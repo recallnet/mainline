@@ -519,6 +519,24 @@ Acceptance criteria:
 - status output is checked against durable state in representative end-to-end scenarios
 - the invariant suite runs as a named CI step instead of being an implicit side effect of the full test run
 
+## Milestone 21: Repo Hook Rigor
+
+Goal:
+
+- mirror CI-grade safety locally for a repository that pushes straight to `main`
+
+Deliverables:
+
+- repo-managed `pre-commit` and `pre-push` hooks under a tracked hooks path
+- hook installer script and documented setup flow for contributors
+- shell regression tests that exercise hook pass and fail paths against realistic Git state
+
+Acceptance criteria:
+
+- `pre-commit` blocks unformatted staged Go files, workflow mistakes, staged secrets, and release drift on relevant changes
+- `pre-push` blocks dirty pushes, stale `origin/main`, and pushes to `origin/main` from a non-`main` local branch
+- contributors can enable the tracked hooks with one documented command
+
 ## Architecture Plan
 
 ## Repository Layout

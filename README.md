@@ -146,6 +146,7 @@ The rule is simple:
 - retry and cancel as explicit operator controls
 - live operator surfaces through `status`, `watch`, `logs`, and `events`
 - policy checks, hook coordination, and worktree layout warnings
+- repo-managed `pre-commit` and `pre-push` hooks that mirror CI and block unsafe direct pushes to `main`
 - shell completions for `bash`, `zsh`, and `fish`
 - Homebrew and Nix packaging
 - tag-built GitHub release archives with checksums
@@ -163,6 +164,7 @@ From source:
 git clone git@github.com:recallnet/mainline.git
 cd mainline
 make build
+make install-hooks
 ```
 
 With `go install`:
@@ -253,7 +255,14 @@ parallelism. Git alone is already good at that.
 make fmt
 make test
 make build
+make install-hooks
 ```
+
+When working directly in this repo, install the repo-managed Git hooks. They
+mirror the rigor of CI locally:
+
+- `pre-commit` runs staged-format checks, `go vet`, `go test`, invariants, workflow lint when needed, and release regression checks when release paths change
+- `pre-push` blocks dirty pushes, blocks stale `origin/main`, requires pushes to `origin/main` to come from local branch `main`, and reruns the full suite before remote mutation
 
 The deeper workflow examples live in
 [FLOWS.md](/Users/devrel/Projects/recallnet/mainline/docs/FLOWS.md).

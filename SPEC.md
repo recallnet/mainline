@@ -306,6 +306,10 @@ Phase 2 checks:
 - branch-local test commands
 - upstream freshness policy
 
+For repositories that intentionally push straight to `main`, the repo should
+also ship mirrored local `pre-commit` and `pre-push` hooks so direct pushes are
+guarded by the same level of rigor before CI sees them.
+
 ### Status and Auditability
 
 Users need inspectable state.
