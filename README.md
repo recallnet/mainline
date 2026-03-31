@@ -1,129 +1,65 @@
 # mainline
 
-Git is excellent at describing history.
+Five agents share one machine.
 
-It is not excellent at coordinating ten active worktrees, several coding
-agents, a protected local `main`, and a machine where `origin/main` is expected
-to stay pushable all day.
+They all have worktrees. They all fork from the same local `main`. They all run tests, rebase, fix conflicts, and eventually want to land. And because this is real life, `main` is also supposed to stay clean enough to push upstream all day.
 
-That gap is where teams start inventing local folklore:
+Git gives you the primitives for that world. It does not give you a coordinator.
 
-- "just rebase before you merge"
-- "don't commit on `main`"
-- "someone check whether the daemon already pushed"
-- "wait, which worktree landed that branch?"
+That coordinator is `mainline`.
 
-Those rules hold right up until the machine gets busy.
+`mainline` is a local control plane for parallel worktree development. It keeps topic work in topic worktrees, serializes integrations onto protected `main`, coalesces publishes so only the newest protected tip matters, and stores queue state durably so the machine can still explain itself after a crash.
 
-`mainline` turns that social protocol into a local control plane.
-
-It gives a repo one serialized integration path onto protected `main`, one
-coalesced publish path to remote, one durable record of what happened, and one
-operator surface for seeing the queue in motion.
-
-If you run humans, Codex, Claude, factory daemons, or all of them at once,
-`mainline` keeps `main` boring.
+This is not a new VCS. It is the missing piece between "Git has branches" and "ten humans and agents are all landing work on the same box."
 
 ---
 
-## The Problem
+## The Bug Is Not In Git
 
-A modern local repo is no longer one branch and one shell.
+The failure mode here is subtle.
 
-It is a little cluster:
+Nothing is obviously broken. Everyone is doing normal Git things:
 
-- many linked worktrees
-- multiple agents editing in parallel
-- periodic rebases
-- direct pushes to remote
-- background jobs that mutate the repo while someone else is still thinking
+- branch off `main`
+- work in parallel
+- rebase occasionally
+- merge or push when done
 
-Plain Git still gives you the primitives:
+That workflow is fine for one person.
 
-- branch
-- worktree
-- rebase
-- fast-forward
-- push
+It gets sloppy fast under local parallelism:
 
-What it does not give you is local coordination.
+- one worktree rebases while another is still building on stale `main`
+- conflicts are discovered late, on the protected branch, in the wrong checkout
+- two publish attempts race even though only the newest protected tip matters
+- an agent gets interrupted and nobody can tell what was queued, what was blocked, or what is safe to retry
 
-So the failure mode is predictable:
+The result is not some dramatic distributed systems incident. It is worse: low-grade local chaos. `main` stops being boring. People start treating the protected branch as a scratchpad. Queue state lives in scrollback and memory.
 
-1. several branches fork from the same local `main`
-2. they finish in a different order than they started
-3. one rebases, one pushes, one is now stale, one discovers a conflict late
-4. `main` becomes the place where ordering bugs and half-resolved conflicts show up
+`mainline` takes that coordination problem and makes it explicit.
 
-Nothing explodes. It just gets annoying, lossy, and hard to reason about.
+## The Core Idea
 
-That is the exact class of problem `mainline` is built to remove.
+There is one rule that matters:
 
-## The Thesis
+**`main` is not where feature work happens.**
 
-Treat local branch landing the way a small database treats writes:
+Once you enforce that, the rest becomes mechanical:
 
-- serialize integration
-- make state durable
-- make operator actions explicit
-- keep the hot path simple
-- surface the queue instead of hiding it in shell history
+- feature work happens in feature worktrees
+- submissions are recorded durably
+- integrations happen one at a time
+- conflicts are resolved back in the source worktree
+- publish is a separate queue
+- operators can see the queue, retry items, cancel items, and watch the system progress
 
-`mainline` does not replace Git.
+That is the whole shape of the tool.
 
-It wraps the Git workflow you already use with just enough coordination to make
-parallel worktrees safe:
+Git stays in charge of refs, rebases, fast-forwards, pushes, and worktrees. SQLite stores the queue, locks, and event history. `mainline` coordinates the two.
 
-- feature work still happens on branches
-- all commits still live in Git
-- rebase and fast-forward semantics still come from Git
-- push still means push
+## What Using It Feels Like
 
-But now:
-
-- topic branches are submitted instead of ad hoc merged
-- integrations happen one at a time onto protected `main`
-- publishes are coalesced so only the latest protected tip matters
-- queue state survives restarts
-- blocked, retried, cancelled, and published work has an audit trail
-
-Git remains the source of truth for repository semantics.
-SQLite becomes the source of truth for queue semantics.
-
-That split is the whole design.
-
-## The Model
-
-There are only three moving parts:
-
-1. A canonical protected-branch worktree
-
-This is the only worktree that matters for landing and publishing. It stays
-clean, boring, and easy to inspect.
-
-2. Many topic worktrees
-
-This is where all real work happens. Humans and agents make commits here. If a
-rebase conflicts, the conflict stays here too.
-
-3. A durable queue
-
-Branches are submitted into the queue. A worker rebases them in order,
-fast-forwards protected `main`, and separately drains publish requests to
-remote.
-
-That is it.
-
-No service.
-No distributed coordinator.
-No custom VCS.
-Just enough local structure so parallel work stops feeling random.
-
-## What It Feels Like
-
-The short CLI is `mq`.
-
-In normal use it looks like this:
+You do your normal work in a feature worktree. You commit there. Then you hand that branch to the local queue.
 
 ```bash
 mq repo init --repo .
@@ -133,19 +69,7 @@ mq publish --repo /path/to/main
 mq watch --repo /path/to/main
 ```
 
-For a human, the workflow is simple:
-
-- do all edits in a feature worktree
-- commit there
-- submit that branch
-- let `mq` land it onto protected `main`
-- let `mq` publish the protected tip
-
-For the machine, the workflow is just as simple:
-
-- one integration at a time
-- one publish queue per repo
-- newest publish target wins
+The short name is `mq` because that is what it is: the main queue for one machine.
 
 ### Land a branch
 
@@ -159,149 +83,40 @@ For the machine, the workflow is just as simple:
 
 ![Watch mainline operator state](docs/demos/gifs/watch.gif)
 
-These demos are generated from source-controlled VHS tapes in
-[`docs/demos/tapes/`](docs/demos/tapes/) and can be re-rendered with:
+The demos are generated from source-controlled VHS tapes in [`docs/demos/tapes/`](docs/demos/tapes/) and can be re-rendered with:
 
 ```bash
 ./docs/demos/scripts/render.sh
 ```
 
-## Why It Works
+## Why The Model Holds Up
 
-Because it draws one hard boundary:
+The model is intentionally conservative.
 
-`main` is not a feature worktree.
+- Git is still the source of truth
+- `go-git` handles ordinary repository inspection and config work
+- native `git` is used where exact write-path behavior matters
+- SQLite gives durable local state instead of shell folklore
+- the protected branch stays clean because it is treated as infrastructure, not a workspace
 
-Once that rule is enforced, the rest gets easier:
-
-- all commits happen on topic branches
-- conflicts are resolved in the source worktree, not on protected `main`
-- ordering becomes explicit instead of accidental
-- publish becomes its own queue instead of a side effect of integration
-- retry and cancel become state transitions instead of terminal folklore
-
-This is the important part:
-
-`mainline` is not clever.
-
-It is intentionally conservative.
-
-- `go-git` handles repository inspection, config, and ordinary ref/worktree operations
-- native `git` is used where exact Git behavior matters on the write path
-- SQLite stores durable queue state, locks, and event history
-
-That is a feature, not a limitation. Coordination software should be boring.
-
-## Why Agents Need This
-
-Agents amplify throughput, but they also amplify local Git sloppiness.
-
-One human making a slightly stale merge is tolerable.
-Six agents doing it in parallel is a coordination bug generator.
-
-`mainline` is built for the exact environment where normal Git etiquette stops
-scaling:
-
-- multiple coding agents on one machine
-- many linked worktrees
-- direct or frequent pushes to remote
-- a protected local `main`
-- a need to know what landed, what blocked, and what is next
-
-The repo itself dogfoods this workflow. The committed worktree skill lives at
-[.agents/skills/worktree/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/worktree/SKILL.md),
-and the repo-specific guardrails live at
-[AGENTS.md](/Users/devrel/Projects/recallnet/mainline/AGENTS.md).
-
-The rule is not subtle:
-
-- do work in a feature worktree
-- do not mutate protected `main` with raw Git
-- land through `mq`
+That matters if your machine is running Codex, Claude, factory daemons, humans, or all of them at once. `mainline` does not ask those actors to become perfectly disciplined. It gives them a coordinator that turns the safe path into the normal path.
 
 ## What Ships
 
-This is already a working system:
+`mainline` is already a real toolchain:
 
-- repository discovery for normal repos and bare-clone-plus-worktree layouts
-- durable SQLite state stored with shared Git storage
-- schema-versioned SQLite state with explicit upgrade checks
-- serialized submission, integration, and publish coordination
-- the full operator surface: `submit`, `run-once`, `publish`, `status`, `confidence`, `watch`, `logs`, `events`, `retry`, and `cancel`
+- repo discovery for standard repos and bare-clone-plus-worktree layouts
+- durable SQLite queue state in shared Git storage
+- serialized integration and publish workers
+- `submit`, `run-once`, `publish`, `retry`, and `cancel`
+- `status`, `watch`, `logs`, `events`, and `confidence`
 - daemon mode through `mainlined`
-- hook-aware direct-to-`main` safety gates
-- crash/restart recovery for orphaned running submissions and publishes
-- shell completions for `bash`, `zsh`, and `fish`
-- Homebrew and Nix packaging
-- tagged release archives, checksums, and release manifests
-- multi-agent stress coverage that simulates parallel worktree submission and publish coalescing
-- a real-repo certification matrix runner for disposable mirrors of local sibling repos
+- policy checks, hook coordination, and repo-managed hooks
+- release archives, Homebrew assets, Nix packaging, and machine-readable release manifests
 
-## The Stress Result
+This repo also dogfoods the workflow. The committed worktree instructions live in [SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/worktree/SKILL.md), and the repo-specific guardrails live in [AGENTS.md](/Users/devrel/Projects/recallnet/mainline/AGENTS.md).
 
-The repo now ships a first-class stress target:
-
-```bash
-make test-stress
-```
-
-That test creates ten local worktrees, submits them in parallel while the
-daemon drains the queue, introduces a real conflict pair, and verifies the
-final integration and publish invariants.
-
-One representative run produced:
-
-- 10 local agent worktrees
-- 9 succeeded submissions
-- 1 blocked conflict
-- 9 publish requests
-- 8 superseded publishes
-- 1 final successful publish
-- clean protected `main`
-- remote head equal to local protected head
-
-That is the behavior the tool exists to guarantee.
-
-For repeated evidence instead of a single green run, use the soak runner:
-
-```bash
-make soak
-```
-
-That reruns the stress workload many times, stores per-run logs and JSON
-reports under `artifacts/soak/`, and writes an aggregate `summary.json` with
-pass count, fail count, flake rate, duration, and queue-depth metrics.
-
-For seeded race and transient-failure replay instead of only deterministic soak:
-
-```bash
-make soak-randomized
-```
-
-That runs the randomized stress harness, records the seed used for each run,
-and persists enough metadata to replay the same failure class later.
-
-For disposable real-repo certification against the committed local matrix:
-
-```bash
-make certify-matrix
-```
-
-That exercises `mq` against disposable mirrors of the configured real repos,
-using the local `./bin/mq` by default, records the required repo-specific
-policy defaults, and writes a machine-readable report under
-`docs/certification/`.
-
-To answer "does this checkout currently meet the promotion bar?":
-
-```bash
-mq confidence --repo /path/to/main
-```
-
-That combines live queue health, queue-derived rates and latencies, the latest
-soak summary, and the latest certification report into one explicit gate
-report. Evidence only counts if it was produced for the current `mainline`
-commit.
+It also ships evidence, not just claims: stress runs, soak runs, certification runs against real repo layouts, and a `mq confidence` gate that tells you whether the current build has enough proof behind it.
 
 ## Install
 
@@ -324,12 +139,11 @@ go install github.com/recallnet/mainline/cmd/mq@latest
 go install github.com/recallnet/mainline/cmd/mainlined@latest
 ```
 
-Stable install details for Homebrew and Nix are in
-[install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md).
+Homebrew and Nix details are in [install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md).
 
-## Commands
+## The Operator Surface
 
-Repo setup:
+Setup and health:
 
 ```bash
 mq repo init --repo /path/to/main --main-worktree /path/to/main
@@ -346,7 +160,7 @@ mq run-once --repo /path/to/main
 mq publish --repo /path/to/main
 ```
 
-Operate the queue:
+Observe and control:
 
 ```bash
 mq status --repo /path/to/main --json
@@ -354,6 +168,7 @@ mq watch --repo /path/to/main
 mq logs --repo /path/to/main --follow
 mq retry --repo /path/to/main --submission 17
 mq cancel --repo /path/to/main --publish 4
+mq confidence --repo /path/to/main --json
 mq version
 ```
 
@@ -363,48 +178,42 @@ Daemon mode:
 mainlined --repo /path/to/main --interval 2s --json
 ```
 
+## Where It Fits
+
+Use `mainline` when:
+
+- many worktrees share one machine
+- `main` needs to stay pushable all day
+- humans and coding agents are landing in parallel
+- you want queue state to survive crashes and restarts
+- you want a local operator view instead of reading raw `.git` state
+
+Do not use it if your workflow is one person, one branch, one push, no parallelism. Plain Git is already excellent there.
+
 ## Repository Layouts
 
 `mainline` supports both:
 
-- standard repos with `.git/` in the checked-out worktree
-- bare-clone storage with linked worktrees, such as
-  `~/Projects/.bare/owner/repo.git` plus `~/Projects/owner/repo`
+- normal repos with `.git/` inside the checked-out worktree
+- bare-clone storage with linked worktrees, such as `~/Projects/.bare/owner/repo.git` with `~/Projects/owner/repo`
 
-For bare-clone layouts, queue state and locks live with shared Git storage so
-every worktree sees the same truth.
+For bare-clone layouts, state and locks live with shared Git storage so every worktree sees the same queue truth.
 
-## When To Use It
+## Architecture
 
-Use `mainline` when:
+The system is intentionally small.
 
-- your repo already uses worktrees
-- `main` must stay clean and pushable
-- several humans or agents share one machine
-- branch landing order matters
-- you want publish to be deterministic and observable
+- Git answers branch and worktree semantics
+- SQLite answers ordering, durability, recovery, and audit history
+- `mainline` coordinates the landing path between them
 
-Do not use it if your workflow is one person, one branch, one push, and no
-parallelism. Plain Git is already excellent there.
+More detail is in [ARCHITECTURE.md](/Users/devrel/Projects/recallnet/mainline/docs/ARCHITECTURE.md).
 
 ## Development
 
 ```bash
 make fmt
 make test
-make test-stress
 make build
 make install-hooks
 ```
-
-When working directly in this repo, install the repo-managed hooks. They mirror
-CI locally:
-
-- `pre-commit` runs staged-format checks, `go vet`, `go test`, invariants, workflow lint when needed, and release regression checks when release paths change
-- `pre-push` blocks dirty pushes, blocks stale `origin/main`, requires pushes to `origin/main` to come from local branch `main`, and reruns the full suite before remote mutation
-
-More detail is in:
-
-- [ARCHITECTURE.md](/Users/devrel/Projects/recallnet/mainline/docs/ARCHITECTURE.md)
-- [FLOWS.md](/Users/devrel/Projects/recallnet/mainline/docs/FLOWS.md)
-- [install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md)
