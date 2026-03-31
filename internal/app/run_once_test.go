@@ -154,6 +154,76 @@ func TestRunOnceBlocksConflictAndLeavesProtectedBranchUntouched(t *testing.T) {
 	}
 }
 
+func TestStatusBlockedSubmissionUsesLatestConflictDiagnosticsWhenHistoryIsLong(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featureOne := filepath.Join(t.TempDir(), "feature-one")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/one", featureOne)
+	replaceFileAndCommit(t, featureOne, "README.md", "# alpha\n", "feature one")
+	submitBranch(t, featureOne)
+
+	featureTwo := filepath.Join(t.TempDir(), "feature-two")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/two", featureTwo)
+	replaceFileAndCommit(t, featureTwo, "README.md", "# beta\n", "feature two")
+	submitBranch(t, featureTwo)
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	blockedID := submissions[1].ID
+	for i := 0; i < 12; i++ {
+		if _, err := store.AppendEvent(context.Background(), state.EventRecord{
+			RepoID:    repoRecord.ID,
+			ItemType:  "integration_submission",
+			ItemID:    state.NullInt64(blockedID),
+			EventType: "integration.debug",
+			Payload:   mustJSON(map[string]any{"ordinal": i}),
+		}); err != nil {
+			t.Fatalf("AppendEvent: %v", err)
+		}
+	}
+
+	runOnce(t, repoRoot)
+	protectedAfterFirst := strings.TrimSpace(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+
+	var statusOut bytes.Buffer
+	var statusErr bytes.Buffer
+	if err := runStatus([]string{"--repo", repoRoot, "--json", "--events", "10"}, &statusOut, &statusErr); err != nil {
+		t.Fatalf("runStatus returned error: %v", err)
+	}
+
+	var report statusResult
+	if err := json.Unmarshal(statusOut.Bytes(), &report); err != nil {
+		t.Fatalf("Unmarshal status: %v", err)
+	}
+	if report.LatestSubmission == nil || report.LatestSubmission.Status != "blocked" {
+		t.Fatalf("expected blocked latest submission, got %+v", report.LatestSubmission)
+	}
+	if report.LatestSubmission.ProtectedTipSHA != protectedAfterFirst {
+		t.Fatalf("expected protected tip %q, got %+v", protectedAfterFirst, report.LatestSubmission)
+	}
+	if len(report.LatestSubmission.ConflictFiles) == 0 || report.LatestSubmission.ConflictFiles[0] != "README.md" {
+		t.Fatalf("expected latest blocked diagnostics, got %+v", report.LatestSubmission)
+	}
+}
+
 func TestRunOnceAutoQueuesPublishRequest(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)

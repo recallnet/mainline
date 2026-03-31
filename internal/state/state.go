@@ -707,7 +707,7 @@ func (s Store) ListEventsForItem(ctx context.Context, repoID int64, itemType str
 		SELECT id, repo_id, item_type, item_id, event_type, payload, created_at
 		FROM events
 		WHERE repo_id = ? AND item_type = ? AND item_id = ?
-		ORDER BY id ASC
+		ORDER BY id DESC
 		LIMIT ?
 	`, repoID, itemType, itemID, limit)
 	if err != nil {
@@ -725,6 +725,9 @@ func (s Store) ListEventsForItem(ctx context.Context, repoID int64, itemType str
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	for left, right := 0, len(events)-1; left < right; left, right = left+1, right-1 {
+		events[left], events[right] = events[right], events[left]
 	}
 	return events, nil
 }
