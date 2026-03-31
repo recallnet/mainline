@@ -170,6 +170,75 @@ func TestRunOnceAutoQueuesPublishRequest(t *testing.T) {
 	}
 }
 
+func TestRunOnceReportsProtectedBranchSyncFromUpstream(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+
+	upstreamClone := filepath.Join(t.TempDir(), "upstream-clone")
+	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
+	runTestCommand(t, upstreamClone, "git", "config", "user.name", "Test User")
+	runTestCommand(t, upstreamClone, "git", "config", "user.email", "test@example.com")
+	writeFileAndCommit(t, upstreamClone, "upstream.txt", "upstream\n", "upstream advance")
+	upstreamHead := trimNewline(runTestCommand(t, upstreamClone, "git", "rev-parse", "HEAD"))
+	runTestCommand(t, upstreamClone, "git", "push", "origin", "main")
+
+	featureOne := filepath.Join(t.TempDir(), "feature-one")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/one", featureOne)
+	writeFileAndCommit(t, featureOne, "one.txt", "feature one\n", "feature one")
+	submitBranch(t, featureOne)
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	output := runOut.String()
+	if !strings.Contains(output, "Synced main from origin/main and integrated submission") {
+		t.Fatalf("expected sync-aware integration output, got %q", output)
+	}
+
+	if got := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD^")); got != upstreamHead {
+		t.Fatalf("expected upstream commit %q to be incorporated before feature commit, got parent %q", upstreamHead, got)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, "upstream.txt")); err != nil {
+		t.Fatalf("expected upstream.txt after sync, got %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	events, err := store.ListEvents(context.Background(), repoRecord.ID, 20)
+	if err != nil {
+		t.Fatalf("ListEvents: %v", err)
+	}
+	foundSync := false
+	for _, event := range events {
+		if event.EventType != "protected.synced_from_upstream" {
+			continue
+		}
+		foundSync = true
+		if event.ItemType != "repository" {
+			t.Fatalf("expected repository event item type, got %q", event.ItemType)
+		}
+		if !strings.Contains(string(event.Payload), "\"upstream\":\"origin/main\"") {
+			t.Fatalf("expected upstream payload, got %s", string(event.Payload))
+		}
+		if !strings.Contains(string(event.Payload), upstreamHead) {
+			t.Fatalf("expected payload to reference synced SHA %q, got %s", upstreamHead, string(event.Payload))
+		}
+	}
+	if !foundSync {
+		t.Fatalf("expected protected.synced_from_upstream event, got %+v", events)
+	}
+}
+
 func TestRunOncePreIntegrateChecksBlockBeforeProtectedBranchMutation(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)

@@ -142,8 +142,24 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 	}
 	mainEngine := git.NewEngine(mainLayout.WorktreeRoot)
 
-	if err := syncProtectedBranch(mainEngine, cfg); err != nil {
+	syncResult, err := syncProtectedBranch(mainEngine, cfg)
+	if err != nil {
 		return failIntegrationSubmission(ctx, store, repoRecord.ID, submission.ID, err)
+	}
+	if syncResult.Synced {
+		if err := appendStateEvent(ctx, store, state.EventRecord{
+			RepoID:    repoRecord.ID,
+			ItemType:  "repository",
+			EventType: "protected.synced_from_upstream",
+			Payload: mustJSON(map[string]string{
+				"protected_branch": cfg.Repo.ProtectedBranch,
+				"upstream":         syncResult.Upstream,
+				"before_sha":       syncResult.BeforeSHA,
+				"after_sha":        syncResult.AfterSHA,
+			}),
+		}); err != nil {
+			return "", err
+		}
 	}
 
 	sourceLayout, err := git.DiscoverRepositoryLayout(submission.SourceWorktree)
@@ -238,44 +254,71 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 		}
 	}
 
+	if syncResult.Synced {
+		return fmt.Sprintf("Synced %s from %s and integrated submission %d from %s onto %s", cfg.Repo.ProtectedBranch, syncResult.Upstream, submission.ID, submission.BranchName, cfg.Repo.ProtectedBranch), nil
+	}
+
 	return fmt.Sprintf("Integrated submission %d from %s onto %s", submission.ID, submission.BranchName, cfg.Repo.ProtectedBranch), nil
 }
 
-func syncProtectedBranch(engine git.Engine, cfg policy.File) error {
+type protectedSyncResult struct {
+	Synced    bool
+	Upstream  string
+	BeforeSHA string
+	AfterSHA  string
+}
+
+func syncProtectedBranch(engine git.Engine, cfg policy.File) (protectedSyncResult, error) {
 	if cfg.Integration.SyncPolicy != "sync-before-integrate" {
-		return nil
+		return protectedSyncResult{}, nil
 	}
 
 	status, err := engine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
 	if err != nil {
-		return err
+		return protectedSyncResult{}, err
 	}
 	if !status.HasUpstream {
-		return nil
+		return protectedSyncResult{}, nil
 	}
 	if status.AheadCount > 0 && status.BehindCount > 0 {
-		return fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, status.Upstream)
+		return protectedSyncResult{}, fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, status.Upstream)
+	}
+	beforeSHA, err := engine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+	if err != nil {
+		return protectedSyncResult{}, err
 	}
 
 	if err := applyAppTestFault("integration.fetch"); err != nil {
-		return err
+		return protectedSyncResult{}, err
 	}
 	if err := engine.FetchRemote(cfg.Repo.MainWorktree, cfg.Repo.RemoteName); err != nil {
-		return err
+		return protectedSyncResult{}, err
 	}
 
 	status, err = engine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
 	if err != nil {
-		return err
+		return protectedSyncResult{}, err
 	}
 	if status.AheadCount > 0 && status.BehindCount > 0 {
-		return fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, status.Upstream)
+		return protectedSyncResult{}, fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, status.Upstream)
 	}
 	if status.BehindCount == 0 {
-		return nil
+		return protectedSyncResult{}, nil
 	}
 
-	return engine.FastForwardCurrentBranch(cfg.Repo.MainWorktree, status.Upstream)
+	if err := engine.FastForwardCurrentBranch(cfg.Repo.MainWorktree, status.Upstream); err != nil {
+		return protectedSyncResult{}, err
+	}
+	afterSHA, err := engine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+	if err != nil {
+		return protectedSyncResult{}, err
+	}
+	return protectedSyncResult{
+		Synced:    true,
+		Upstream:  status.Upstream,
+		BeforeSHA: beforeSHA,
+		AfterSHA:  afterSHA,
+	}, nil
 }
 
 func processPublishRequest(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File, publishLease *state.Lease) (string, error) {

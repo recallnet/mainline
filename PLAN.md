@@ -731,6 +731,25 @@ Acceptance criteria:
 - `submit --check` performs no queue mutation
 - `submit --json` returns submission metadata on success and stable error codes on deterministic failure
 
+## Milestone 32: Upstream Drift Operator DX
+
+Goal:
+
+- make upstream advancement feel like ordinary queue progress instead of a manual `main` repair task
+
+Deliverables:
+
+- explicit worker messaging when protected `main` is synced from upstream before integration
+- durable `protected.synced_from_upstream` events for operators and daemons
+- coverage for the common case where `origin/main` advances before a queued branch lands
+- docs that reinforce that `mq` owns protected-branch sync, not the feature worktree
+
+Acceptance criteria:
+
+- `mq run-once` and queue-driven land flows explain upstream syncs in plain operator language
+- event streams show when protected `main` was fast-forwarded from upstream
+- the queue integrates a behind protected branch without forcing manual merge or push repair
+
 ## Architecture Plan
 
 ## Repository Layout
