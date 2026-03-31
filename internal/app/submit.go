@@ -51,6 +51,7 @@ type preparedSubmission struct {
 	SourceSHA    string
 	RequestedBy  string
 	Priority     string
+	Duplicate    *state.IntegrationSubmission
 }
 
 type queuedSubmission struct {
@@ -418,6 +419,21 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 			return preparedSubmission{}, err
 		}
 		if found {
+			if duplicate.Status == "queued" && duplicate.Priority != opts.priority {
+				dup := duplicate
+				return preparedSubmission{
+					Layout:       layout,
+					RepoRoot:     repoRoot,
+					Config:       cfg,
+					Store:        store,
+					Branch:       branch,
+					WorktreePath: worktree.Path,
+					SourceSHA:    headSHA,
+					RequestedBy:  requestedBy,
+					Priority:     opts.priority,
+					Duplicate:    &dup,
+				}, nil
+			}
 			return preparedSubmission{}, &submitValidationError{
 				Code:    "already_queued",
 				Message: fmt.Sprintf("submission %d for branch %q at %s is already %s", duplicate.ID, branch, headSHA, duplicate.Status),
@@ -499,6 +515,42 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 		if err != nil {
 			return queuedSubmission{}, err
 		}
+	}
+
+	if prepared.Duplicate != nil {
+		submission, err := prepared.Store.UpdateIntegrationSubmissionPriority(ctx, prepared.Duplicate.ID, prepared.Priority)
+		if err != nil {
+			return queuedSubmission{}, err
+		}
+		payload, err := json.Marshal(map[string]string{
+			"branch":            prepared.Branch,
+			"source_worktree":   prepared.WorktreePath,
+			"source_sha":        prepared.SourceSHA,
+			"requested_by":      prepared.RequestedBy,
+			"previous_priority": prepared.Duplicate.Priority,
+			"updated_priority":  prepared.Priority,
+		})
+		if err != nil {
+			return queuedSubmission{}, err
+		}
+		if _, err := prepared.Store.AppendEvent(ctx, state.EventRecord{
+			RepoID:    repoRecord.ID,
+			ItemType:  "integration_submission",
+			ItemID:    state.NullInt64(submission.ID),
+			EventType: "submission.reprioritized",
+			Payload:   payload,
+		}); err != nil {
+			return queuedSubmission{}, err
+		}
+
+		return queuedSubmission{
+			Layout:     prepared.Layout,
+			RepoRoot:   prepared.RepoRoot,
+			Config:     prepared.Config,
+			Store:      prepared.Store,
+			RepoRecord: repoRecord,
+			Submission: submission,
+		}, nil
 	}
 
 	submission, err := prepared.Store.CreateIntegrationSubmission(ctx, state.IntegrationSubmission{

@@ -293,6 +293,65 @@ func TestSubmitRejectsUnknownPriority(t *testing.T) {
 	}
 }
 
+func TestSubmitReprioritizesAlreadyQueuedSubmission(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-reprioritize")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/reprioritize", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+
+	var firstOut bytes.Buffer
+	var firstErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityLow}, &firstOut, &firstErr); err != nil {
+		t.Fatalf("first runSubmit returned error: %v", err)
+	}
+
+	var first submitResult
+	if err := json.Unmarshal(firstOut.Bytes(), &first); err != nil {
+		t.Fatalf("Unmarshal first: %v", err)
+	}
+
+	var secondOut bytes.Buffer
+	var secondErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, &secondOut, &secondErr); err != nil {
+		t.Fatalf("second runSubmit returned error: %v", err)
+	}
+
+	var second submitResult
+	if err := json.Unmarshal(secondOut.Bytes(), &second); err != nil {
+		t.Fatalf("Unmarshal second: %v", err)
+	}
+	if first.SubmissionID != second.SubmissionID {
+		t.Fatalf("expected reprioritization to reuse submission id, got first=%d second=%d", first.SubmissionID, second.SubmissionID)
+	}
+	if second.Priority != submissionPriorityHigh {
+		t.Fatalf("expected reprioritized high priority, got %+v", second)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(featurePath)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if len(submissions) != 1 || submissions[0].Priority != submissionPriorityHigh {
+		t.Fatalf("expected one reprioritized queued submission, got %+v", submissions)
+	}
+}
+
 func TestSubmitCheckValidatesWithoutQueueing(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	featurePath := filepath.Join(t.TempDir(), "feature-check")

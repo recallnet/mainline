@@ -306,6 +306,32 @@ func (s Store) UpdateIntegrationSubmissionStatus(ctx context.Context, submission
 	return submission, nil
 }
 
+// UpdateIntegrationSubmissionPriority updates queued submission priority.
+func (s Store) UpdateIntegrationSubmissionPriority(ctx context.Context, submissionID int64, priority string) (IntegrationSubmission, error) {
+	db, err := s.open()
+	if err != nil {
+		return IntegrationSubmission{}, err
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(ctx, `
+		UPDATE integration_submissions
+		SET priority = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+		RETURNING id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
+	`, priority, submissionID)
+
+	submission, err := scanIntegrationSubmission(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return IntegrationSubmission{}, ErrNotFound
+		}
+		return IntegrationSubmission{}, err
+	}
+
+	return submission, nil
+}
+
 // CreatePublishRequest inserts a publish request row.
 func (s Store) CreatePublishRequest(ctx context.Context, request PublishRequest) (PublishRequest, error) {
 	if err := applyTestFault("CreatePublishRequest"); err != nil {
