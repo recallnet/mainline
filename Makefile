@@ -5,7 +5,7 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS ?= -X github.com/recallnet/mainline/internal/app.Version=$(VERSION) -X github.com/recallnet/mainline/internal/app.Commit=$(COMMIT) -X github.com/recallnet/mainline/internal/app.Date=$(DATE)
 
-.PHONY: fmt lint test build release-snapshot
+.PHONY: fmt lint test test-invariants build release-snapshot
 
 fmt:
 	$(GO) fmt ./...
@@ -15,6 +15,9 @@ lint:
 
 test:
 	$(GO) test ./...
+
+test-invariants:
+	$(GO) test ./internal/app -run TestInvariant
 
 build:
 	mkdir -p bin

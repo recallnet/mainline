@@ -501,6 +501,24 @@ Acceptance criteria:
 - the manifest includes every shipped archive plus checksum and URL metadata
 - automation can discover the current release payload shape from a single JSON file
 
+## Milestone 20: Invariant Coverage
+
+Goal:
+
+- make core queue and publish invariants explicit in end-to-end tests instead of relying on scattered feature tests
+
+Deliverables:
+
+- invariant-focused test matrix for integration, conflict, cancel, retry, and publish behavior
+- reusable test helpers for asserting protected-branch cleanliness and queue/status consistency
+- CI entrypoint for the invariant suite
+
+Acceptance criteria:
+
+- protected-branch safety is asserted after success, conflict, cancel, and retry flows
+- status output is checked against durable state in representative end-to-end scenarios
+- the invariant suite runs as a named CI step instead of being an implicit side effect of the full test run
+
 ## Architecture Plan
 
 ## Repository Layout

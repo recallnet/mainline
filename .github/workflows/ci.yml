@@ -27,6 +27,9 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Invariant suite
+        run: make test-invariants
+
       - name: Release script regression test
         run: ./scripts/test-build-release.sh
 
