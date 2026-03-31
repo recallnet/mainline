@@ -1,6 +1,6 @@
 # Install
 
-`mainline` is source-first today.
+`mainline` now ships source-controlled packaging outputs for Homebrew and Nix.
 
 ## Go Install
 
@@ -12,21 +12,37 @@ go install github.com/recallnet/mainline/cmd/mainlined@latest
 
 ## Homebrew
 
-No tap is published yet. A local formula-style install can still build from source:
+Install from the committed formula without cloning the repo manually:
 
 ```bash
-brew install go
-git clone git@github.com:recallnet/mainline.git
-cd mainline
-make build
-sudo install -m 0755 ./bin/mainline /usr/local/bin/mainline
-sudo install -m 0755 ./bin/mq /usr/local/bin/mq
-sudo install -m 0755 ./bin/mainlined /usr/local/bin/mainlined
+brew install --HEAD https://raw.githubusercontent.com/recallnet/mainline/main/Formula/mainline.rb
 ```
+
+This installs:
+
+- `mainline`
+- `mq`
+- `mainlined`
+
+The formula source is in [Formula/mainline.rb](/Users/devrel/Projects/recallnet/mainline/Formula/mainline.rb).
 
 ## Nix
 
-No packaged flake output is published yet. For now, use a dev shell or build from source inside your existing Nix environment.
+Install directly from the flake:
+
+```bash
+nix profile install github:recallnet/mainline#mainline
+```
+
+Run without installing:
+
+```bash
+nix run github:recallnet/mainline#mainline -- --help
+nix run github:recallnet/mainline#mq -- --help
+nix run github:recallnet/mainline#mainlined -- --help
+```
+
+The flake source is in [flake.nix](/Users/devrel/Projects/recallnet/mainline/flake.nix) and [package.nix](/Users/devrel/Projects/recallnet/mainline/nix/package.nix).
 
 ## Completion Install
 

@@ -162,7 +162,7 @@ go install github.com/recallnet/mainline/cmd/mq@latest
 go install github.com/recallnet/mainline/cmd/mainlined@latest
 ```
 
-Homebrew and Nix examples live in [docs/install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md). They are intentionally source-first for now because no tap or flake output is published yet.
+Homebrew and Nix install commands live in [docs/install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md), with the packaging sources in [Formula/mainline.rb](/Users/devrel/Projects/recallnet/mainline/Formula/mainline.rb), [flake.nix](/Users/devrel/Projects/recallnet/mainline/flake.nix), and [package.nix](/Users/devrel/Projects/recallnet/mainline/nix/package.nix).
 
 ## Shell Completion
 
