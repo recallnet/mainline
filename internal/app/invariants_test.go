@@ -52,6 +52,38 @@ func TestInvariantSuccessfulIntegrationPublishLeavesConsistentState(t *testing.T
 	assertEventPresent(t, events, "publish.completed")
 }
 
+func TestInvariantAutoPublishMaintainsCleanProtectedState(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishMode(t, repoRoot, "auto")
+
+	feature := filepath.Join(t.TempDir(), "feature-auto")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/auto", feature)
+	writeFileAndCommit(t, feature, "auto.txt", "auto\n", "feature auto")
+	submitBranch(t, feature)
+
+	runOnce(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	assertProtectedWorktreeClean(t, repoRoot)
+	assertRemoteHeadMatchesLocal(t, repoRoot, remoteDir)
+
+	status := readStatusJSON(t, repoRoot)
+	if status.Counts.QueuedSubmissions != 0 || status.Counts.QueuedPublishes != 0 {
+		t.Fatalf("expected no queued work after auto publish, got %+v", status.Counts)
+	}
+	if status.LatestSubmission == nil || status.LatestSubmission.Status != "succeeded" {
+		t.Fatalf("expected succeeded submission after auto publish, got %+v", status.LatestSubmission)
+	}
+	if status.LatestPublish == nil || status.LatestPublish.Status != "succeeded" {
+		t.Fatalf("expected succeeded auto publish, got %+v", status.LatestPublish)
+	}
+
+	events := readRecentEvents(t, repoRoot, 10)
+	assertEventPresent(t, events, "publish.requested")
+	assertEventPresent(t, events, "publish.completed")
+}
+
 func TestInvariantBlockedSubmissionDoesNotAdvanceProtectedBranch(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)
