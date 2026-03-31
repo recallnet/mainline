@@ -191,6 +191,71 @@ func TestInvariantCancelledPublishDoesNotPushUntilRetried(t *testing.T) {
 	}
 }
 
+func TestInvariantInvalidControlActionsDoNotMutateCompletedState(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	feature := filepath.Join(t.TempDir(), "feature-complete")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/complete", feature)
+	writeFileAndCommit(t, feature, "complete.txt", "complete\n", "feature complete")
+	submitBranch(t, feature)
+	runOnce(t, repoRoot)
+	queuePublish(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	assertRemoteHeadMatchesLocal(t, repoRoot, remoteDir)
+
+	store, repoRecord := openRepoStore(t, repoRoot)
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(submissions) != 1 || len(requests) != 1 {
+		t.Fatalf("expected one completed submission and publish, got submissions=%d requests=%d", len(submissions), len(requests))
+	}
+
+	beforeEvents, err := store.ListEvents(context.Background(), repoRecord.ID, 100)
+	if err != nil {
+		t.Fatalf("ListEvents: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCancel([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(submissions[0].ID, 10)}, &stdout, &stderr); err == nil {
+		t.Fatalf("expected cancelling succeeded submission to fail")
+	}
+	if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requests[0].ID, 10)}, &stdout, &stderr); err == nil {
+		t.Fatalf("expected retrying succeeded publish to fail")
+	}
+
+	afterSubmission, err := store.GetIntegrationSubmission(context.Background(), submissions[0].ID)
+	if err != nil {
+		t.Fatalf("GetIntegrationSubmission: %v", err)
+	}
+	if afterSubmission.Status != "succeeded" {
+		t.Fatalf("expected submission to remain succeeded, got %q", afterSubmission.Status)
+	}
+	afterPublish, err := store.GetPublishRequest(context.Background(), requests[0].ID)
+	if err != nil {
+		t.Fatalf("GetPublishRequest: %v", err)
+	}
+	if afterPublish.Status != "succeeded" {
+		t.Fatalf("expected publish to remain succeeded, got %q", afterPublish.Status)
+	}
+
+	afterEvents, err := store.ListEvents(context.Background(), repoRecord.ID, 100)
+	if err != nil {
+		t.Fatalf("ListEvents: %v", err)
+	}
+	if len(afterEvents) != len(beforeEvents) {
+		t.Fatalf("expected invalid control actions to append no events, got before=%d after=%d", len(beforeEvents), len(afterEvents))
+	}
+}
+
 func assertProtectedWorktreeClean(t *testing.T, repoRoot string) {
 	t.Helper()
 
