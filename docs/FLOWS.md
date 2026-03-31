@@ -14,7 +14,7 @@ mq doctor --repo .
 Use a topic worktree, then land it:
 
 ```bash
-git worktree add ../feature-login -b feature/login
+git worktree add ../feature-login -b feature/login main
 cd ../feature-login
 # edit, test, commit
 mq submit --repo .

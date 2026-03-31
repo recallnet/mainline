@@ -55,13 +55,13 @@ Prefer the machine worktree layout convention:
 
 ```bash
 mkdir -p ~/Projects/_wt/recallnet/mainline
-git worktree add ~/Projects/_wt/recallnet/mainline/<branch-name> -b <branch-name>
+git worktree add ~/Projects/_wt/recallnet/mainline/<branch-name> -b <branch-name> main
 ```
 
 Example:
 
 ```bash
-git worktree add ~/Projects/_wt/recallnet/mainline/m4-run-once -b m4-run-once
+git worktree add ~/Projects/_wt/recallnet/mainline/m4-run-once -b m4-run-once main
 ```
 
 ### 3. Do all work inside the feature worktree
