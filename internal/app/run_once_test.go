@@ -170,6 +170,58 @@ func TestRunOnceAutoQueuesPublishRequest(t *testing.T) {
 	}
 }
 
+func TestRunOncePreIntegrateChecksBlockBeforeProtectedBranchMutation(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Checks.PreIntegrate = []string{"exit 5"}
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "configure pre integrate check")
+
+	featureOne := filepath.Join(t.TempDir(), "feature-one")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/checks", featureOne)
+	writeFileAndCommit(t, featureOne, "one.txt", "feature one\n", "feature one")
+	submitBranch(t, featureOne)
+
+	protectedBefore := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if !strings.Contains(runOut.String(), "pre-integrate checks failed") {
+		t.Fatalf("expected pre-integrate failure output, got %q", runOut.String())
+	}
+	protectedAfter := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	if protectedBefore != protectedAfter {
+		t.Fatalf("expected protected branch unchanged, got %q then %q", protectedBefore, protectedAfter)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if len(submissions) != 1 || submissions[0].Status != "blocked" {
+		t.Fatalf("expected blocked submission, got %+v", submissions)
+	}
+}
+
 func initRepoForWorker(t *testing.T, repoRoot string) {
 	t.Helper()
 

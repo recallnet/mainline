@@ -71,6 +71,7 @@ type HealthReport struct {
 	HasDivergedUpstream   bool     `json:"has_diverged_upstream"`
 	StaleLocks            []string `json:"stale_locks"`
 	UnfinishedQueueItems  []string `json:"unfinished_queue_items"`
+	Warnings              []string `json:"warnings"`
 }
 
 // NewEngine returns a Git engine rooted at the provided repository path.
@@ -333,11 +334,16 @@ func (e Engine) FastForwardCurrentBranch(worktreePath string, targetRef string) 
 }
 
 // PushBranch pushes a local branch ref to the configured remote branch.
-func (e Engine) PushBranch(worktreePath string, remote string, branch string) error {
+func (e Engine) PushBranch(worktreePath string, remote string, branch string, noVerify bool) error {
 	if remote == "" {
 		return fmt.Errorf("remote name is empty")
 	}
-	output, err := e.runGit(worktreePath, "push", remote, branch+":"+branch)
+	args := []string{"push"}
+	if noVerify {
+		args = append(args, "--no-verify")
+	}
+	args = append(args, remote, branch+":"+branch)
+	output, err := e.runGit(worktreePath, args...)
 	if err == nil {
 		return nil
 	}
@@ -435,6 +441,7 @@ func (e Engine) InspectHealth(protectedBranch string, mainWorktreePath string) (
 		IsGitRepository:      true,
 		StaleLocks:           []string{},
 		UnfinishedQueueItems: []string{},
+		Warnings:             []string{},
 	}
 
 	report.ProtectedBranchExists = engine.BranchExists(protectedBranch)

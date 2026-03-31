@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/recallnet/mainline/internal/policy"
 )
 
 func TestRepoInitAndShow(t *testing.T) {
@@ -141,6 +143,42 @@ func TestDoctorDoesNotCreateStateDBBeforeInit(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(repoRoot, ".git", "mainline", "state.db")); !os.IsNotExist(err) {
 		t.Fatalf("expected no state db before init, got err=%v", err)
+	}
+}
+
+func TestDoctorWarnsWhenWorktreeOutsidePolicyPrefix(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "outside-prefix")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/outside", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Repo.WorktreeLayoutPolicy = "enforce-prefix"
+	cfg.Repo.WorktreeRootPrefix = filepath.Join(repoRoot, "_wt")
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	output := doctorOut.String()
+	if !strings.Contains(output, "Warnings: 1") {
+		t.Fatalf("expected warning count, got %q", output)
+	}
+	if !strings.Contains(output, "worktree outside policy prefix") {
+		t.Fatalf("expected policy warning, got %q", output)
 	}
 }
 

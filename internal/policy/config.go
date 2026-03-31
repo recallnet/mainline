@@ -15,6 +15,7 @@ type File struct {
 	Repo        RepoConfig        `toml:"repo"`
 	Integration IntegrationConfig `toml:"integration"`
 	Publish     PublishConfig     `toml:"publish"`
+	Checks      ChecksConfig      `toml:"checks"`
 }
 
 // ConfigPath returns the config path for a repository root.
@@ -70,5 +71,6 @@ func DefaultFile() File {
 		Repo:        defaults.Repo,
 		Integration: defaults.Integration,
 		Publish:     defaults.Publish,
+		Checks:      defaults.Checks,
 	}
 }

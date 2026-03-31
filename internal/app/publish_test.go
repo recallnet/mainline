@@ -3,7 +3,9 @@ package app
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/recallnet/mainline/internal/git"
@@ -185,6 +187,71 @@ func TestRunOnceAutoPublishQueuesAndPublishesOnSecondCycle(t *testing.T) {
 	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
 	if remoteHead != localHead {
 		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+}
+
+func TestRunOncePrePublishChecksFailBeforePush(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Checks.PrePublish = []string{"exit 9"}
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "configure pre publish check")
+
+	writeFileAndCommit(t, repoRoot, "one.txt", "one\n", "main change one")
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if !strings.Contains(runOut.String(), "pre-publish checks failed") {
+		t.Fatalf("expected pre-publish check failure output, got %q", runOut.String())
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead == localHead {
+		t.Fatalf("expected remote head to remain behind local head %q", localHead)
+	}
+}
+
+func TestPublishRespectsHookPolicyBypassingPrePushHook(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	hookPath := filepath.Join(repoRoot, ".git", "hooks", "pre-push")
+	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Repo.HookPolicy = "replace-with-mainline-checks"
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "configure hook policy")
+
+	writeFileAndCommit(t, repoRoot, "hook.txt", "hook\n", "main change")
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected hook-bypassed publish to update remote to %q, got %q", localHead, remoteHead)
 	}
 }
 

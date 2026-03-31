@@ -166,6 +166,10 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 		return failIntegrationSubmission(ctx, store, repoRecord.ID, submission.ID, fmt.Errorf("branch %q moved from submitted SHA %s to %s; resubmit the branch", submission.BranchName, submission.SourceSHA, headSHA))
 	}
 
+	if err := runConfiguredChecks(cfg.Checks.PreIntegrate, submission.SourceWorktree, cfg.Checks.CommandTimeout); err != nil {
+		return blockIntegrationSubmission(ctx, store, repoRecord.ID, submission.ID, fmt.Errorf("pre-integrate checks failed: %w", err))
+	}
+
 	if err := sourceEngine.RebaseCurrentBranch(submission.SourceWorktree, cfg.Repo.ProtectedBranch); err != nil {
 		if errors.Is(err, git.ErrRebaseConflict) {
 			return blockIntegrationSubmission(ctx, store, repoRecord.ID, submission.ID, fmt.Errorf("rebase conflict in %s: resolve in the source worktree and resubmit", submission.SourceWorktree))
@@ -313,7 +317,26 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 		return fmt.Sprintf("Superseded older publish requests; latest target is %s", currentProtectedSHA), nil
 	}
 
-	if err := mainEngine.PushBranch(cfg.Repo.MainWorktree, cfg.Repo.RemoteName, cfg.Repo.ProtectedBranch); err != nil {
+	if err := runConfiguredChecks(cfg.Checks.PrePublish, cfg.Repo.MainWorktree, cfg.Checks.CommandTimeout); err != nil {
+		if _, updateErr := store.UpdatePublishRequestStatus(ctx, request.ID, "failed", sql.NullInt64{}); updateErr != nil {
+			return "", updateErr
+		}
+		if eventErr := appendStateEvent(ctx, store, state.EventRecord{
+			RepoID:    repoRecord.ID,
+			ItemType:  "publish_request",
+			ItemID:    state.NullInt64(request.ID),
+			EventType: "publish.failed",
+			Payload: mustJSON(map[string]string{
+				"target_sha": request.TargetSHA,
+				"error":      fmt.Sprintf("pre-publish checks failed: %s", err.Error()),
+			}),
+		}); eventErr != nil {
+			return "", eventErr
+		}
+		return fmt.Sprintf("Failed publish request %d: pre-publish checks failed: %s", request.ID, err.Error()), nil
+	}
+
+	if err := mainEngine.PushBranch(cfg.Repo.MainWorktree, cfg.Repo.RemoteName, cfg.Repo.ProtectedBranch, shouldBypassGitHooks(cfg)); err != nil {
 		if _, updateErr := store.UpdatePublishRequestStatus(ctx, request.ID, "failed", sql.NullInt64{}); updateErr != nil {
 			return "", updateErr
 		}

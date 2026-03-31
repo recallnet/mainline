@@ -27,6 +27,7 @@ Today the repo implements the foundation for that model:
 - ordered single-repo integration with `run-once`
 - coalesced latest-tip publish queue with `publish` and `run-once`
 - polling daemon mode with `mainlined`
+- repo-defined policy checks, hook coordination, and worktree layout warnings
 - support for standard repos and bare-clone-plus-worktree layouts
 
 ## Current Status
@@ -40,11 +41,13 @@ Implemented milestones:
 - Milestone 4: integration queue MVP
 - Milestone 5: publish queue MVP
 - Milestone 6: daemon mode
+- Milestone 7: policies and hooks
 
 The current CLI can initialize a repo, inspect health, queue clean topic
 branches, run one serialized integration cycle locally, queue manual publish
 requests, push the latest protected-branch tip through the coalesced publish
-queue, or run a polling background loop through `mainlined`.
+queue, run a polling background loop through `mainlined`, and enforce
+repo-specific pre-checks and hook/worktree policies.
 
 ## Why This Exists
 
@@ -199,6 +202,15 @@ Current daemon behavior:
 - exits cleanly on `SIGINT` or `SIGTERM`
 - preserves queue truth across restarts because durable state remains in SQLite
 
+Current policy behavior:
+
+- repo config now includes hook policy, dirty-worktree policy, worktree layout policy, and shell checks
+- pre-integrate checks run in the source worktree before protected-branch mutation
+- pre-publish checks run in the main worktree before push
+- check execution uses a configurable command timeout
+- `replace-with-mainline-checks` and `bypass-with-explicit-command` bypass `git push` hooks with `--no-verify`
+- `doctor` warns when linked worktrees fall outside an enforced prefix
+
 Current lock domains:
 
 - integration
@@ -236,6 +248,32 @@ The project plan and spec live in:
 
 - `PLAN.md`
 - `SPEC.md`
+
+Example policy config:
+
+```toml
+[repo]
+ProtectedBranch = "main"
+RemoteName = "origin"
+MainWorktree = "/Users/alice/Projects/recallnet/mainline"
+WorktreeLayoutPolicy = "enforce-prefix"
+WorktreeRootPrefix = "/Users/alice/Projects/_wt/recallnet/mainline"
+HookPolicy = "replace-with-mainline-checks"
+
+[integration]
+Strategy = "rebase-then-ff"
+SyncPolicy = "sync-before-integrate"
+DirtyWorktreePolicy = "reject"
+
+[publish]
+Mode = "auto"
+Coalesced = true
+
+[checks]
+PreIntegrate = ["go test ./..."]
+PrePublish = ["go test ./..."]
+CommandTimeout = "30s"
+```
 
 ## License
 

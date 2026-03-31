@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/recallnet/mainline/internal/git"
@@ -271,6 +272,25 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 
+	if cfg.Repo.WorktreeLayoutPolicy == "enforce-prefix" && cfg.Repo.WorktreeRootPrefix != "" {
+		engine := git.NewEngine(layout.WorktreeRoot)
+		worktrees, err := engine.ListWorktrees()
+		if err != nil {
+			return err
+		}
+		prefix := filepath.Clean(cfg.Repo.WorktreeRootPrefix) + string(filepath.Separator)
+		mainWorktree := filepath.Clean(cfg.Repo.MainWorktree)
+		for _, wt := range worktrees {
+			cleanPath := filepath.Clean(wt.Path)
+			if cleanPath == mainWorktree {
+				continue
+			}
+			if !strings.HasPrefix(cleanPath+string(filepath.Separator), prefix) {
+				report.Warnings = append(report.Warnings, "worktree outside policy prefix: "+cleanPath)
+			}
+		}
+	}
+
 	store := state.NewStore(state.DefaultPath(layout.GitDir))
 	ctx := context.Background()
 	if store.Exists() {
@@ -315,6 +335,10 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "Stale locks: %d\n", len(report.StaleLocks))
 	fmt.Fprintf(stdout, "Unfinished queue items: %d\n", len(report.UnfinishedQueueItems))
+	fmt.Fprintf(stdout, "Warnings: %d\n", len(report.Warnings))
+	for _, warning := range report.Warnings {
+		fmt.Fprintf(stdout, "Warning: %s\n", warning)
+	}
 	return nil
 }
 
