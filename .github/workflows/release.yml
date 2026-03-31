@@ -47,6 +47,13 @@ jobs:
             --output dist/mainline.rb
           ruby -c dist/mainline.rb
 
+      - name: Generate release manifest
+        run: |
+          ./scripts/generate-release-manifest.sh \
+            --version "${{ steps.version.outputs.value }}" \
+            --checksums dist/SHA256SUMS \
+            --output dist/release-manifest.json
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -64,3 +71,4 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS
             dist/mainline.rb
+            dist/release-manifest.json

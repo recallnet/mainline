@@ -36,5 +36,16 @@ jobs:
           ./scripts/generate-homebrew-formula.sh --version v0.0.0-ci --checksums dist/SHA256SUMS --output dist/mainline.rb
           ruby -c dist/mainline.rb
 
+      - name: Release manifest generation test
+        run: |
+          ./scripts/generate-release-manifest.sh --version v0.0.0-ci --checksums dist/SHA256SUMS --output dist/release-manifest.json
+          python3 - <<'PY'
+          import json
+          data = json.load(open("dist/release-manifest.json"))
+          assert data["version"] == "v0.0.0-ci"
+          assert len(data["assets"]) == 4
+          assert all(item["url"].startswith("https://github.com/recallnet/mainline/releases/download/v0.0.0-ci/") for item in data["assets"])
+          PY
+
       - name: Release build
         run: make release-snapshot VERSION=ci

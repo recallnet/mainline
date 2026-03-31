@@ -482,6 +482,25 @@ Acceptance criteria:
 - the formula installs the correct archive for Intel and Apple Silicon macOS
 - install docs no longer imply that Homebrew support is `--HEAD`-only
 
+## Milestone 19: Machine-Readable Release Manifest
+
+Goal:
+
+- publish a stable manifest that automation can consume without scraping GitHub release pages
+
+Deliverables:
+
+- manifest generation script that emits version, commit, archive URLs, and checksums as JSON
+- CI verification for manifest generation
+- release workflow upload of the manifest asset
+- install docs that point operators and automation at the manifest
+
+Acceptance criteria:
+
+- a tagged release publishes a `release-manifest.json` asset
+- the manifest includes every shipped archive plus checksum and URL metadata
+- automation can discover the current release payload shape from a single JSON file
+
 ## Architecture Plan
 
 ## Repository Layout

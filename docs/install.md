@@ -3,7 +3,8 @@
 `mainline` now ships source-controlled packaging outputs for Homebrew and Nix.
 
 For direct downloads, GitHub releases also publish versioned `.tar.gz` archives
-for macOS and Linux plus a `SHA256SUMS` file.
+for macOS and Linux plus a `SHA256SUMS` file and a machine-readable
+`release-manifest.json`.
 
 ## Direct Download
 
@@ -11,6 +12,12 @@ Download the archive that matches your platform from the GitHub releases page:
 
 ```bash
 https://github.com/recallnet/mainline/releases
+```
+
+Automation can consume the release manifest directly:
+
+```bash
+curl -LO https://github.com/recallnet/mainline/releases/download/v0.1.0/release-manifest.json
 ```
 
 Archive naming:
