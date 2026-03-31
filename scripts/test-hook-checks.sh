@@ -49,7 +49,17 @@ EOF
 
 (
   cd "${clone_a}"
-  :
+  python3 - <<'PY' > partial-secret.txt
+print("to" + 'ken = "staged-secret"')
+PY
+  git add partial-secret.txt
+  printf 'token = ""\n' > partial-secret.txt
+  if ./scripts/run-hook-checks.sh pre-commit; then
+    echo "expected pre-commit to block staged secret content" >&2
+    exit 1
+  fi
+  git reset --quiet HEAD partial-secret.txt
+  rm -f partial-secret.txt
 )
 
 rsync -a --delete \

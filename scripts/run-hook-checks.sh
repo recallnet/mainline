@@ -71,12 +71,10 @@ check_secrets_in_staged_files() {
   fi
 
   python3 - <<'PY'
-import pathlib
 import re
 import subprocess
 import sys
 
-repo = pathlib.Path.cwd()
 files = subprocess.check_output(
     ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
     text=True,
@@ -84,11 +82,10 @@ files = subprocess.check_output(
 pattern = re.compile(r"(password|secret|api[_-]?key|token|credential)\s*[:=]\s*['\"][^'\"]+['\"]", re.I)
 bad = []
 for rel in files:
-    path = repo / rel
-    if not path.is_file():
-        continue
     try:
-        text = path.read_text()
+        text = subprocess.check_output(["git", "show", f":{rel}"], text=True, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        continue
     except UnicodeDecodeError:
         continue
     if pattern.search(text):
