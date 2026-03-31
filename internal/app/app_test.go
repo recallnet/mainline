@@ -119,6 +119,36 @@ func TestDaemonIdleExitEmitsJSONLog(t *testing.T) {
 	}
 }
 
+func TestDaemonTreatsHeldLockAsBusyNotFatal(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
+	lease, err := lockManager.Acquire(state.PublishLock, "test")
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	defer lease.Release()
+
+	var stdout bytes.Buffer
+	opts := daemonOptions{
+		repoPath:  repoRoot,
+		interval:  time.Millisecond,
+		maxCycles: 1,
+	}
+	if err := runDaemonLoop(context.Background(), opts, &stdout); err != nil {
+		t.Fatalf("runDaemonLoop returned error: %v", err)
+	}
+
+	if !strings.Contains(stdout.String(), "Publish worker busy.") {
+		t.Fatalf("expected busy log output, got %q", stdout.String())
+	}
+}
+
 func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

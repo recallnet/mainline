@@ -70,6 +70,9 @@ func runOneCycle(repoPath string) (string, error) {
 
 	lease, err := lockManager.Acquire(state.IntegrationLock, "run-once")
 	if err != nil {
+		if errors.Is(err, state.ErrLockHeld) {
+			return "Integration worker busy.", nil
+		}
 		return "", err
 	}
 
@@ -102,6 +105,9 @@ func runOneCycle(repoPath string) (string, error) {
 
 	publishLease, err := lockManager.Acquire(state.PublishLock, "run-once")
 	if err != nil {
+		if errors.Is(err, state.ErrLockHeld) {
+			return "Publish worker busy.", nil
+		}
 		return "", err
 	}
 	defer publishLease.Release()
