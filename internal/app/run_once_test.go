@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,6 +125,32 @@ func TestRunOnceBlocksConflictAndLeavesProtectedBranchUntouched(t *testing.T) {
 
 	if status := runTestCommand(t, featureTwo, "git", "status", "--short"); strings.TrimSpace(status) == "" {
 		t.Fatalf("expected conflicted source worktree to remain non-clean")
+	}
+
+	var statusOut bytes.Buffer
+	var statusErr bytes.Buffer
+	if err := runStatus([]string{"--repo", repoRoot, "--json", "--events", "10"}, &statusOut, &statusErr); err != nil {
+		t.Fatalf("runStatus returned error: %v", err)
+	}
+
+	var report statusResult
+	if err := json.Unmarshal(statusOut.Bytes(), &report); err != nil {
+		t.Fatalf("Unmarshal status: %v", err)
+	}
+	if report.LatestSubmission == nil {
+		t.Fatalf("expected latest submission in status report")
+	}
+	if report.LatestSubmission.Status != "blocked" {
+		t.Fatalf("expected blocked latest submission, got %+v", report.LatestSubmission)
+	}
+	if report.LatestSubmission.ProtectedTipSHA != strings.TrimSpace(protectedAfterFirst) {
+		t.Fatalf("expected protected tip %q, got %+v", strings.TrimSpace(protectedAfterFirst), report.LatestSubmission)
+	}
+	if report.LatestSubmission.RetryHint != "manual-rebase-from-tip" {
+		t.Fatalf("expected retry hint, got %+v", report.LatestSubmission)
+	}
+	if len(report.LatestSubmission.ConflictFiles) == 0 || report.LatestSubmission.ConflictFiles[0] != "README.md" {
+		t.Fatalf("expected conflict files for blocked submission, got %+v", report.LatestSubmission)
 	}
 }
 

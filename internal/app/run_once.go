@@ -219,7 +219,27 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 	}
 	if err := sourceEngine.RebaseCurrentBranch(submission.SourceWorktree, cfg.Repo.ProtectedBranch); err != nil {
 		if errors.Is(err, git.ErrRebaseConflict) {
-			return blockIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, fmt.Errorf("rebase conflict in %s: resolve in the source worktree and resubmit", submission.SourceWorktree))
+			protectedTipSHA, shaErr := mainEngine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+			if shaErr != nil {
+				return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, shaErr)
+			}
+			conflictFiles, conflictErr := sourceEngine.ConflictedFiles(submission.SourceWorktree)
+			if conflictErr != nil {
+				return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, conflictErr)
+			}
+			return blockIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult,
+				fmt.Errorf("rebase conflict in %s: resolve in the source worktree and resubmit", submission.SourceWorktree),
+				map[string]any{
+					"blocked_reason":     "rebase_conflict",
+					"conflict_files":     conflictFiles,
+					"protected_tip_sha":  protectedTipSHA,
+					"retry_hint":         "manual-rebase-from-tip",
+					"retry_recommended":  false,
+					"source_worktree":    submission.SourceWorktree,
+					"protected_branch":   cfg.Repo.ProtectedBranch,
+					"protected_upstream": syncResult.Upstream,
+				},
+			)
 		}
 		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, err)
 	}
@@ -607,13 +627,17 @@ func failIntegrationSubmission(ctx context.Context, store state.Store, repoID in
 	return fmt.Sprintf("Failed submission %d: %s", submissionID, cause.Error()), nil
 }
 
-func blockIntegrationSubmission(ctx context.Context, store state.Store, repoID int64, submissionID int64, cause error) (string, error) {
+func blockIntegrationSubmission(ctx context.Context, store state.Store, repoID int64, submissionID int64, cause error, details map[string]any) (string, error) {
 	if _, err := store.UpdateIntegrationSubmissionStatus(ctx, submissionID, "blocked", cause.Error()); err != nil {
 		return "", err
 	}
-	if err := appendSubmissionEvent(ctx, store, repoID, submissionID, "integration.blocked", map[string]string{
+	payload := map[string]any{
 		"error": cause.Error(),
-	}); err != nil {
+	}
+	for key, value := range details {
+		payload[key] = value
+	}
+	if err := appendSubmissionEvent(ctx, store, repoID, submissionID, "integration.blocked", payload); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("Blocked submission %d: %s", submissionID, cause.Error()), nil
@@ -627,15 +651,19 @@ func failIntegrationSubmissionWithSync(ctx context.Context, store state.Store, r
 	return withProtectedSyncMessage(syncResult, result), nil
 }
 
-func blockIntegrationSubmissionWithSync(ctx context.Context, store state.Store, repoID int64, submissionID int64, syncResult protectedSyncResult, cause error) (string, error) {
-	result, err := blockIntegrationSubmission(ctx, store, repoID, submissionID, cause)
+func blockIntegrationSubmissionWithSync(ctx context.Context, store state.Store, repoID int64, submissionID int64, syncResult protectedSyncResult, cause error, details ...map[string]any) (string, error) {
+	var payload map[string]any
+	if len(details) > 0 {
+		payload = details[0]
+	}
+	result, err := blockIntegrationSubmission(ctx, store, repoID, submissionID, cause, payload)
 	if err != nil {
 		return "", err
 	}
 	return withProtectedSyncMessage(syncResult, result), nil
 }
 
-func appendSubmissionEvent(ctx context.Context, store state.Store, repoID int64, submissionID int64, eventType string, payload map[string]string) error {
+func appendSubmissionEvent(ctx context.Context, store state.Store, repoID int64, submissionID int64, eventType string, payload any) error {
 	return appendStateEvent(ctx, store, state.EventRecord{
 		RepoID:    repoID,
 		ItemType:  "integration_submission",
@@ -708,7 +736,7 @@ func recoverInterruptedPublishRequests(ctx context.Context, store state.Store, r
 	return nil
 }
 
-func mustJSON(payload map[string]string) json.RawMessage {
+func mustJSON(payload any) json.RawMessage {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		panic(err)

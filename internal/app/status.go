@@ -27,19 +27,34 @@ type statusCounts struct {
 }
 
 type statusResult struct {
-	RepositoryRoot     string                        `json:"repository_root"`
-	StatePath          string                        `json:"state_path"`
-	CurrentWorktree    string                        `json:"current_worktree"`
-	CurrentBranch      string                        `json:"current_branch"`
-	ProtectedBranch    string                        `json:"protected_branch"`
-	ProtectedBranchSHA string                        `json:"protected_branch_sha"`
-	ProtectedUpstream  git.BranchStatus              `json:"protected_upstream"`
-	Counts             statusCounts                  `json:"counts"`
-	LatestSubmission   *state.IntegrationSubmission  `json:"latest_submission,omitempty"`
-	LatestPublish      *state.PublishRequest         `json:"latest_publish,omitempty"`
-	ActiveSubmissions  []state.IntegrationSubmission `json:"active_submissions,omitempty"`
-	ActivePublishes    []state.PublishRequest        `json:"active_publishes,omitempty"`
-	RecentEvents       []state.EventRecord           `json:"recent_events"`
+	RepositoryRoot     string                 `json:"repository_root"`
+	StatePath          string                 `json:"state_path"`
+	CurrentWorktree    string                 `json:"current_worktree"`
+	CurrentBranch      string                 `json:"current_branch"`
+	ProtectedBranch    string                 `json:"protected_branch"`
+	ProtectedBranchSHA string                 `json:"protected_branch_sha"`
+	ProtectedUpstream  git.BranchStatus       `json:"protected_upstream"`
+	Counts             statusCounts           `json:"counts"`
+	LatestSubmission   *statusSubmission      `json:"latest_submission,omitempty"`
+	LatestPublish      *state.PublishRequest  `json:"latest_publish,omitempty"`
+	ActiveSubmissions  []statusSubmission     `json:"active_submissions,omitempty"`
+	ActivePublishes    []state.PublishRequest `json:"active_publishes,omitempty"`
+	RecentEvents       []state.EventRecord    `json:"recent_events"`
+}
+
+type statusSubmission struct {
+	state.IntegrationSubmission
+	ConflictFiles   []string `json:"conflict_files,omitempty"`
+	ProtectedTipSHA string   `json:"protected_tip_sha,omitempty"`
+	RetryHint       string   `json:"retry_hint,omitempty"`
+}
+
+type blockedSubmissionDetails struct {
+	Error           string   `json:"error,omitempty"`
+	BlockedReason   string   `json:"blocked_reason,omitempty"`
+	ConflictFiles   []string `json:"conflict_files,omitempty"`
+	ProtectedTipSHA string   `json:"protected_tip_sha,omitempty"`
+	RetryHint       string   `json:"retry_hint,omitempty"`
 }
 
 func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -117,6 +132,11 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		return statusResult{}, err
 	}
 
+	enrichedSubmissions, err := enrichStatusSubmissions(ctx, store, repoRecord.ID, submissions)
+	if err != nil {
+		return statusResult{}, err
+	}
+
 	result := statusResult{
 		RepositoryRoot:     repoRecord.CanonicalPath,
 		StatePath:          store.Path,
@@ -126,12 +146,13 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		ProtectedBranchSHA: protectedSHA,
 		ProtectedUpstream:  protectedStatus,
 		Counts:             summarizeCounts(submissions, requests),
-		ActiveSubmissions:  activeSubmissions(submissions),
+		ActiveSubmissions:  activeSubmissions(enrichedSubmissions),
 		ActivePublishes:    activePublishes(requests),
 		RecentEvents:       events,
 	}
-	if len(submissions) > 0 {
-		result.LatestSubmission = &submissions[len(submissions)-1]
+	if len(enrichedSubmissions) > 0 {
+		latest := enrichedSubmissions[len(enrichedSubmissions)-1]
+		result.LatestSubmission = &latest
 	}
 	if len(requests) > 0 {
 		result.LatestPublish = &requests[len(requests)-1]
@@ -175,6 +196,15 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 		if result.LatestSubmission.LastError != "" {
 			fmt.Fprintf(stdout, "  last error: %s\n", result.LatestSubmission.LastError)
 		}
+		if len(result.LatestSubmission.ConflictFiles) > 0 {
+			fmt.Fprintf(stdout, "  conflict files: %s\n", strings.Join(result.LatestSubmission.ConflictFiles, ", "))
+		}
+		if result.LatestSubmission.ProtectedTipSHA != "" {
+			fmt.Fprintf(stdout, "  protected tip: %s\n", result.LatestSubmission.ProtectedTipSHA)
+		}
+		if result.LatestSubmission.RetryHint != "" {
+			fmt.Fprintf(stdout, "  retry hint: %s\n", result.LatestSubmission.RetryHint)
+		}
 	} else {
 		fmt.Fprintln(stdout, "Latest submission: none")
 	}
@@ -216,8 +246,8 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 	return nil
 }
 
-func activeSubmissions(submissions []state.IntegrationSubmission) []state.IntegrationSubmission {
-	var active []state.IntegrationSubmission
+func activeSubmissions(submissions []statusSubmission) []statusSubmission {
+	var active []statusSubmission
 	for _, submission := range submissions {
 		switch submission.Status {
 		case "queued", "running", "blocked":
@@ -225,6 +255,45 @@ func activeSubmissions(submissions []state.IntegrationSubmission) []state.Integr
 		}
 	}
 	return active
+}
+
+func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int64, submissions []state.IntegrationSubmission) ([]statusSubmission, error) {
+	enriched := make([]statusSubmission, 0, len(submissions))
+	for _, submission := range submissions {
+		item := statusSubmission{IntegrationSubmission: submission}
+		if submission.Status == "blocked" {
+			details, err := latestBlockedSubmissionDetails(ctx, store, repoID, submission.ID)
+			if err != nil {
+				return nil, err
+			}
+			item.ConflictFiles = details.ConflictFiles
+			item.ProtectedTipSHA = details.ProtectedTipSHA
+			item.RetryHint = details.RetryHint
+		}
+		enriched = append(enriched, item)
+	}
+	return enriched, nil
+}
+
+func latestBlockedSubmissionDetails(ctx context.Context, store state.Store, repoID int64, submissionID int64) (blockedSubmissionDetails, error) {
+	events, err := store.ListEventsForItem(ctx, repoID, "integration_submission", submissionID, 10)
+	if err != nil {
+		return blockedSubmissionDetails{}, err
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].EventType != "integration.blocked" {
+			continue
+		}
+		var details blockedSubmissionDetails
+		if len(events[i].Payload) == 0 {
+			return details, nil
+		}
+		if err := json.Unmarshal(events[i].Payload, &details); err != nil {
+			return blockedSubmissionDetails{}, err
+		}
+		return details, nil
+	}
+	return blockedSubmissionDetails{}, nil
 }
 
 func activePublishes(requests []state.PublishRequest) []state.PublishRequest {

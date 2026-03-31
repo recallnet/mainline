@@ -367,6 +367,24 @@ func (e Engine) RebaseCurrentBranch(worktreePath string, upstreamRef string) err
 	return err
 }
 
+// ConflictedFiles returns the current unmerged paths in a worktree.
+func (e Engine) ConflictedFiles(worktreePath string) ([]string, error) {
+	output, err := e.runGit(worktreePath, "diff", "--name-only", "--diff-filter=U")
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	files := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		files = append(files, line)
+	}
+	return files, nil
+}
+
 // FastForwardCurrentBranch fast-forwards the checked-out branch in a worktree to targetRef.
 func (e Engine) FastForwardCurrentBranch(worktreePath string, targetRef string) error {
 	output, err := e.runGit(worktreePath, "merge", "--ff-only", targetRef)
