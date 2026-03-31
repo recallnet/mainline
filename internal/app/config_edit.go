@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/kballard/go-shellquote"
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
 )
@@ -43,19 +44,19 @@ func runConfigEdit(args []string, stdout io.Writer, stderr io.Writer) error {
 		fmt.Fprintln(stdout, configPath)
 	}
 
-	editorBin, err := resolveEditorBinary(editor)
+	editorCommand, err := resolveEditorCommand(editor)
 	if err != nil {
 		return err
 	}
 
-	cmd := exec.Command(editorBin, configPath)
+	cmd := exec.Command(editorCommand[0], append(editorCommand[1:], configPath)...)
 	cmd.Dir = repoRoot
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("run editor %q: %w", editorBin, err)
+		return fmt.Errorf("run editor %q: %w", editorCommand[0], err)
 	}
 
 	fmt.Fprintf(stdout, "Edited %s\n", configPath)
@@ -84,17 +85,25 @@ func ensureConfigScaffold(layout git.RepositoryLayout) error {
 	return policy.SaveFile(repoRoot, cfg)
 }
 
-func resolveEditorBinary(flagValue string) (string, error) {
+func resolveEditorCommand(flagValue string) ([]string, error) {
 	for _, candidate := range []string{flagValue, os.Getenv("VISUAL"), os.Getenv("EDITOR")} {
 		if candidate == "" {
 			continue
 		}
-		path, err := exec.LookPath(candidate)
+		command, err := shellquote.Split(candidate)
 		if err != nil {
-			return "", fmt.Errorf("resolve editor %q: %w", candidate, err)
+			return nil, fmt.Errorf("parse editor %q: %w", candidate, err)
 		}
-		return path, nil
+		if len(command) == 0 {
+			continue
+		}
+		path, err := exec.LookPath(command[0])
+		if err != nil {
+			return nil, fmt.Errorf("resolve editor %q: %w", command[0], err)
+		}
+		command[0] = path
+		return command, nil
 	}
 
-	return "", fmt.Errorf("no editor configured; pass --editor or set VISUAL/EDITOR")
+	return nil, fmt.Errorf("no editor configured; pass --editor or set VISUAL/EDITOR")
 }

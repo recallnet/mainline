@@ -306,6 +306,32 @@ func TestConfigEditRequiresEditor(t *testing.T) {
 	}
 }
 
+func TestConfigEditSupportsEditorCommandsWithArgs(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	editorPath := filepath.Join(t.TempDir(), "editor-args.sh")
+	editorOutput := []byte(`#!/bin/sh
+test "$1" = "--wait" || exit 11
+echo "# args-ok" >> "$2"
+`)
+	if err := os.WriteFile(editorPath, editorOutput, 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runConfigEdit([]string{"--repo", repoRoot, "--editor", editorPath + " --wait"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runConfigEdit returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(repoRoot, "mainline.toml"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(data), "# args-ok") {
+		t.Fatalf("expected editor with args to mutate config, got %q", string(data))
+	}
+}
+
 func createTestRepo(t *testing.T) (string, string) {
 	t.Helper()
 
