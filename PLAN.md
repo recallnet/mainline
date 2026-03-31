@@ -555,6 +555,132 @@ Acceptance criteria:
 - exactly one publish completes for the final protected tip while older publish requests are superseded
 - the stress run emits metrics that operators can use to track queue behavior over time
 
+## Milestone 23: Repeated Soak And Flake Tracking
+
+Goal:
+
+- move from one-off green stress runs to evidence about stability over many runs
+
+Deliverables:
+
+- soak runner that executes the stress workload repeatedly with configurable iteration count
+- machine-readable soak summaries that record pass/fail, duration, queue depth, and publish coalescing metrics per run
+- flake-rate reporting in CI or local maintainer tooling
+
+Acceptance criteria:
+
+- maintainers can run a long soak with one command
+- every soak run produces a persisted summary that can be compared across revisions
+- any intermittent queue, publish, lock, or hook failure is visible as a measured flake instead of anecdotal suspicion
+
+## Milestone 24: Randomized Timing And Failure Injection
+
+Goal:
+
+- make race conditions and brittle ordering assumptions easier to reproduce before production
+
+Deliverables:
+
+- randomized delays around submit, integration, publish, and daemon polling paths in test-only harnesses
+- fault injection for fetch, rebase, push, hook execution, and state-store write paths
+- seeded replay support so a failing randomized run can be reproduced exactly
+
+Acceptance criteria:
+
+- the stress harness can run with randomized timing and seeded replay
+- failure injection exercises blocked, failed, retried, and superseded paths without manual test surgery
+- a failing randomized run can be rerun from the same seed and reproduce the same failure class
+
+## Milestone 25: Crash And Restart Correctness
+
+Goal:
+
+- prove restart-safety instead of assuming it from normal happy-path tests
+
+Deliverables:
+
+- tests that terminate the worker during integration, during publish, and while locks are held
+- restart scenarios that verify queue state, events, and lock recovery after abrupt process exit
+- explicit assertions for partial-progress recovery and stale-lock cleanup
+
+Acceptance criteria:
+
+- crashing during integration never leaves protected `main` dirty
+- crashing during publish converges back to the correct latest publish target after restart
+- stale locks are either reclaimed safely or surfaced clearly through `doctor` and worker output
+
+## Milestone 26: Real-Repo Certification Matrix
+
+Goal:
+
+- validate behavior against the kinds of repos that will actually use `mainline`
+
+Deliverables:
+
+- certification checklist for at least a small matrix of real repos
+- exercised repo classes including bare-clone-plus-worktree layouts, heavy hook repos, and agent-heavy repos
+- captured findings and any repo-specific policy defaults required for safe adoption
+
+Acceptance criteria:
+
+- `mainline` passes end-to-end dogfood runs on multiple real repositories, not just temporary test repos
+- at least one hook-heavy repo and one bare-clone layout repo complete repeated landing/publish cycles cleanly
+- any repo-specific incompatibilities are documented as either fixed, policy-gated, or explicit non-goals
+
+## Milestone 27: Observability And Confidence Reporting
+
+Goal:
+
+- make confidence measurable during real use instead of inferred from occasional manual checks
+
+Deliverables:
+
+- exported metrics or structured reports for queue depth, drain latency, blocked rate, retry rate, supersede rate, and publish latency
+- operator-visible confidence report summarizing recent soak results and live health signals
+- command output that surfaces whether the current build has passed the required confidence gates
+
+Acceptance criteria:
+
+- operators can inspect recent queue behavior and confidence signals without reading raw SQLite tables
+- regressions in latency, blocked rate, or flaky publish behavior are visible as metrics deltas
+- maintainers can tell whether a build meets the current promotion bar from one report
+
+## Milestone 28: Upgrade And Migration Safety
+
+Goal:
+
+- remove storage and release-upgrade uncertainty as a source of production risk
+
+Deliverables:
+
+- explicit schema migration path with upgrade and downgrade tests where supported
+- compatibility checks for upgrading from older binaries to newer binaries on existing state
+- release notes and tooling that call out any state or policy changes required during upgrade
+
+Acceptance criteria:
+
+- upgrading across released versions preserves durable queue state correctly
+- new binaries can detect unsupported on-disk state and fail clearly instead of corrupting it
+- state migrations are tested as first-class release criteria, not manual spot checks
+
+## Milestone 29: Production Readiness Gate
+
+Goal:
+
+- define the concrete evidence required before claiming production trust
+
+Deliverables:
+
+- a written readiness rubric that includes soak length, acceptable flake rate, certification repos, migration coverage, and hook/policy coverage
+- a release gate command or checklist that aggregates the required evidence
+- a documented statement of what "production ready" means for `mainline`
+
+Acceptance criteria:
+
+- the project has an explicit promotion bar instead of relying on intuition
+- maintainers can point to measured evidence for every major failure class before release
+- no release is called production ready unless it passes the full readiness rubric
+
 ## Architecture Plan
 
 ## Repository Layout
