@@ -57,13 +57,16 @@ func runCLI(args []string, stdout io.Writer, stderr io.Writer) error {
 		return nil
 	}
 
-	command := strings.Join(remaining, " ")
+	command, commandArgs := parseCLICommand(remaining)
 	if !isKnownCLICommand(command) {
 		return fmt.Errorf("unknown command %q\n\n%s", command, cliHelpText())
 	}
 
 	wiring := bootstrap()
 	fmt.Fprintf(stdout, "%s is not implemented yet.\n", command)
+	if len(commandArgs) > 0 {
+		fmt.Fprintf(stdout, "Received %d trailing argument(s) for future subcommand handling.\n", len(commandArgs))
+	}
 	fmt.Fprintf(stdout, "Protected branch default: %s\n", wiring.Policy.Repo.ProtectedBranch)
 	fmt.Fprintf(stdout, "Repository root: %s\n", wiring.Git.RepositoryRoot)
 	return nil
@@ -99,6 +102,21 @@ func isKnownCLICommand(command string) bool {
 		}
 	}
 	return false
+}
+
+func parseCLICommand(args []string) (string, []string) {
+	if len(args) == 0 {
+		return "", nil
+	}
+
+	if args[0] == "repo" {
+		if len(args) == 1 {
+			return "repo", nil
+		}
+		return strings.Join(args[:2], " "), args[2:]
+	}
+
+	return args[0], args[1:]
 }
 
 type wiring struct {
