@@ -7,12 +7,6 @@ import (
 	"io"
 	"os"
 	"strings"
-
-	"github.com/recallnet/mainline/internal/git"
-	"github.com/recallnet/mainline/internal/policy"
-	"github.com/recallnet/mainline/internal/queue"
-	"github.com/recallnet/mainline/internal/state"
-	"github.com/recallnet/mainline/internal/worker"
 )
 
 var cliCommands = []string{
@@ -62,14 +56,7 @@ func runCLI(args []string, stdout io.Writer, stderr io.Writer) error {
 		return fmt.Errorf("unknown command %q\n\n%s", command, cliHelpText())
 	}
 
-	wiring := bootstrap()
-	fmt.Fprintf(stdout, "%s is not implemented yet.\n", command)
-	if len(commandArgs) > 0 {
-		fmt.Fprintf(stdout, "Received %d trailing argument(s) for future subcommand handling.\n", len(commandArgs))
-	}
-	fmt.Fprintf(stdout, "Protected branch default: %s\n", wiring.Policy.Repo.ProtectedBranch)
-	fmt.Fprintf(stdout, "Repository root: %s\n", wiring.Git.RepositoryRoot)
-	return nil
+	return handleCommand(command, commandArgs, stdout, stderr)
 }
 
 func printCLIHelp(w io.Writer) {
@@ -117,22 +104,4 @@ func parseCLICommand(args []string) (string, []string) {
 	}
 
 	return args[0], args[1:]
-}
-
-type wiring struct {
-	Git     git.Engine
-	Queue   queue.Manager
-	State   state.Store
-	Policy  policy.Config
-	Workers worker.Registry
-}
-
-func bootstrap() wiring {
-	return wiring{
-		Git:     git.NewEngine("."),
-		Queue:   queue.NewManager(),
-		State:   state.NewStore(""),
-		Policy:  policy.DefaultConfig(),
-		Workers: worker.NewRegistry(),
-	}
 }

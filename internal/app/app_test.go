@@ -53,12 +53,13 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 func TestCLIRepoSubcommandsRemainReachable(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	repoRoot, _ := createTestRepo(t)
 
-	if err := runCLI([]string{"repo", "init", "--path", "/tmp/example"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"repo", "init", "--repo", repoRoot}, &stdout, &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
-	if !strings.Contains(stdout.String(), "repo init is not implemented yet") {
-		t.Fatalf("expected repo init placeholder output, got %q", stdout.String())
+	if !strings.Contains(stdout.String(), "Initialized ") {
+		t.Fatalf("expected repo init output, got %q", stdout.String())
 	}
 }

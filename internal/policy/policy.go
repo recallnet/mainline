@@ -11,6 +11,7 @@ type Config struct {
 type RepoConfig struct {
 	ProtectedBranch string
 	RemoteName      string
+	MainWorktree    string
 }
 
 // IntegrationConfig holds integration policy defaults.
@@ -31,6 +32,7 @@ func DefaultConfig() Config {
 		Repo: RepoConfig{
 			ProtectedBranch: "main",
 			RemoteName:      "origin",
+			MainWorktree:    "",
 		},
 		Integration: IntegrationConfig{
 			Strategy:   "rebase-then-ff",
