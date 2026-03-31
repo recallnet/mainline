@@ -299,3 +299,30 @@ func TestSubmitJSONFailureIncludesStableErrorCode(t *testing.T) {
 		t.Fatalf("expected dirty_worktree error code, got %+v", result)
 	}
 }
+
+func TestSubmitJSONDetachedFailureUsesStableErrorCode(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	detachedPath := filepath.Join(t.TempDir(), "detached-json")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "--detach", detachedPath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err := runSubmit([]string{"--repo", detachedPath, "--branch", "main", "--json"}, &submitOut, &submitErr)
+	if err == nil {
+		t.Fatalf("expected detached submit failure")
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.OK || result.ErrorCode != "detached_head" {
+		t.Fatalf("expected detached_head error code, got %+v", result)
+	}
+}

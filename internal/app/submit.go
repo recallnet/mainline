@@ -9,6 +9,7 @@ import (
 	"io"
 	"os/user"
 	"path/filepath"
+	"strings"
 
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
@@ -222,7 +223,10 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 	engine := git.NewEngine(worktreePath)
 	worktree, err := engine.ResolveWorktree(worktreePath)
 	if err != nil {
-		return preparedSubmission{}, err
+		return preparedSubmission{}, &submitValidationError{
+			Code:    "invalid_worktree",
+			Message: err.Error(),
+		}
 	}
 
 	branch := opts.branch
@@ -238,6 +242,12 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 
 	currentBranch, err := engine.CurrentBranchAtPath(worktreePath)
 	if err != nil {
+		if strings.Contains(err.Error(), "detached HEAD state") {
+			return preparedSubmission{}, &submitValidationError{
+				Code:    "detached_head",
+				Message: "cannot submit from detached HEAD; pass --branch with a checked-out branch worktree",
+			}
+		}
 		return preparedSubmission{}, err
 	}
 	if currentBranch != branch {
