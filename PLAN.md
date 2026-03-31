@@ -126,6 +126,7 @@ Acceptance criteria:
 
 - a submitted branch appears in queue state
 - invalid branches are rejected with actionable errors
+- repo state is shared correctly when submission is invoked from a linked worktree or bare-clone worktree layout
 
 ## Milestone 4: Integration Queue MVP
 

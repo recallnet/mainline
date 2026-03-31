@@ -27,6 +27,8 @@ type repoShowResult struct {
 
 func handleCommand(command string, args []string, stdout io.Writer, stderr io.Writer) error {
 	switch command {
+	case "submit":
+		return runSubmit(args, stdout, stderr)
 	case "repo init":
 		return runRepoInit(args, stdout, stderr)
 	case "repo show":

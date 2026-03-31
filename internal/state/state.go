@@ -314,6 +314,11 @@ type scanner interface {
 	Scan(dest ...any) error
 }
 
+// NullInt64 returns a valid sql.NullInt64.
+func NullInt64(v int64) sql.NullInt64 {
+	return sql.NullInt64{Int64: v, Valid: true}
+}
+
 func scanRepositoryRecord(row scanner) (RepositoryRecord, error) {
 	var record RepositoryRecord
 	err := row.Scan(
@@ -374,6 +379,37 @@ func scanEventRecord(row scanner) (EventRecord, error) {
 	)
 	event.Payload = payload
 	return event, err
+}
+
+// ListIntegrationSubmissions returns submissions for a repo ordered by creation time.
+func (s Store) ListIntegrationSubmissions(ctx context.Context, repoID int64) ([]IntegrationSubmission, error) {
+	db, err := s.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error, created_at, updated_at
+		FROM integration_submissions
+		WHERE repo_id = ?
+		ORDER BY created_at ASC, id ASC
+	`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var submissions []IntegrationSubmission
+	for rows.Next() {
+		submission, err := scanIntegrationSubmission(rows)
+		if err != nil {
+			return nil, err
+		}
+		submissions = append(submissions, submission)
+	}
+
+	return submissions, rows.Err()
 }
 
 var ErrNotFound = errors.New("state record not found")

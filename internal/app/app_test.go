@@ -36,13 +36,13 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	if err := runCLI([]string{"submit", "--branch", "fix-login"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"status", "--json"}, &stdout, &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "submit is not implemented yet") {
-		t.Fatalf("expected submit placeholder output, got %q", output)
+	if !strings.Contains(output, "status is not implemented yet") {
+		t.Fatalf("expected status placeholder output, got %q", output)
 	}
 
 	if !strings.Contains(output, "trailing argument") {

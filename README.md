@@ -23,6 +23,7 @@ Today the repo implements the foundation for that model:
 - repo config persistence
 - durable SQLite state
 - per-repo integration and publish locks
+- branch submission into durable queue state
 - support for standard repos and bare-clone-plus-worktree layouts
 
 ## Current Status
@@ -32,16 +33,16 @@ Implemented milestones:
 - Milestone 0: project skeleton
 - Milestone 1: repository discovery and health
 - Milestone 2: durable state and locking
+- Milestone 3: branch submission
 
 Not implemented yet:
 
-- branch submission
 - integration worker
 - publish worker
 - daemon loop
 
-The current CLI is useful for repo inspection and initialization, not for full
-queue-driven integration yet.
+The current CLI can initialize a repo, inspect health, and queue clean topic
+branches for later integration. It does not land or publish branches yet.
 
 ## Why This Exists
 
@@ -90,6 +91,8 @@ Current repo commands:
 mainline repo init --repo .
 mainline repo show --repo .
 mainline doctor --repo .
+mainline submit --repo /path/to/feature-worktree
+mainline submit --repo /path/to/repo --branch fix-login --worktree /path/to/feature-worktree
 ```
 
 The same commands work through `mq`:
@@ -98,6 +101,7 @@ The same commands work through `mq`:
 mq repo init --repo .
 mq repo show --repo .
 mq doctor --repo .
+mq submit --repo /path/to/feature-worktree
 ```
 
 ## Build
@@ -145,6 +149,15 @@ Current durable entities:
 - publish requests
 - events
 
+Current submission behavior:
+
+- submits the checked-out branch by default
+- allows explicit `--branch` and `--worktree`
+- rejects protected-branch submits
+- rejects dirty source worktrees
+- rejects detached HEAD without an explicit branch worktree
+- stores submission metadata and emits a `submission.created` event
+
 Current lock domains:
 
 - integration
@@ -182,10 +195,9 @@ Implementation principles:
 
 Next milestones:
 
-1. branch submission
-2. integration queue MVP
-3. publish queue MVP
-4. daemon mode
+1. integration queue MVP
+2. publish queue MVP
+3. daemon mode
 
 The project plan and spec live in:
 

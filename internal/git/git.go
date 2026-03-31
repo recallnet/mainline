@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -223,6 +224,73 @@ func (e Engine) StatusPorcelain(path string) (string, error) {
 	}
 
 	return strings.TrimSpace(status.String()), nil
+}
+
+// WorktreeIsClean reports whether a worktree has no staged or unstaged changes.
+func (e Engine) WorktreeIsClean(path string) (bool, error) {
+	status, err := e.StatusPorcelain(path)
+	if err != nil {
+		return false, err
+	}
+
+	return status == "", nil
+}
+
+// CurrentBranchAtPath returns the checked-out branch for a specific worktree path.
+func (e Engine) CurrentBranchAtPath(path string) (string, error) {
+	repo, err := openRepository(path)
+	if err != nil {
+		return "", err
+	}
+
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+	if !head.Name().IsBranch() {
+		return "", fmt.Errorf("worktree is in detached HEAD state")
+	}
+
+	return head.Name().Short(), nil
+}
+
+// ResolveWorktree finds a known worktree by path.
+func (e Engine) ResolveWorktree(path string) (Worktree, error) {
+	worktrees, err := e.ListWorktrees()
+	if err != nil {
+		return Worktree{}, err
+	}
+
+	cleanPath := filepath.Clean(path)
+	for _, wt := range worktrees {
+		if filepath.Clean(wt.Path) == cleanPath {
+			return wt, nil
+		}
+	}
+
+	return Worktree{}, fmt.Errorf("worktree %s is not part of this repository", path)
+}
+
+// CommitCount returns the number of commits reachable from a branch.
+func (e Engine) CommitCount(branch string) (int, error) {
+	layout, err := DiscoverRepositoryLayout(e.RepositoryRoot)
+	if err != nil {
+		return 0, err
+	}
+
+	cmd := exec.Command("git", "rev-list", "--count", branch)
+	cmd.Dir = layout.WorktreeRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0, fmt.Errorf("count commits for %s: %w: %s", branch, err, strings.TrimSpace(string(output)))
+	}
+
+	var count int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &count); err != nil {
+		return 0, fmt.Errorf("parse commit count for %s: %w", branch, err)
+	}
+
+	return count, nil
 }
 
 // BranchStatus returns the branch status including upstream relationship.
