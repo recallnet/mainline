@@ -154,7 +154,7 @@ func collectConfidence(repoPath string, eventLimit int, soakSummaryPath string, 
 }
 
 func collectConfidenceInputs(repoPath string, eventLimit int) (statusResult, []state.IntegrationSubmission, []state.PublishRequest, []state.EventRecord, string, error) {
-	layout, _, cfg, repoRecord, store, err := loadRepoContext(repoPath)
+	layout, _, _, repoRecord, store, err := loadRepoContext(repoPath)
 	if err != nil {
 		return statusResult{}, nil, nil, nil, "", err
 	}
@@ -165,7 +165,7 @@ func collectConfidenceInputs(repoPath string, eventLimit int) (statusResult, []s
 	}
 
 	engine := git.NewEngine(layout.WorktreeRoot)
-	currentCommit, err := engine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+	currentCommit, err := engine.BranchHeadSHA("HEAD")
 	if err != nil {
 		return statusResult{}, nil, nil, nil, "", err
 	}

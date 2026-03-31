@@ -334,6 +334,55 @@ func TestConfidenceFailsOnMismatchedEvidenceCommit(t *testing.T) {
 	}
 }
 
+func TestConfidenceUsesCurrentWorktreeHeadForBuildIdentity(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-confidence")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/confidence", featurePath)
+	writeFileAndCommit(t, featurePath, "confidence.txt", "confidence\n", "feature confidence")
+
+	featureHead := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+	mainHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	if featureHead == mainHead {
+		t.Fatalf("expected feature head to differ from main head")
+	}
+
+	soakPath := filepath.Join(t.TempDir(), "summary.json")
+	certPath := filepath.Join(t.TempDir(), "latest-report.json")
+	writeJSONFile(t, soakPath, map[string]any{
+		"mainline_commit": featureHead,
+		"generated_at":    "2026-03-31T21:30:00Z",
+		"runs":            1,
+		"passed_runs":     1,
+		"failed_runs":     0,
+		"flake_rate":      0.0,
+	})
+	writeJSONFile(t, certPath, map[string]any{
+		"mainline_commit": featureHead,
+		"generated_at":    "2026-03-31T21:30:00Z",
+		"result":          "passed",
+		"repos": []map[string]any{
+			{"id": "dogfood", "result": "passed"},
+		},
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"confidence", "--repo", featurePath, "--json", "--soak-summary", soakPath, "--cert-report", certPath}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var report confidenceResult
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if report.CurrentCommit != featureHead {
+		t.Fatalf("expected current commit %q, got %q", featureHead, report.CurrentCommit)
+	}
+}
+
 func writeJSONFile(t *testing.T, path string, v any) {
 	t.Helper()
 	data, err := json.MarshalIndent(v, "", "  ")
