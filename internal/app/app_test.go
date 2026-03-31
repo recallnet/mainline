@@ -693,6 +693,53 @@ func TestEventsLifecycleJSONProjectsBranchTransitions(t *testing.T) {
 	}
 }
 
+func TestEventsLifecycleReplayKeepsBranchOnPublishWindow(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishMode(t, repoRoot, "auto")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-lifecycle-window")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/lifecycle-window", featurePath)
+	writeFileAndCommit(t, featurePath, "window.txt", "window\n", "feature lifecycle window")
+	submitBranch(t, featurePath)
+	runOnce(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	protectedSHA := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	remoteSHA := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteSHA != protectedSHA {
+		t.Fatalf("expected remote head %q, got %q", protectedSHA, remoteSHA)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "3"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 lifecycle events, got %d: %q", len(lines), stdout.String())
+	}
+
+	foundPublished := false
+	for _, line := range lines {
+		var event lifecycleEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("Unmarshal lifecycle event: %v", err)
+		}
+		if event.Event == "published" {
+			foundPublished = true
+			if event.Branch != "feature/lifecycle-window" || event.SHA != protectedSHA {
+				t.Fatalf("expected published branch + sha in narrow replay window, got %+v", event)
+			}
+		}
+	}
+	if !foundPublished {
+		t.Fatalf("expected published lifecycle event in %q", stdout.String())
+	}
+}
+
 func TestEventsFollowStreamsNewEvent(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

@@ -285,7 +285,13 @@ func (e *lifecycleEmitter) project(event state.EventRecord) (lifecycleEvent, boo
 		record.Event = "publish_requested"
 		record.Status = "queued"
 		record.SHA = getString("target_sha")
-		record.Branch = e.shaToBranch[record.SHA]
+		record.Branch = getString("branch")
+		if record.Branch == "" {
+			record.Branch = e.shaToBranch[record.SHA]
+		}
+		if record.SHA != "" && record.Branch != "" {
+			e.shaToBranch[record.SHA] = record.Branch
+		}
 		return record, true, nil
 	case "publish.completed":
 		record.Event = "published"

@@ -281,6 +281,7 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 			Payload: mustJSON(map[string]string{
 				"target_sha": protectedHead,
 				"reason":     "integration_succeeded",
+				"branch":     submission.BranchName,
 			}),
 		}); err != nil {
 			return "", err
