@@ -169,6 +169,8 @@ complete -c mainline -l repo
 complete -c mq -l repo
 complete -c mainline -n "__fish_seen_subcommand_from status doctor repo show" -l json
 complete -c mq -n "__fish_seen_subcommand_from status doctor repo show" -l json
+complete -c mainline -n "__fish_seen_subcommand_from events" -l json
+complete -c mq -n "__fish_seen_subcommand_from events" -l json
 complete -c mainline -n "__fish_seen_subcommand_from events" -l follow
 complete -c mq -n "__fish_seen_subcommand_from events" -l follow
 complete -c mainline -n "__fish_seen_subcommand_from events" -l limit

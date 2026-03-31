@@ -49,6 +49,7 @@ Implemented milestones:
 - Milestone 10: self-hosting and `mq` dogfooding
 - Milestone 11: operator controls
 - Milestone 12: real distribution packaging
+- Milestone 13: live operator UX
 
 The current CLI can initialize a repo, inspect health, queue clean topic
 branches, run one serialized integration cycle locally, queue manual publish
@@ -56,7 +57,8 @@ requests, push the latest protected-branch tip through the coalesced publish
 queue, run a polling background loop through `mainlined`, and enforce
 repo-specific pre-checks and hook/worktree policies, retry or cancel queue
 items with durable history, document the repo’s own committed `mq`
-dogfooding workflow, and ship Homebrew/Nix packaging outputs.
+dogfooding workflow, ship Homebrew/Nix packaging outputs, and stream durable
+operator events directly from the queue state.
 
 ## Why This Exists
 

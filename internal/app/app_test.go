@@ -174,6 +174,17 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if strings.Contains(output, "run-once|publish)\n      COMPREPLY=( $(compgen -W \"--repo --json\" -- \"$cur\") )") {
 		t.Fatalf("expected bash completion to avoid generic unsupported json flag suggestions, got %q", output)
 	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := runCLI([]string{"completion", "fish"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	output = stdout.String()
+	if !strings.Contains(output, "__fish_seen_subcommand_from events\" -l json") {
+		t.Fatalf("expected fish completion to include events --json, got %q", output)
+	}
 }
 
 func TestStatusJSONReportsQueuedWork(t *testing.T) {
