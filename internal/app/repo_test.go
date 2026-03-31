@@ -88,6 +88,26 @@ func TestDoctorDetectsMissingCanonicalWorktree(t *testing.T) {
 	}
 }
 
+func TestRepoInitFromLinkedWorktreeWritesSharedConfig(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	linkedWorktree := filepath.Join(t.TempDir(), "feature-worktree")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature", linkedWorktree)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", linkedWorktree}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(repoRoot, "mainline.toml")); err != nil {
+		t.Fatalf("expected shared config in main repo root: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(linkedWorktree, "mainline.toml")); !os.IsNotExist(err) {
+		t.Fatalf("expected no separate config in linked worktree, got err=%v", err)
+	}
+}
+
 func createTestRepo(t *testing.T) (string, string) {
 	t.Helper()
 

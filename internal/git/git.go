@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -85,8 +86,8 @@ func DiscoverRepositoryRoot(startPath string) (string, error) {
 			continue
 		}
 
-		if _, err := openRepository(current); err == nil {
-			return filepath.Clean(current), nil
+		if commonRoot, err := resolveRepositoryRootFromWorktree(current); err == nil {
+			return commonRoot, nil
 		}
 
 		if parent := filepath.Dir(current); parent == current {
@@ -356,8 +357,8 @@ func (e Engine) open() (*gogit.Repository, error) {
 
 func openRepository(path string) (*gogit.Repository, error) {
 	return gogit.PlainOpenWithOptions(path, &gogit.PlainOpenOptions{
-		DetectDotGit:           true,
-		EnableDotGitCommonDir:  true,
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: true,
 	})
 }
 
@@ -399,6 +400,75 @@ func hasDotGitMarker(dir string) bool {
 		return true
 	}
 	return false
+}
+
+func resolveRepositoryRootFromWorktree(worktreePath string) (string, error) {
+	dotGitPath := filepath.Join(worktreePath, ".git")
+	info, err := os.Stat(dotGitPath)
+	if err != nil {
+		return "", err
+	}
+
+	if info.IsDir() {
+		if _, err := openRepository(worktreePath); err != nil {
+			return "", err
+		}
+		return filepath.Clean(worktreePath), nil
+	}
+
+	gitDir, err := resolveGitDirFromFile(worktreePath, dotGitPath)
+	if err != nil {
+		return "", err
+	}
+
+	commonDir, err := resolveCommonDir(gitDir)
+	if err != nil {
+		return "", err
+	}
+
+	if filepath.Base(commonDir) != ".git" {
+		return "", fmt.Errorf("unsupported common git dir layout: %s", commonDir)
+	}
+
+	return filepath.Dir(commonDir), nil
+}
+
+func resolveGitDirFromFile(worktreePath string, dotGitPath string) (string, error) {
+	data, err := os.ReadFile(dotGitPath)
+	if err != nil {
+		return "", err
+	}
+
+	line := strings.TrimSpace(string(bytes.TrimSpace(data)))
+	const prefix = "gitdir:"
+	if !strings.HasPrefix(line, prefix) {
+		return "", fmt.Errorf("invalid .git file in %s", worktreePath)
+	}
+
+	gitDir := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Clean(filepath.Join(worktreePath, gitDir))
+	}
+
+	return gitDir, nil
+}
+
+func resolveCommonDir(gitDir string) (string, error) {
+	commonDirPath := filepath.Join(gitDir, "commondir")
+	data, err := os.ReadFile(commonDirPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return gitDir, nil
+		}
+		return "", err
+	}
+
+	commonDir := strings.TrimSpace(string(bytes.TrimSpace(data)))
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Clean(filepath.Join(gitDir, commonDir))
+	}
+
+	return commonDir, nil
 }
 
 func upstreamReferenceName(branch *config.Branch) (plumbing.ReferenceName, string, bool) {
