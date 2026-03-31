@@ -197,10 +197,10 @@ func (e Engine) ListWorktrees() ([]Worktree, error) {
 		}
 
 		wt := Worktree{
-			Path:       filepath.Clean(wtPath),
+			Path:       normalizePath(wtPath),
 			HeadSHA:    head.Hash().String(),
 			IsDetached: !head.Name().IsBranch(),
-			IsCurrent:  filepath.Clean(wtPath) == layout.WorktreeRoot,
+			IsCurrent:  normalizePath(wtPath) == layout.WorktreeRoot,
 		}
 		if head.Name().IsBranch() {
 			wt.Branch = head.Name().Short()

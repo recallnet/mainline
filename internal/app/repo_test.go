@@ -182,6 +182,47 @@ func TestDoctorWarnsWhenWorktreeOutsidePolicyPrefix(t *testing.T) {
 	}
 }
 
+func TestDoctorAcceptsSymlinkedPolicyPrefix(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	actualPrefix := filepath.Join(t.TempDir(), "actual-prefix")
+	if err := os.MkdirAll(actualPrefix, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	symlinkRoot := filepath.Join(t.TempDir(), "prefix-link")
+	if err := os.Symlink(actualPrefix, symlinkRoot); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+	featurePath := filepath.Join(actualPrefix, "feature-inside")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/inside", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Repo.WorktreeLayoutPolicy = "enforce-prefix"
+	cfg.Repo.WorktreeRootPrefix = symlinkRoot
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	output := doctorOut.String()
+	if !strings.Contains(output, "Warnings: 0") {
+		t.Fatalf("expected no warnings, got %q", output)
+	}
+}
+
 func createTestRepo(t *testing.T) (string, string) {
 	t.Helper()
 

@@ -278,10 +278,17 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		prefix := filepath.Clean(cfg.Repo.WorktreeRootPrefix) + string(filepath.Separator)
-		mainWorktree := filepath.Clean(cfg.Repo.MainWorktree)
+		prefixPath, err := filepath.EvalSymlinks(filepath.Clean(cfg.Repo.WorktreeRootPrefix))
+		if err != nil {
+			prefixPath = filepath.Clean(cfg.Repo.WorktreeRootPrefix)
+		}
+		prefix := filepath.Clean(prefixPath) + string(filepath.Separator)
+		mainWorktree, err := filepath.EvalSymlinks(filepath.Clean(cfg.Repo.MainWorktree))
+		if err != nil {
+			mainWorktree = filepath.Clean(cfg.Repo.MainWorktree)
+		}
 		for _, wt := range worktrees {
-			cleanPath := filepath.Clean(wt.Path)
+			cleanPath := wt.Path
 			if cleanPath == mainWorktree {
 				continue
 			}
