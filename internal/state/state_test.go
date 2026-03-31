@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -141,5 +143,104 @@ func TestAppendEventRoundTrips(t *testing.T) {
 
 	if event.EventType != "repository.initialized" {
 		t.Fatalf("unexpected event type %q", event.EventType)
+	}
+}
+
+func TestEnsureSchemaMigratesLegacyVersionZeroState(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitDir := filepath.Join(repoRoot, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	store := NewStore(DefaultPath(gitDir))
+	ctx := context.Background()
+	if err := os.MkdirAll(filepath.Dir(store.Path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(state dir): %v", err)
+	}
+
+	db, err := sql.Open("sqlite", store.Path)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(schemaSQL); err != nil {
+		t.Fatalf("Exec schemaSQL: %v", err)
+	}
+	if _, err := db.Exec(`PRAGMA user_version = 0;`); err != nil {
+		t.Fatalf("reset user_version: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO repositories (canonical_path, protected_branch, remote_name, main_worktree_path, policy_version)
+		VALUES (?, 'main', 'origin', ?, 'v1')
+	`, repoRoot, repoRoot); err != nil {
+		t.Fatalf("insert repository: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO integration_submissions (repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error)
+		VALUES (1, 'feature/test', ?, 'abc123', 'tester', 'queued', '')
+	`, repoRoot); err != nil {
+		t.Fatalf("insert integration submission: %v", err)
+	}
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("EnsureSchema: %v", err)
+	}
+
+	version, err := schemaVersion(db)
+	if err != nil {
+		t.Fatalf("schemaVersion: %v", err)
+	}
+	if version != currentSchemaVersion {
+		t.Fatalf("expected schema version %d, got %d", currentSchemaVersion, version)
+	}
+
+	found, err := store.GetRepositoryByPath(ctx, repoRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	if found.CanonicalPath != repoRoot {
+		t.Fatalf("expected repository %q, got %q", repoRoot, found.CanonicalPath)
+	}
+	count, err := store.CountUnfinishedItems(ctx, found.ID)
+	if err != nil {
+		t.Fatalf("CountUnfinishedItems: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 unfinished item after migration, got %d", count)
+	}
+}
+
+func TestStoreRejectsFutureSchemaVersion(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitDir := filepath.Join(repoRoot, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	store := NewStore(DefaultPath(gitDir))
+	if err := os.MkdirAll(filepath.Dir(store.Path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(state dir): %v", err)
+	}
+
+	db, err := sql.Open("sqlite", store.Path)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	if _, err := db.Exec(`PRAGMA user_version = 999;`); err != nil {
+		t.Fatalf("set future user_version: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("db.Close: %v", err)
+	}
+
+	err = store.EnsureSchema(context.Background())
+	if err == nil {
+		t.Fatalf("expected future schema version rejection")
+	}
+	if !errors.Is(err, ErrUnsupportedSchemaVersion) {
+		t.Fatalf("expected ErrUnsupportedSchemaVersion, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "supports up to") {
+		t.Fatalf("expected actionable version error, got %v", err)
 	}
 }

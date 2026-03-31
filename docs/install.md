@@ -42,6 +42,12 @@ mainline version
 mainlined --version
 ```
 
+State compatibility:
+
+- the SQLite queue store is schema-versioned
+- legacy unversioned stores upgrade in place when opened by a newer binary
+- if a store was created by a newer unsupported binary, `mainline` fails clearly instead of mutating it
+
 ## Go Install
 
 ```bash

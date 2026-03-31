@@ -14,9 +14,12 @@ import (
 )
 
 const (
-	defaultDirName = "mainline"
-	defaultDBName  = "state.db"
+	defaultDirName       = "mainline"
+	defaultDBName        = "state.db"
+	currentSchemaVersion = 1
 )
+
+var ErrUnsupportedSchemaVersion = errors.New("unsupported state schema version")
 
 // Store describes the durable state boundary.
 type Store struct {
@@ -106,11 +109,7 @@ func (s Store) EnsureSchema(ctx context.Context) error {
 	if _, err := db.Exec(`PRAGMA journal_mode = WAL;`); err != nil {
 		return fmt.Errorf("configure sqlite journal mode: %w", err)
 	}
-	if _, err := db.ExecContext(ctx, schemaSQL); err != nil {
-		return fmt.Errorf("ensure state schema: %w", err)
-	}
-
-	return nil
+	return ensureSchemaVersion(ctx, db)
 }
 
 // UpsertRepository inserts or updates the repository record.
@@ -527,8 +526,62 @@ func (s Store) open() (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("configure sqlite busy timeout: %w", err)
 	}
+	version, err := schemaVersion(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	if version > currentSchemaVersion {
+		db.Close()
+		return nil, fmt.Errorf("%w at %s: found version %d, binary supports up to %d", ErrUnsupportedSchemaVersion, s.Path, version, currentSchemaVersion)
+	}
 
 	return db, nil
+}
+
+func schemaVersion(db *sql.DB) (int, error) {
+	var version int
+	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
+		return 0, fmt.Errorf("read sqlite schema version: %w", err)
+	}
+	return version, nil
+}
+
+func setSchemaVersion(ctx context.Context, db *sql.DB, version int) error {
+	if _, err := db.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d;`, version)); err != nil {
+		return fmt.Errorf("set sqlite schema version: %w", err)
+	}
+	return nil
+}
+
+func ensureSchemaVersion(ctx context.Context, db *sql.DB) error {
+	version, err := schemaVersion(db)
+	if err != nil {
+		return err
+	}
+	if version > currentSchemaVersion {
+		return fmt.Errorf("%w: found version %d, binary supports up to %d", ErrUnsupportedSchemaVersion, version, currentSchemaVersion)
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin schema transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, schemaSQL); err != nil {
+		return fmt.Errorf("ensure state schema: %w", err)
+	}
+	if version < currentSchemaVersion {
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d;`, currentSchemaVersion)); err != nil {
+			return fmt.Errorf("set sqlite schema version: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit schema transaction: %w", err)
+	}
+
+	return nil
 }
 
 type scanner interface {

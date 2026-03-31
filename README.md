@@ -225,6 +225,7 @@ This is already a working system:
 
 - repository discovery for normal repos and bare-clone-plus-worktree layouts
 - durable SQLite state stored with shared Git storage
+- schema-versioned SQLite state with explicit upgrade checks
 - serialized submission, integration, and publish coordination
 - the full operator surface: `submit`, `run-once`, `publish`, `status`, `confidence`, `watch`, `logs`, `events`, `retry`, and `cancel`
 - daemon mode through `mainlined`

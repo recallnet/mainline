@@ -671,6 +671,10 @@ Acceptance criteria:
 - new binaries can detect unsupported on-disk state and fail clearly instead of corrupting it
 - state migrations are tested as first-class release criteria, not manual spot checks
 
+Implementation note:
+
+- the initial migration contract may be narrow: support in-place upgrade from the legacy unversioned schema to version `1`, and reject any future schema version newer than the running binary
+
 ## Milestone 29: Production Readiness Gate
 
 Goal:
