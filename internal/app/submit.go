@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
@@ -53,17 +54,22 @@ type queuedSubmission struct {
 }
 
 type submitResult struct {
-	OK             bool   `json:"ok"`
-	Checked        bool   `json:"checked"`
-	Queued         bool   `json:"queued"`
-	SubmissionID   int64  `json:"submission_id,omitempty"`
-	Branch         string `json:"branch,omitempty"`
-	SourceWorktree string `json:"source_worktree,omitempty"`
-	SourceSHA      string `json:"source_sha,omitempty"`
-	RepositoryRoot string `json:"repository_root,omitempty"`
-	RequestedBy    string `json:"requested_by,omitempty"`
-	ErrorCode      string `json:"error_code,omitempty"`
-	Error          string `json:"error,omitempty"`
+	OK               bool   `json:"ok"`
+	Checked          bool   `json:"checked"`
+	Queued           bool   `json:"queued"`
+	Waited           bool   `json:"waited"`
+	SubmissionID     int64  `json:"submission_id,omitempty"`
+	Branch           string `json:"branch,omitempty"`
+	SourceWorktree   string `json:"source_worktree,omitempty"`
+	SourceSHA        string `json:"source_sha,omitempty"`
+	RepositoryRoot   string `json:"repository_root,omitempty"`
+	RequestedBy      string `json:"requested_by,omitempty"`
+	SubmissionStatus string `json:"submission_status,omitempty"`
+	Outcome          string `json:"outcome,omitempty"`
+	DurationMS       int64  `json:"duration_ms,omitempty"`
+	LastWorkerResult string `json:"last_worker_result,omitempty"`
+	ErrorCode        string `json:"error_code,omitempty"`
+	Error            string `json:"error,omitempty"`
 }
 
 func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -80,6 +86,9 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	var requestedBy string
 	var asJSON bool
 	var checkOnly bool
+	var waitForResult bool
+	var timeout time.Duration
+	var pollInterval time.Duration
 
 	fs.StringVar(&repoPath, "repo", ".", "repository path")
 	fs.StringVar(&branch, "branch", "", "branch to submit")
@@ -87,9 +96,21 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.StringVar(&requestedBy, "requested-by", "", "submitter identity")
 	fs.BoolVar(&asJSON, "json", false, "output json")
 	fs.BoolVar(&checkOnly, "check", false, "validate submission without queueing it")
+	fs.BoolVar(&waitForResult, "wait", false, "wait for the submission to integrate")
+	fs.DurationVar(&timeout, "timeout", 10*time.Minute, "maximum time to wait for integration")
+	fs.DurationVar(&pollInterval, "poll-interval", 500*time.Millisecond, "wait interval between worker checks")
 
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if checkOnly && waitForResult {
+		return fmt.Errorf("--check and --wait cannot be used together")
+	}
+	if timeout <= 0 {
+		return fmt.Errorf("timeout must be greater than zero")
+	}
+	if pollInterval <= 0 {
+		return fmt.Errorf("poll-interval must be greater than zero")
 	}
 
 	opts := submitOptions{
@@ -153,15 +174,49 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	result := submitResult{
-		OK:             true,
-		Checked:        true,
-		Queued:         true,
-		SubmissionID:   queued.Submission.ID,
-		Branch:         queued.Submission.BranchName,
-		SourceWorktree: queued.Submission.SourceWorktree,
-		SourceSHA:      queued.Submission.SourceSHA,
-		RepositoryRoot: queued.RepoRoot,
-		RequestedBy:    queued.Submission.RequestedBy,
+		OK:               true,
+		Checked:          true,
+		Queued:           true,
+		Waited:           false,
+		SubmissionID:     queued.Submission.ID,
+		Branch:           queued.Submission.BranchName,
+		SourceWorktree:   queued.Submission.SourceWorktree,
+		SourceSHA:        queued.Submission.SourceSHA,
+		RepositoryRoot:   queued.RepoRoot,
+		RequestedBy:      queued.Submission.RequestedBy,
+		SubmissionStatus: queued.Submission.Status,
+	}
+	if waitForResult {
+		waitResult, waitErr := waitForIntegratedSubmission(queued, timeout, pollInterval)
+		result.OK = waitErr == nil
+		result.Waited = true
+		result.SubmissionStatus = waitResult.SubmissionStatus
+		result.Outcome = string(waitResult.Outcome)
+		result.DurationMS = waitResult.DurationMS
+		result.LastWorkerResult = waitResult.LastWorkerResult
+		if waitResult.Error != "" {
+			result.Error = waitResult.Error
+		}
+		if waitErr != nil {
+			if result.ErrorCode == "" {
+				result.ErrorCode = submitWaitErrorCode(waitErr)
+			}
+			if asJSON {
+				return writeSubmitJSON(stdout, result, waitErr)
+			}
+			fmt.Fprintf(stdout, "Queued submission %d\n", queued.Submission.ID)
+			fmt.Fprintf(stdout, "Branch: %s\n", queued.Submission.BranchName)
+			fmt.Fprintf(stdout, "Worktree: %s\n", queued.Submission.SourceWorktree)
+			fmt.Fprintf(stdout, "Source SHA: %s\n", queued.Submission.SourceSHA)
+			fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
+			if result.LastWorkerResult != "" {
+				fmt.Fprintf(stdout, "Last worker result: %s\n", result.LastWorkerResult)
+			}
+			if result.DurationMS > 0 {
+				fmt.Fprintf(stdout, "Duration: %s\n", (time.Duration(result.DurationMS) * time.Millisecond).Round(time.Millisecond))
+			}
+			return waitErr
+		}
 	}
 	if asJSON {
 		return writeSubmitJSON(stdout, result, nil)
@@ -171,6 +226,15 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "Branch: %s\n", queued.Submission.BranchName)
 	fmt.Fprintf(stdout, "Worktree: %s\n", queued.Submission.SourceWorktree)
 	fmt.Fprintf(stdout, "Source SHA: %s\n", queued.Submission.SourceSHA)
+	if waitForResult {
+		fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
+		if result.LastWorkerResult != "" {
+			fmt.Fprintf(stdout, "Last worker result: %s\n", result.LastWorkerResult)
+		}
+		if result.DurationMS > 0 {
+			fmt.Fprintf(stdout, "Duration: %s\n", (time.Duration(result.DurationMS) * time.Millisecond).Round(time.Millisecond))
+		}
+	}
 	return nil
 }
 
@@ -403,4 +467,21 @@ func submitErrorCode(err error) string {
 		return validationErr.Code
 	}
 	return "submit_failed"
+}
+
+func submitWaitErrorCode(err error) string {
+	if CLIExitCode(err) == 2 {
+		return "timeout"
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, " blocked:"):
+		return "blocked"
+	case strings.Contains(msg, " cancelled"):
+		return "cancelled"
+	case strings.Contains(msg, " failed:"):
+		return "failed"
+	default:
+		return "submit_wait_failed"
+	}
 }

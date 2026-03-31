@@ -67,6 +67,7 @@ This repo ships the canonical agent instructions in [.agents/skills/worktree/SKI
 That skill is now expected to use the real end-to-end flow:
 
 ```bash
+mq submit --repo /path/to/topic-worktree --wait --timeout 10m
 mq submit --repo /path/to/topic-worktree
 mq status --repo /path/to/main --json
 mq run-once --repo /path/to/main
@@ -75,6 +76,18 @@ mq watch --repo /path/to/main
 mq logs --repo /path/to/main --follow
 mq events --repo /path/to/main --follow
 ```
+
+For agent wrappers that only need to know whether their branch landed cleanly, prefer:
+
+```bash
+mq submit --repo /path/to/topic-worktree --wait --timeout 10m --json
+```
+
+Exit codes:
+
+- `0`: integrated
+- `1`: blocked, failed, or cancelled
+- `2`: timed out waiting for integration
 
 If a queue item needs operator intervention:
 

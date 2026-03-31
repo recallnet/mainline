@@ -326,3 +326,105 @@ func TestSubmitJSONDetachedFailureUsesStableErrorCode(t *testing.T) {
 		t.Fatalf("expected detached_head error code, got %+v", result)
 	}
 }
+
+func TestSubmitWaitIntegratesBranchAndReturnsSucceededOutcome(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-wait")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/wait", featurePath)
+	writeFileAndCommit(t, featurePath, "wait.txt", "wait\n", "feature wait")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.OK || !result.Waited || result.SubmissionStatus != "succeeded" || result.Outcome != "succeeded" {
+		t.Fatalf("expected waited succeeded result, got %+v", result)
+	}
+	if !strings.Contains(result.LastWorkerResult, "Integrated submission") {
+		t.Fatalf("expected worker result, got %+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, "wait.txt")); err != nil {
+		t.Fatalf("expected integrated file, got %v", err)
+	}
+}
+
+func TestSubmitWaitReturnsBlockedExitCodeForConflict(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featureOne := filepath.Join(t.TempDir(), "feature-one")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/one", featureOne)
+	replaceFileAndCommit(t, featureOne, "README.md", "# alpha\n", "feature one")
+
+	featureTwo := filepath.Join(t.TempDir(), "feature-two")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/two", featureTwo)
+	replaceFileAndCommit(t, featureTwo, "README.md", "# beta\n", "feature two")
+
+	if err := runSubmit([]string{"--repo", featureOne, "--wait", "--timeout", "30s", "--poll-interval", "10ms"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("first runSubmit returned error: %v", err)
+	}
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err := runSubmit([]string{"--repo", featureTwo, "--wait", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, &submitOut, &submitErr)
+	if err == nil {
+		t.Fatalf("expected blocked wait failure")
+	}
+	if got := CLIExitCode(err); got != 1 {
+		t.Fatalf("expected exit code 1, got %d", got)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.ErrorCode != "blocked" || result.Outcome != "blocked" || result.SubmissionStatus != "blocked" {
+		t.Fatalf("expected blocked wait result, got %+v", result)
+	}
+}
+
+func TestSubmitWaitReturnsTimeoutExitCodeWhenWorkerStaysBusy(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-timeout")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/timeout", featurePath)
+	writeFileAndCommit(t, featurePath, "timeout.txt", "timeout\n", "feature timeout")
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
+	lease, err := lockManager.Acquire(state.IntegrationLock, "test-timeout")
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	defer lease.Release()
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err = runSubmit([]string{"--repo", featurePath, "--wait", "--json", "--timeout", "20ms", "--poll-interval", "5ms"}, &submitOut, &submitErr)
+	if err == nil {
+		t.Fatalf("expected timeout wait failure")
+	}
+	if got := CLIExitCode(err); got != 2 {
+		t.Fatalf("expected exit code 2, got %d", got)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.ErrorCode != "timeout" || result.Outcome != "timed_out" {
+		t.Fatalf("expected timeout wait result, got %+v", result)
+	}
+}

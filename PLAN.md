@@ -750,6 +750,25 @@ Acceptance criteria:
 - event streams show when protected `main` was fast-forwarded from upstream
 - the queue integrates a behind protected branch without forcing manual merge or push repair
 
+## Milestone 33: Blocking Submit DX
+
+Goal:
+
+- let agents hand a branch to the queue and block on a final integration outcome without writing their own poll loops
+
+Deliverables:
+
+- `submit --wait` for blocking submit-plus-integration
+- timeout and poll interval flags for caller control
+- stable process exit codes for landed, blocked, and timed-out outcomes
+- machine-readable submit wait output for agent wrappers
+
+Acceptance criteria:
+
+- `mq submit --wait` returns zero only when the submitted branch reaches integrated state
+- blocked, failed, or cancelled outcomes return a nonzero exit that agents can distinguish from timeout
+- agents can consume submit wait results through either human output or JSON without scraping status loops
+
 ## Architecture Plan
 
 ## Repository Layout

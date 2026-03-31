@@ -156,6 +156,7 @@ Queue work:
 ```bash
 mq submit --repo /path/to/topic-worktree --check --json
 mq submit --repo /path/to/topic-worktree --json
+mq submit --repo /path/to/topic-worktree --wait --timeout 10m
 mq land --repo /path/to/topic-worktree --json --timeout 30m
 mq submit --repo /path/to/topic-worktree
 mq run-once --repo /path/to/main
@@ -166,9 +167,12 @@ For factory or daemon callers, the intended handoff is:
 
 - `mq submit --check --json` to fast-fail deterministic problems before queue mutation
 - `mq submit --json` to record the branch and get a stable `submission_id`
+- `mq submit --wait --timeout 10m` when an agent needs a blocking landed-or-blocked answer without implementing its own poll loop
 - `mainlined` or `mq land` to carry the branch the rest of the way to integrated and published state
 
 If `origin/main` advances before your branch reaches the front of the queue, that is normal queue work, not a manual repair job. `mainline` syncs protected `main` from upstream before integration when policy allows it, records that as a durable event, and only blocks if the branch now has a real rebase conflict.
+
+`mq submit --wait` is integration-scoped, not publish-scoped. It exits `0` when the branch is integrated, `1` for blocked/failed/cancelled outcomes, and `2` on timeout.
 
 Observe and control:
 
