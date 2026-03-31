@@ -36,6 +36,9 @@ jobs:
       - name: Short soak summary
         run: ./scripts/run-soak.sh --runs 3 --output artifacts/soak-ci
 
+      - name: Short randomized soak summary
+        run: ./scripts/run-soak.sh --randomized --runs 2 --seed-base 20260331 --output artifacts/soak-randomized-ci
+
       - name: Release script regression test
         run: ./scripts/test-build-release.sh
 

@@ -36,6 +36,10 @@ func runRunOnce(args []string, stdout io.Writer, stderr io.Writer) error {
 }
 
 func runOneCycle(repoPath string) (string, error) {
+	if err := applyAppTestFault("daemon.cycle"); err != nil {
+		return "", err
+	}
+
 	layout, repoRoot, cfg, repoRecord, store, err := loadRepoContext(repoPath)
 	if err != nil {
 		return "", err
@@ -174,6 +178,9 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 		return blockIntegrationSubmission(ctx, store, repoRecord.ID, submission.ID, fmt.Errorf("pre-integrate checks failed: %w", err))
 	}
 
+	if err := applyAppTestFault("integration.rebase"); err != nil {
+		return failIntegrationSubmission(ctx, store, repoRecord.ID, submission.ID, err)
+	}
 	if err := sourceEngine.RebaseCurrentBranch(submission.SourceWorktree, cfg.Repo.ProtectedBranch); err != nil {
 		if errors.Is(err, git.ErrRebaseConflict) {
 			return blockIntegrationSubmission(ctx, store, repoRecord.ID, submission.ID, fmt.Errorf("rebase conflict in %s: resolve in the source worktree and resubmit", submission.SourceWorktree))
@@ -242,6 +249,9 @@ func syncProtectedBranch(engine git.Engine, cfg policy.File) error {
 		return fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, status.Upstream)
 	}
 
+	if err := applyAppTestFault("integration.fetch"); err != nil {
+		return err
+	}
 	if err := engine.FetchRemote(cfg.Repo.MainWorktree, cfg.Repo.RemoteName); err != nil {
 		return err
 	}
@@ -340,6 +350,9 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 		return fmt.Sprintf("Failed publish request %d: pre-publish checks failed: %s", request.ID, err.Error()), nil
 	}
 
+	if err := applyAppTestFault("publish.push"); err != nil {
+		return markPublishFailed(ctx, store, repoRecord.ID, request.ID, request.TargetSHA, err)
+	}
 	handle, err := mainEngine.StartPushBranch(cfg.Repo.MainWorktree, cfg.Repo.RemoteName, cfg.Repo.ProtectedBranch, shouldBypassGitHooks(cfg))
 	if err != nil {
 		return markPublishFailed(ctx, store, repoRecord.ID, request.ID, request.TargetSHA, err)

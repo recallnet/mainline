@@ -269,6 +269,15 @@ That reruns the stress workload many times, stores per-run logs and JSON
 reports under `artifacts/soak/`, and writes an aggregate `summary.json` with
 pass count, fail count, flake rate, duration, and queue-depth metrics.
 
+For seeded race and transient-failure replay instead of only deterministic soak:
+
+```bash
+make soak-randomized
+```
+
+That runs the randomized stress harness, records the seed used for each run,
+and persists enough metadata to replay the same failure class later.
+
 ## Install
 
 Requires Go 1.25 or newer.

@@ -16,6 +16,10 @@ import (
 )
 
 func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
+	if err := applyAppTestFault("submit.start"); err != nil {
+		return err
+	}
+
 	fs := flag.NewFlagSet("mainline submit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 

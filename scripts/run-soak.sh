@@ -4,6 +4,8 @@ set -euo pipefail
 runs=25
 output_dir="artifacts/soak"
 test_pattern='TestStressParallelAgentQueueAndPublishCoalescing'
+randomized=0
+seed_base=20260331
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -15,6 +17,15 @@ while [[ $# -gt 0 ]]; do
       output_dir="${2:?missing value for --output}"
       shift 2
       ;;
+    --randomized)
+      randomized=1
+      test_pattern='TestStressRandomizedSeededReplay'
+      shift
+      ;;
+    --seed-base)
+      seed_base="${2:?missing value for --seed-base}"
+      shift 2
+      ;;
     *)
       echo "unknown argument: $1" >&2
       exit 2
@@ -24,6 +35,10 @@ done
 
 if ! [[ "${runs}" =~ ^[0-9]+$ ]] || [[ "${runs}" -le 0 ]]; then
   echo "--runs must be a positive integer" >&2
+  exit 2
+fi
+if ! [[ "${seed_base}" =~ ^-?[0-9]+$ ]]; then
+  echo "--seed-base must be an integer" >&2
   exit 2
 fi
 
@@ -48,6 +63,7 @@ for i in $(seq 1 "${runs}"); do
   mkdir -p "${run_dir}"
   log_path="${run_dir}/go-test.jsonl"
   report_path="${run_dir}/report.json"
+  run_seed=$((seed_base + i - 1))
 
   start_epoch="$(python3 - <<'PY'
 import time
@@ -58,6 +74,7 @@ PY
   status="passed"
   if (
     cd "${repo_root}" && \
+      MAINLINE_STRESS_SEED="${run_seed}" \
       MAINLINE_STRESS_REPORT_PATH="${report_path}" \
       go test ./internal/app -run "${test_pattern}" -count=1 -json
   ) >"${log_path}" 2>&1; then
@@ -74,10 +91,10 @@ PY
 )"
   wall_ms=$((end_epoch - start_epoch))
 
-  summary_rows+=("${run_id}:${status}:${wall_ms}:${report_path}:${log_path}")
+  summary_rows+=("${run_id}:${status}:${wall_ms}:${run_seed}:${report_path}:${log_path}")
 done
 
-python3 - "${soak_root}" "${runs}" "${pass_count}" "${fail_count}" "${summary_rows[@]}" <<'PY'
+python3 - "${soak_root}" "${runs}" "${pass_count}" "${fail_count}" "${randomized}" "${seed_base}" "${summary_rows[@]}" <<'PY'
 import datetime
 import json
 import pathlib
@@ -87,7 +104,9 @@ soak_root = pathlib.Path(sys.argv[1])
 runs = int(sys.argv[2])
 pass_count = int(sys.argv[3])
 fail_count = int(sys.argv[4])
-rows = sys.argv[5:]
+randomized = sys.argv[5] == "1"
+seed_base = int(sys.argv[6])
+rows = sys.argv[7:]
 
 run_summaries = []
 duration_values = []
@@ -95,8 +114,9 @@ queued_submission_values = []
 queued_publish_values = []
 
 for row in rows:
-    run_id, status, wall_ms, report_path, log_path = row.split(":", 4)
+    run_id, status, wall_ms, seed, report_path, log_path = row.split(":", 5)
     wall_ms = int(wall_ms)
+    seed = int(seed)
     report_file = pathlib.Path(report_path)
     report = None
     if report_file.exists():
@@ -108,6 +128,7 @@ for row in rows:
     run_summaries.append({
         "run_id": run_id,
         "status": status,
+        "seed": seed,
         "wall_ms": wall_ms,
         "report_path": str(report_file.relative_to(soak_root)),
         "log_path": str(pathlib.Path(log_path).relative_to(soak_root)),
@@ -116,6 +137,8 @@ for row in rows:
 
 summary = {
     "runs": runs,
+    "randomized": randomized,
+    "seed_base": seed_base,
     "passed_runs": pass_count,
     "failed_runs": fail_count,
     "flake_rate": fail_count / runs,

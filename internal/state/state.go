@@ -178,6 +178,9 @@ func (s Store) GetRepositoryByPath(ctx context.Context, canonicalPath string) (R
 
 // CreateIntegrationSubmission inserts a submission row.
 func (s Store) CreateIntegrationSubmission(ctx context.Context, submission IntegrationSubmission) (IntegrationSubmission, error) {
+	if err := applyTestFault("CreateIntegrationSubmission"); err != nil {
+		return IntegrationSubmission{}, err
+	}
 	db, err := s.open()
 	if err != nil {
 		return IntegrationSubmission{}, err
@@ -262,6 +265,9 @@ func (s Store) NextQueuedIntegrationSubmission(ctx context.Context, repoID int64
 
 // UpdateIntegrationSubmissionStatus updates submission state and error text.
 func (s Store) UpdateIntegrationSubmissionStatus(ctx context.Context, submissionID int64, status string, lastError string) (IntegrationSubmission, error) {
+	if err := applyTestFault("UpdateIntegrationSubmissionStatus"); err != nil {
+		return IntegrationSubmission{}, err
+	}
 	db, err := s.open()
 	if err != nil {
 		return IntegrationSubmission{}, err
@@ -288,6 +294,9 @@ func (s Store) UpdateIntegrationSubmissionStatus(ctx context.Context, submission
 
 // CreatePublishRequest inserts a publish request row.
 func (s Store) CreatePublishRequest(ctx context.Context, request PublishRequest) (PublishRequest, error) {
+	if err := applyTestFault("CreatePublishRequest"); err != nil {
+		return PublishRequest{}, err
+	}
 	db, err := s.open()
 	if err != nil {
 		return PublishRequest{}, err
@@ -382,6 +391,9 @@ func (s Store) SupersedeOlderQueuedPublishRequests(ctx context.Context, repoID i
 
 // UpdatePublishRequestStatus updates publish request state and superseded link.
 func (s Store) UpdatePublishRequestStatus(ctx context.Context, requestID int64, status string, supersededBy sql.NullInt64) (PublishRequest, error) {
+	if err := applyTestFault("UpdatePublishRequestStatus"); err != nil {
+		return PublishRequest{}, err
+	}
 	db, err := s.open()
 	if err != nil {
 		return PublishRequest{}, err
@@ -439,6 +451,9 @@ func (s Store) ListPublishRequests(ctx context.Context, repoID int64) ([]Publish
 
 // AppendEvent inserts an event record.
 func (s Store) AppendEvent(ctx context.Context, event EventRecord) (EventRecord, error) {
+	if err := applyTestFault("AppendEvent"); err != nil {
+		return EventRecord{}, err
+	}
 	db, err := s.open()
 	if err != nil {
 		return EventRecord{}, err

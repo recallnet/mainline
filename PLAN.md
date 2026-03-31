@@ -584,12 +584,14 @@ Deliverables:
 - randomized delays around submit, integration, publish, and daemon polling paths in test-only harnesses
 - fault injection for fetch, rebase, push, hook execution, and state-store write paths
 - seeded replay support so a failing randomized run can be reproduced exactly
+- a randomized soak command that persists per-run seeds and replay metadata
 
 Acceptance criteria:
 
 - the stress harness can run with randomized timing and seeded replay
 - failure injection exercises blocked, failed, retried, and superseded paths without manual test surgery
 - a failing randomized run can be rerun from the same seed and reproduce the same failure class
+- maintainers can run repeated randomized soaks without inventing local wrapper scripts
 
 ## Milestone 25: Crash And Restart Correctness
 

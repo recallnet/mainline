@@ -15,6 +15,9 @@ func runConfiguredChecks(checks []string, workdir string, timeoutSetting string)
 	if len(checks) == 0 {
 		return nil
 	}
+	if err := applyAppTestFault("checks.start"); err != nil {
+		return err
+	}
 
 	timeout, err := time.ParseDuration(timeoutSetting)
 	if err != nil {
