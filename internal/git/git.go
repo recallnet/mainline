@@ -173,6 +173,40 @@ func (e Engine) BranchHeadSHA(ref string) (string, error) {
 	return hash.String(), nil
 }
 
+// IsAncestor reports whether ancestorRef is an ancestor of descendantRef.
+func (e Engine) IsAncestor(ancestorRef string, descendantRef string) (bool, error) {
+	repo, err := e.open()
+	if err != nil {
+		return false, err
+	}
+
+	resolveCommit := func(ref string) (*object.Commit, error) {
+		revision := plumbing.Revision(ref)
+		hash, err := repo.ResolveRevision(revision)
+		if err != nil && !strings.HasPrefix(ref, "refs/") {
+			revision = plumbing.Revision(plumbing.NewBranchReferenceName(ref).String())
+			hash, err = repo.ResolveRevision(revision)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return repo.CommitObject(*hash)
+	}
+
+	ancestorCommit, err := resolveCommit(ancestorRef)
+	if err != nil {
+		return false, err
+	}
+	descendantCommit, err := resolveCommit(descendantRef)
+	if err != nil {
+		return false, err
+	}
+	if ancestorCommit.Hash == descendantCommit.Hash {
+		return true, nil
+	}
+	return ancestorCommit.IsAncestor(descendantCommit)
+}
+
 // BranchExists reports whether a local branch exists.
 func (e Engine) BranchExists(branch string) bool {
 	repo, err := e.open()

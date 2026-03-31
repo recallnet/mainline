@@ -63,7 +63,7 @@ _mainline_completions()
       COMPREPLY=( $(compgen -W "--repo --branch --worktree --requested-by --json --timeout --poll-interval" -- "$cur") )
       ;;
     submit)
-      COMPREPLY=( $(compgen -W "--repo --branch --worktree --requested-by --json --check --wait --timeout --poll-interval" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --branch --worktree --requested-by --json --check --check-only --wait --timeout --poll-interval" -- "$cur") )
       ;;
     status)
       COMPREPLY=( $(compgen -W "--repo --json --events" -- "$cur") )
@@ -165,7 +165,7 @@ _mainline() {
       return
       ;;
     submit)
-      _arguments '--repo[repository path]:path:_files -/' '--branch[branch name]:branch:' '--worktree[source worktree]:path:_files -/' '--requested-by[submitter identity]:identity:' '--json[json output]' '--check[validate submission without queueing]' '--wait[wait for the submission to integrate]' '--timeout[maximum integration wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
+      _arguments '--repo[repository path]:path:_files -/' '--branch[branch name]:branch:' '--worktree[source worktree]:path:_files -/' '--requested-by[submitter identity]:identity:' '--json[json output]' '--check[validate submission without queueing]' '--check-only[validate submission without queueing]' '--wait[wait for the submission to integrate]' '--timeout[maximum integration wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
       return
       ;;
     status)
@@ -277,6 +277,8 @@ complete -c mainline -n "__fish_seen_subcommand_from submit" -l json
 complete -c mq -n "__fish_seen_subcommand_from submit" -l json
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l check
 complete -c mq -n "__fish_seen_subcommand_from submit" -l check
+complete -c mainline -n "__fish_seen_subcommand_from submit" -l check-only
+complete -c mq -n "__fish_seen_subcommand_from submit" -l check-only
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l wait
 complete -c mq -n "__fish_seen_subcommand_from submit" -l wait
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l timeout

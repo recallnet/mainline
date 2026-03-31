@@ -269,6 +269,128 @@ func TestSubmitCheckValidatesWithoutQueueing(t *testing.T) {
 	}
 }
 
+func TestSubmitCheckOnlyAliasValidatesWithoutQueueing(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-check-only")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/check-only", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--check-only", "--json"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.OK || !result.Checked || result.Queued {
+		t.Fatalf("expected check-only success without queueing, got %+v", result)
+	}
+}
+
+func TestSubmitCheckOnlyRejectsBranchBehindProtected(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	featurePath := filepath.Join(t.TempDir(), "feature-behind")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/behind", featurePath)
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+	writeFileAndCommit(t, repoRoot, "main.txt", "main\n", "main advance")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err := runSubmit([]string{"--repo", featurePath, "--check-only", "--json"}, &submitOut, &submitErr)
+	if err == nil {
+		t.Fatalf("expected behind-protected check-only failure")
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.ErrorCode != "branch_needs_rebase" {
+		t.Fatalf("expected branch_needs_rebase, got %+v", result)
+	}
+}
+
+func TestSubmitCheckOnlyRejectsAlreadyQueuedSubmission(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-queued")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/queued", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+	if err := runSubmit([]string{"--repo", featurePath}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("first runSubmit returned error: %v", err)
+	}
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err := runSubmit([]string{"--repo", featurePath, "--check-only", "--json"}, &submitOut, &submitErr)
+	if err == nil {
+		t.Fatalf("expected already-queued check-only failure")
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.ErrorCode != "already_queued" {
+		t.Fatalf("expected already_queued, got %+v", result)
+	}
+}
+
+func TestSubmitRejectsExactDuplicateActiveSubmission(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-duplicate")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/duplicate", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+	if err := runSubmit([]string{"--repo", featurePath}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("first runSubmit returned error: %v", err)
+	}
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr)
+	if err == nil {
+		t.Fatalf("expected duplicate submit failure")
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.ErrorCode != "already_queued" {
+		t.Fatalf("expected already_queued duplicate error, got %+v", result)
+	}
+}
+
 func TestSubmitJSONFailureIncludesStableErrorCode(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	featurePath := filepath.Join(t.TempDir(), "dirty-json")

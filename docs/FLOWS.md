@@ -89,6 +89,14 @@ Exit codes:
 - `1`: blocked, failed, or cancelled
 - `2`: timed out waiting for integration
 
+For cheap preflight before expensive local gates, use:
+
+```bash
+mq submit --repo /path/to/topic-worktree --check-only --json
+```
+
+That dry run verifies the branch is clean, includes the current protected tip, and is not already active in the queue at the same branch SHA.
+
 If a queue item needs operator intervention:
 
 ```bash

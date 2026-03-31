@@ -155,6 +155,7 @@ Queue work:
 
 ```bash
 mq submit --repo /path/to/topic-worktree --check --json
+mq submit --repo /path/to/topic-worktree --check-only --json
 mq submit --repo /path/to/topic-worktree --json
 mq submit --repo /path/to/topic-worktree --wait --timeout 10m
 mq land --repo /path/to/topic-worktree --json --timeout 30m
@@ -166,6 +167,7 @@ mq publish --repo /path/to/main
 For factory or daemon callers, the intended handoff is:
 
 - `mq submit --check --json` to fast-fail deterministic problems before queue mutation
+- `mq submit --check-only --json` for the stricter dry-run path: clean worktree, current protected tip included, and no duplicate active submission for the same branch SHA
 - `mq submit --json` to record the branch and get a stable `submission_id`
 - `mq submit --wait --timeout 10m` when an agent needs a blocking landed-or-blocked answer without implementing its own poll loop
 - `mainlined` or `mq land` to carry the branch the rest of the way to integrated and published state

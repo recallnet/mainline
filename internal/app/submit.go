@@ -31,6 +31,7 @@ type submitOptions struct {
 	branch       string
 	worktreePath string
 	requestedBy  string
+	checkOnly    bool
 }
 
 type preparedSubmission struct {
@@ -86,6 +87,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	var requestedBy string
 	var asJSON bool
 	var checkOnly bool
+	var checkOnlyAlias bool
 	var waitForResult bool
 	var timeout time.Duration
 	var pollInterval time.Duration
@@ -96,6 +98,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.StringVar(&requestedBy, "requested-by", "", "submitter identity")
 	fs.BoolVar(&asJSON, "json", false, "output json")
 	fs.BoolVar(&checkOnly, "check", false, "validate submission without queueing it")
+	fs.BoolVar(&checkOnlyAlias, "check-only", false, "validate submission without queueing it")
 	fs.BoolVar(&waitForResult, "wait", false, "wait for the submission to integrate")
 	fs.DurationVar(&timeout, "timeout", 10*time.Minute, "maximum time to wait for integration")
 	fs.DurationVar(&pollInterval, "poll-interval", 500*time.Millisecond, "wait interval between worker checks")
@@ -103,6 +106,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	checkOnly = checkOnly || checkOnlyAlias
 	if checkOnly && waitForResult {
 		return fmt.Errorf("--check and --wait cannot be used together")
 	}
@@ -118,6 +122,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 		branch:       branch,
 		worktreePath: worktreePath,
 		requestedBy:  requestedBy,
+		checkOnly:    checkOnly,
 	}
 	prepared, err := prepareSubmission(opts)
 	if err != nil {
@@ -379,6 +384,41 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		}
 	}
 
+	ctx := context.Background()
+	repoRecord, err := store.GetRepositoryByPath(ctx, repoRoot)
+	if err != nil && !errors.Is(err, state.ErrNotFound) {
+		return preparedSubmission{}, err
+	}
+	if err == nil {
+		duplicate, found, err := findActiveDuplicateSubmission(ctx, store, repoRecord.ID, branch, headSHA)
+		if err != nil {
+			return preparedSubmission{}, err
+		}
+		if found {
+			return preparedSubmission{}, &submitValidationError{
+				Code:    "already_queued",
+				Message: fmt.Sprintf("submission %d for branch %q at %s is already %s", duplicate.ID, branch, headSHA, duplicate.Status),
+			}
+		}
+	}
+
+	if opts.checkOnly {
+		protectedHeadSHA, err := engine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+		if err != nil {
+			return preparedSubmission{}, fmt.Errorf("resolve protected branch head for %q: %w", cfg.Repo.ProtectedBranch, err)
+		}
+		descended, err := engine.IsAncestor(cfg.Repo.ProtectedBranch, branch)
+		if err != nil {
+			return preparedSubmission{}, err
+		}
+		if !descended {
+			return preparedSubmission{}, &submitValidationError{
+				Code:    "branch_needs_rebase",
+				Message: fmt.Sprintf("branch %q does not include protected branch %q at %s; rebase before submission", branch, cfg.Repo.ProtectedBranch, protectedHeadSHA),
+			}
+		}
+	}
+
 	return preparedSubmission{
 		Layout:       layout,
 		RepoRoot:     repoRoot,
@@ -389,6 +429,23 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		SourceSHA:    headSHA,
 		RequestedBy:  requestedBy,
 	}, nil
+}
+
+func findActiveDuplicateSubmission(ctx context.Context, store state.Store, repoID int64, branch string, sourceSHA string) (state.IntegrationSubmission, bool, error) {
+	submissions, err := store.ListIntegrationSubmissions(ctx, repoID)
+	if err != nil {
+		return state.IntegrationSubmission{}, false, err
+	}
+	for _, submission := range submissions {
+		if submission.BranchName != branch || submission.SourceSHA != sourceSHA {
+			continue
+		}
+		switch submission.Status {
+		case "queued", "running", "blocked":
+			return submission, true, nil
+		}
+	}
+	return state.IntegrationSubmission{}, false, nil
 }
 
 func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, error) {

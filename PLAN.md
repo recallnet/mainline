@@ -769,6 +769,25 @@ Acceptance criteria:
 - blocked, failed, or cancelled outcomes return a nonzero exit that agents can distinguish from timeout
 - agents can consume submit wait results through either human output or JSON without scraping status loops
 
+## Milestone 34: Strict Submit Preflight
+
+Goal:
+
+- give agents a cheap dry-run admission check before they spend time on heavyweight local gates
+
+Deliverables:
+
+- `submit --check-only` as an explicit dry-run alias
+- preflight validation that the branch includes the current protected tip
+- duplicate active-submission detection for the same branch SHA
+- docs and completions that distinguish the strict dry-run path from queueing submit
+
+Acceptance criteria:
+
+- `mq submit --check-only` performs no queue mutation
+- dry-run failures are machine-readable and explain whether the branch needs a rebase or is already active in the queue
+- exact duplicate active submissions are rejected instead of cluttering the queue
+
 ## Architecture Plan
 
 ## Repository Layout
