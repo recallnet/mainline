@@ -60,7 +60,10 @@ _mainline_completions()
     status)
       COMPREPLY=( $(compgen -W "--repo --json --events" -- "$cur") )
       ;;
-    run-once|publish|doctor)
+    run-once|publish)
+      COMPREPLY=( $(compgen -W "--repo" -- "$cur") )
+      ;;
+    doctor)
       COMPREPLY=( $(compgen -W "--repo --json" -- "$cur") )
       ;;
     repo)
@@ -120,7 +123,11 @@ _mainline() {
       _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--events[number of recent events]:count:'
       return
       ;;
-    run-once|publish|doctor)
+    run-once|publish)
+      _arguments '--repo[repository path]:path:_files -/'
+      return
+      ;;
+    doctor)
       _arguments '--repo[repository path]:path:_files -/' '--json[json output]'
       return
       ;;
@@ -143,19 +150,19 @@ complete -c mq -f -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 
 complete -c mainline -l repo
 complete -c mq -l repo
-complete -c mainline -l json
-complete -c mq -l json
-complete -c mainline -l events
-complete -c mq -l events
-complete -c mainline -l branch
-complete -c mq -l branch
-complete -c mainline -l worktree
-complete -c mq -l worktree
-complete -c mainline -l protected-branch
-complete -c mq -l protected-branch
-complete -c mainline -l remote
-complete -c mq -l remote
-complete -c mainline -l main-worktree
-complete -c mq -l main-worktree
+complete -c mainline -n "__fish_seen_subcommand_from status doctor repo show" -l json
+complete -c mq -n "__fish_seen_subcommand_from status doctor repo show" -l json
+complete -c mainline -n "__fish_seen_subcommand_from status" -l events
+complete -c mq -n "__fish_seen_subcommand_from status" -l events
+complete -c mainline -n "__fish_seen_subcommand_from submit" -l branch
+complete -c mq -n "__fish_seen_subcommand_from submit" -l branch
+complete -c mainline -n "__fish_seen_subcommand_from submit" -l worktree
+complete -c mq -n "__fish_seen_subcommand_from submit" -l worktree
+complete -c mainline -n "__fish_seen_subcommand_from repo init" -l protected-branch
+complete -c mq -n "__fish_seen_subcommand_from repo init" -l protected-branch
+complete -c mainline -n "__fish_seen_subcommand_from repo init" -l remote
+complete -c mq -n "__fish_seen_subcommand_from repo init" -l remote
+complete -c mainline -n "__fish_seen_subcommand_from repo init" -l main-worktree
+complete -c mq -n "__fish_seen_subcommand_from repo init" -l main-worktree
 `
 }
