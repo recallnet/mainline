@@ -39,6 +39,8 @@ fi
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 commit="$(git -C "${repo_root}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 release_url="https://github.com/${repo}/releases/download/${version}"
+checksums_asset="SHA256SUMS"
+formula_asset="mainline.rb"
 
 archives=(
   "darwin amd64"
@@ -56,6 +58,8 @@ json_escape() {
   printf '  "version": %s,\n' "$(json_escape "${version}")"
   printf '  "commit": %s,\n' "$(json_escape "${commit}")"
   printf '  "repository": %s,\n' "$(json_escape "${repo}")"
+  printf '  "checksums_url": %s,\n' "$(json_escape "${release_url}/${checksums_asset}")"
+  printf '  "homebrew_formula_url": %s,\n' "$(json_escape "${release_url}/${formula_asset}")"
   printf '  "assets": [\n'
 
   first=1
