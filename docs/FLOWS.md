@@ -21,6 +21,8 @@ mq submit --repo .
 mq status --repo . --json
 mq run-once --repo /path/to/protected-worktree
 mq publish --repo /path/to/protected-worktree
+mq watch --repo /path/to/protected-worktree
+mq logs --repo /path/to/protected-worktree --follow
 mq events --repo /path/to/protected-worktree --follow
 ```
 
@@ -48,6 +50,8 @@ Run the daemon in the protected worktree and let agents only submit:
 mainlined --repo /path/to/main --interval 2s --json
 mq submit --repo /path/to/agent-worktree
 mq status --repo /path/to/main --json
+mq watch --repo /path/to/main
+mq logs --repo /path/to/main --follow
 mq events --repo /path/to/main --follow
 ```
 
@@ -64,6 +68,8 @@ mq submit --repo /path/to/topic-worktree
 mq status --repo /path/to/main --json
 mq run-once --repo /path/to/main
 mq publish --repo /path/to/main
+mq watch --repo /path/to/main
+mq logs --repo /path/to/main --follow
 mq events --repo /path/to/main --follow
 ```
 

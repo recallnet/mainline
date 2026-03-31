@@ -58,15 +58,30 @@ func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 
-	layout, _, cfg, repoRecord, store, err := loadRepoContext(repoPath)
+	result, err := collectStatus(repoPath, limit)
 	if err != nil {
 		return err
+	}
+
+	if asJSON {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(result)
+	}
+
+	return renderStatus(stdout, result)
+}
+
+func collectStatus(repoPath string, limit int) (statusResult, error) {
+	layout, _, cfg, repoRecord, store, err := loadRepoContext(repoPath)
+	if err != nil {
+		return statusResult{}, err
 	}
 
 	engine := git.NewEngine(layout.WorktreeRoot)
 	worktree, err := engine.ResolveWorktree(layout.WorktreeRoot)
 	if err != nil {
-		return err
+		return statusResult{}, err
 	}
 
 	currentBranch := worktree.Branch
@@ -79,27 +94,27 @@ func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
 		if !engine.BranchExists(cfg.Repo.ProtectedBranch) {
 			protectedSHA = ""
 		} else {
-			return err
+			return statusResult{}, err
 		}
 	}
 
 	protectedStatus, err := engine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
 	if err != nil && engine.BranchExists(cfg.Repo.ProtectedBranch) {
-		return err
+		return statusResult{}, err
 	}
 
 	ctx := context.Background()
 	submissions, err := store.ListIntegrationSubmissions(ctx, repoRecord.ID)
 	if err != nil {
-		return err
+		return statusResult{}, err
 	}
 	requests, err := store.ListPublishRequests(ctx, repoRecord.ID)
 	if err != nil {
-		return err
+		return statusResult{}, err
 	}
 	events, err := store.ListEvents(ctx, repoRecord.ID, limit)
 	if err != nil {
-		return err
+		return statusResult{}, err
 	}
 
 	result := statusResult{
@@ -122,12 +137,10 @@ func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
 		result.LatestPublish = &requests[len(requests)-1]
 	}
 
-	if asJSON {
-		encoder := json.NewEncoder(stdout)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(result)
-	}
+	return result, nil
+}
 
+func renderStatus(stdout io.Writer, result statusResult) error {
 	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
 	fmt.Fprintf(stdout, "Current worktree: %s\n", result.CurrentWorktree)
 	fmt.Fprintf(stdout, "Current branch: %s\n", result.CurrentBranch)

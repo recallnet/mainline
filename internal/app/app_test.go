@@ -165,8 +165,8 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "retry cancel publish") {
 		t.Fatalf("expected completion script to include retry and cancel, got %q", output)
 	}
-	if !strings.Contains(output, "events doctor completion") {
-		t.Fatalf("expected completion script to include events, got %q", output)
+	if !strings.Contains(output, "publish logs watch events doctor completion") {
+		t.Fatalf("expected completion script to include logs/watch/events, got %q", output)
 	}
 	if strings.Contains(output, "run-once|publish|doctor") {
 		t.Fatalf("expected split completion cases for real command flags, got %q", output)
@@ -182,8 +182,11 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	}
 
 	output = stdout.String()
-	if !strings.Contains(output, "__fish_seen_subcommand_from events\" -l json") {
-		t.Fatalf("expected fish completion to include events --json, got %q", output)
+	if !strings.Contains(output, "__fish_seen_subcommand_from logs events\" -l json") {
+		t.Fatalf("expected fish completion to include logs/events --json, got %q", output)
+	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from watch\" -l interval") {
+		t.Fatalf("expected fish completion to include watch flags, got %q", output)
 	}
 }
 
@@ -320,6 +323,60 @@ func TestEventsFollowStreamsNewEvent(t *testing.T) {
 	cancel()
 	<-done
 	t.Fatalf("timed out waiting for publish.requested in streamed events, got %q", output.String())
+}
+
+func TestLogsMatchesEventOutput(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	queuePublish(t, repoRoot)
+
+	var eventStdout bytes.Buffer
+	var logsStdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--limit", "3"}, &eventStdout, &stderr); err != nil {
+		t.Fatalf("events runCLI returned error: %v", err)
+	}
+	stderr.Reset()
+	if err := runCLI([]string{"logs", "--repo", repoRoot, "--json", "--limit", "3"}, &logsStdout, &stderr); err != nil {
+		t.Fatalf("logs runCLI returned error: %v", err)
+	}
+	if logsStdout.String() != eventStdout.String() {
+		t.Fatalf("expected logs output to match events output\nlogs:\n%s\nevents:\n%s", logsStdout.String(), eventStdout.String())
+	}
+}
+
+func TestWatchJSONEmitsSnapshots(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	queuePublish(t, repoRoot)
+
+	var stdout bytes.Buffer
+	if err := runWatchLoop(context.Background(), watchOptions{
+		repoPath:   repoRoot,
+		interval:   10 * time.Millisecond,
+		eventLimit: 2,
+		maxCycles:  2,
+		asJSON:     true,
+	}, &stdout); err != nil {
+		t.Fatalf("runWatchLoop returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 json snapshots, got %d: %q", len(lines), stdout.String())
+	}
+	for _, line := range lines {
+		var frame watchFrame
+		if err := json.Unmarshal([]byte(line), &frame); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if frame.Status.Counts.QueuedPublishes != 1 {
+			t.Fatalf("expected queued publish in watch snapshot, got %+v", frame.Status.Counts)
+		}
+		if len(frame.Status.RecentEvents) == 0 {
+			t.Fatalf("expected recent events in watch snapshot")
+		}
+	}
 }
 
 func TestCLIRepoSubcommandsRemainReachable(t *testing.T) {

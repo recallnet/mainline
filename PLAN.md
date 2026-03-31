@@ -389,6 +389,24 @@ Acceptance criteria:
 - operators can watch queue activity without polling raw SQLite-backed commands manually
 - active integrations, publishes, retries, and cancels are visible in a live operator-facing surface
 
+## Milestone 14: Named Watch And Logs Surface
+
+Goal:
+
+- turn the deferred operator commands into first-class interfaces instead of leaving them as placeholders
+
+Deliverables:
+
+- `logs` command as the named durable queue history surface
+- `watch` command as a live refreshing status view
+- shell completion and docs that advertise the new operator commands
+
+Acceptance criteria:
+
+- operators can use `mq logs` without needing to know the lower-level `events` command name
+- operators can use `mq watch` to keep a live repo status screen open during active work
+- the named operator commands use the same queue/state codepaths as `status` and `events`
+
 ## Architecture Plan
 
 ## Repository Layout

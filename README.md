@@ -29,6 +29,7 @@ Today the repo implements the foundation for that model:
 - polling daemon mode with `mainlined`
 - repo-defined policy checks, hook coordination, and worktree layout warnings
 - real `status` output for queue, publish, and recent event visibility
+- named `logs` and `watch` operator commands on the same durable queue state
 - shell completion generation for `bash`, `zsh`, and `fish`
 - support for standard repos and bare-clone-plus-worktree layouts
 
@@ -50,6 +51,7 @@ Implemented milestones:
 - Milestone 11: operator controls
 - Milestone 12: real distribution packaging
 - Milestone 13: live operator UX
+- Milestone 14: named watch and logs surface
 
 The current CLI can initialize a repo, inspect health, queue clean topic
 branches, run one serialized integration cycle locally, queue manual publish
@@ -58,7 +60,8 @@ queue, run a polling background loop through `mainlined`, and enforce
 repo-specific pre-checks and hook/worktree policies, retry or cancel queue
 items with durable history, document the repo’s own committed `mq`
 dogfooding workflow, ship Homebrew/Nix packaging outputs, and stream durable
-operator events directly from the queue state.
+operator events directly from the queue state through both low-level and
+operator-facing commands.
 
 ## Why This Exists
 
@@ -121,6 +124,8 @@ mainline submit --repo /path/to/repo --branch fix-login --worktree /path/to/feat
 mainline run-once --repo /path/to/repo
 mainline retry --repo /path/to/repo --submission 17
 mainline cancel --repo /path/to/repo --publish 4
+mainline logs --repo /path/to/repo --follow
+mainline watch --repo /path/to/repo
 mainline events --repo /path/to/repo --follow
 mainline publish --repo /path/to/repo
 mainline completion zsh
@@ -137,6 +142,8 @@ mq submit --repo /path/to/feature-worktree
 mq run-once --repo /path/to/repo
 mq retry --repo /path/to/repo --submission 17
 mq cancel --repo /path/to/repo --publish 4
+mq logs --repo /path/to/repo --follow
+mq watch --repo /path/to/repo
 mq events --repo /path/to/repo --follow
 mq publish --repo /path/to/repo
 ```
@@ -259,9 +266,11 @@ Current status behavior:
 
 Current live-operator behavior:
 
+- `logs` exposes durable queue history under an operator-friendly command name
+- `watch` refreshes queue state continuously without rerunning `status` by hand
 - `events` prints durable queue history in chronological order
 - `events --follow` streams newly appended events without reading raw SQLite manually
-- active integrations, publishes, retries, and cancels are visible through `status` and `events`
+- active integrations, publishes, retries, and cancels are visible through `status`, `watch`, `logs`, and `events`
 
 Current operator-control behavior:
 
