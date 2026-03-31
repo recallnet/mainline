@@ -345,6 +345,22 @@ func TestLogsMatchesEventOutput(t *testing.T) {
 	}
 }
 
+func TestLogsHelpUsesLogsCommandName(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := runCLI([]string{"logs", "--help"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatalf("expected help error for logs command")
+	}
+	output := stderr.String()
+	if !strings.Contains(output, "Usage of mainline logs:") {
+		t.Fatalf("expected logs help usage, got %q", output)
+	}
+	if strings.Contains(output, "Usage of mainline events:") {
+		t.Fatalf("expected logs help to avoid events alias wording, got %q", output)
+	}
+}
+
 func TestWatchJSONEmitsSnapshots(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

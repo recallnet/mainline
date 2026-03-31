@@ -22,7 +22,15 @@ type eventOptions struct {
 }
 
 func runEvents(args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainline events", flag.ContinueOnError)
+	return runEventCommand("mainline events", args, stdout, stderr)
+}
+
+func runLogs(args []string, stdout io.Writer, stderr io.Writer) error {
+	return runEventCommand("mainline logs", args, stdout, stderr)
+}
+
+func runEventCommand(commandName string, args []string, stdout io.Writer, stderr io.Writer) error {
+	fs := flag.NewFlagSet(commandName, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	opts := eventOptions{

@@ -22,10 +22,6 @@ type watchFrame struct {
 	Status     statusResult `json:"status"`
 }
 
-func runLogs(args []string, stdout io.Writer, stderr io.Writer) error {
-	return runEvents(args, stdout, stderr)
-}
-
 func runWatch(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline watch", flag.ContinueOnError)
 	fs.SetOutput(stderr)
