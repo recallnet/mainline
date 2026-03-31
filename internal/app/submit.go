@@ -199,7 +199,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 		}
 		if waitErr != nil {
 			if result.ErrorCode == "" {
-				result.ErrorCode = submitWaitErrorCode(waitErr)
+				result.ErrorCode = submitWaitOutcomeCode(waitResult.Outcome)
 			}
 			if asJSON {
 				return writeSubmitJSON(stdout, result, waitErr)
@@ -469,17 +469,15 @@ func submitErrorCode(err error) string {
 	return "submit_failed"
 }
 
-func submitWaitErrorCode(err error) string {
-	if CLIExitCode(err) == 2 {
+func submitWaitOutcomeCode(outcome waitOutcome) string {
+	switch outcome {
+	case waitOutcomeTimeout:
 		return "timeout"
-	}
-	msg := err.Error()
-	switch {
-	case strings.Contains(msg, " blocked:"):
+	case waitOutcomeBlocked:
 		return "blocked"
-	case strings.Contains(msg, " cancelled"):
+	case waitOutcomeCancelled:
 		return "cancelled"
-	case strings.Contains(msg, " failed:"):
+	case waitOutcomeFailed:
 		return "failed"
 	default:
 		return "submit_wait_failed"

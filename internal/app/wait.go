@@ -49,8 +49,14 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 	start := time.Now()
 
 	for {
-		submission, err := queued.Store.GetIntegrationSubmission(context.Background(), queued.Submission.ID)
+		submission, err := queued.Store.GetIntegrationSubmission(ctx, queued.Submission.ID)
 		if err != nil {
+			if ctx.Err() != nil {
+				result.DurationMS = time.Since(start).Milliseconds()
+				result.Outcome = waitOutcomeTimeout
+				result.Error = fmt.Sprintf("timed out waiting for submission %d to integrate", queued.Submission.ID)
+				return result, exitWithCode(2, fmt.Errorf("timed out waiting for submission %d to integrate", queued.Submission.ID))
+			}
 			result.DurationMS = time.Since(start).Milliseconds()
 			result.Error = err.Error()
 			return result, err
