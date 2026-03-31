@@ -18,6 +18,10 @@ The goal is simple:
 Do not use this skill to bypass `mq`. It exists to dogfood the workflow that
 `mainline` is building for other repos.
 
+Supported agent clients may also enforce this with hooks. If a hook blocks a
+native `git` mutation on the protected `main` worktree, that is not a false
+positive to work around. Move to a feature worktree and continue there.
+
 ## Operating rules
 
 1. Never do feature work on the protected branch worktree.

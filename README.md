@@ -1,152 +1,153 @@
 # mainline
 
-`mainline` is a local-first branch coordinator for Git repositories with a
-protected local branch, usually `main`.
+Git already knows how to branch, rebase, fast-forward, and push.
 
-It is built for worktree-heavy development, agent-heavy local workflows, and
-machines where keeping `main` boring matters more than cleverness.
+What it does not know is how to behave when five agents on one machine are all
+working in parallel, all using worktrees, and `main` is expected to stay
+pushable all day.
 
-## What It Does
+That is the problem `mainline` solves.
 
-`mainline` is aiming at a simple operating model:
+`mainline` turns "please do not stomp on `main`" from a social rule into a
+local coordination system:
 
-- topic branches do work
-- a protected branch stays clean
-- integrations are serialized
-- publishes are coalesced so the newest tip wins
-- queue truth survives crashes and restarts
+- topic work happens in worktrees
+- integrations onto `main` are serialized
+- publishes are coalesced so the newest protected tip wins
+- queue state survives crashes and restarts
+- operators can see what happened, what is blocked, and what is next
 
-Today the repo implements the foundation for that model:
+If your machine is running humans, Codex, Claude, factory daemons, or all of
+them at once, `mainline` keeps `main` boring without inventing a new VCS.
 
-- project skeleton and release/build scaffolding
-- repository discovery and health inspection
-- repo config persistence
-- durable SQLite state
-- per-repo integration and publish locks
-- branch submission into durable queue state
-- ordered single-repo integration with `run-once`
-- coalesced latest-tip publish queue with `publish` and `run-once`
-- polling daemon mode with `mainlined`
-- repo-defined policy checks, hook coordination, and worktree layout warnings
-- real `status` output for queue, publish, and recent event visibility
-- named `logs` and `watch` operator commands on the same durable queue state
-- shell completion generation for `bash`, `zsh`, and `fish`
-- support for standard repos and bare-clone-plus-worktree layouts
+---
 
-## Current Status
+## The Failure Mode
 
-Implemented milestones:
+The naive workflow looks harmless:
 
-- Milestone 0: project skeleton
-- Milestone 1: repository discovery and health
-- Milestone 2: durable state and locking
-- Milestone 3: branch submission
-- Milestone 4: integration queue MVP
-- Milestone 5: publish queue MVP
-- Milestone 6: daemon mode
-- Milestone 7: policies and hooks
-- Milestone 8: in-flight publish preemption
-- Milestone 9: UX and OSS readiness
-- Milestone 10: self-hosting and `mq` dogfooding
-- Milestone 11: operator controls
-- Milestone 12: real distribution packaging
-- Milestone 13: live operator UX
-- Milestone 14: named watch and logs surface
+1. everyone branches off the same local `main`
+2. everyone rebases whenever they remember
+3. everyone eventually merges or pushes
 
-The current CLI can initialize a repo, inspect health, queue clean topic
-branches, run one serialized integration cycle locally, queue manual publish
-requests, push the latest protected-branch tip through the coalesced publish
-queue, run a polling background loop through `mainlined`, and enforce
-repo-specific pre-checks and hook/worktree policies, retry or cancel queue
-items with durable history, document the repo’s own committed `mq`
-dogfooding workflow, ship Homebrew/Nix packaging outputs, and stream durable
-operator events directly from the queue state through both low-level and
-operator-facing commands.
+It works for one person.
 
-## Why This Exists
+It degrades badly under parallelism:
 
-Modern local Git workflows break down under parallelism:
+- one worktree rebases, another pushes, a third keeps building on stale state
+- `main` becomes the place conflicts get discovered and half-resolved
+- publish jobs race even though only the latest protected tip matters
+- nobody has a durable local record of what was queued, blocked, retried, or cancelled
 
-- many worktrees drift against each other
-- `main` turns into a conflict scratchpad
-- direct pushes race
-- stale publishes waste time
-- there is no durable local record of what was queued or why something blocked
+The result is not a dramatic distributed-systems failure. It is worse: a slow
+drip of local confusion, wasted rebases, dirty protected worktrees, and pushes
+that happen in the wrong order.
 
-`mainline` exists to make that workflow explicit, inspectable, and restart-safe
-without inventing a new VCS model.
+`mainline` is the missing local coordinator.
 
-## Supported Repository Layouts
+## The Model
 
-`mainline` is designed to handle both:
+`mainline` keeps the model intentionally small:
 
-- standard repositories with `.git/` in the checked-out worktree
-- bare clone storage with linked worktrees, such as:
-  - shared repo storage at `~/Projects/.bare/owner/repo.git`
-  - checked-out worktree at `~/Projects/owner/repo`
+- Git remains the source of truth for refs, worktrees, rebase, merge, and push semantics
+- SQLite stores durable queue state, locks, and operator-visible history
+- one canonical protected-branch worktree exists
+- topic branches are submitted from their own worktrees
+- integration happens by rebase-then-fast-forward
+- publish requests are queued, coalesced, and drained separately
 
-For bare-clone layouts, durable state and locks are stored with the shared Git
-storage so every worktree sees the same queue truth.
+This is not a hosted service. It is a repo-local control plane for the Git
+workflow you already have.
 
-## CLI
+## What It Feels Like
 
-Supported binaries:
+You make changes in a feature worktree. You commit there. You submit that
+branch to the queue. `mainline` lands it onto protected `main` in order. Then
+it publishes the protected tip when you ask, or automatically if policy says so.
 
-- `mainline`: full CLI name
-- `mq`: short handle for the main queue CLI
-- `mainlined`: daemon entrypoint
-
-Examples:
-
-```bash
-mainline --help
-mq --help
-mainlined --help
-```
-
-Example daemon usage:
-
-```bash
-mainlined --repo /path/to/repo
-mainlined --repo /path/to/repo --interval 2s --json
-```
-
-Current repo commands:
-
-```bash
-mainline repo init --repo .
-mainline repo show --repo .
-mainline doctor --repo .
-mainline status --repo .
-mainline status --repo . --json
-mainline submit --repo /path/to/feature-worktree
-mainline submit --repo /path/to/repo --branch fix-login --worktree /path/to/feature-worktree
-mainline run-once --repo /path/to/repo
-mainline retry --repo /path/to/repo --submission 17
-mainline cancel --repo /path/to/repo --publish 4
-mainline logs --repo /path/to/repo --follow
-mainline watch --repo /path/to/repo
-mainline events --repo /path/to/repo --follow
-mainline publish --repo /path/to/repo
-mainline completion zsh
-```
-
-The same commands work through `mq`:
+The short CLI is `mq`, because that is how it should feel in daily use.
 
 ```bash
 mq repo init --repo .
-mq repo show --repo .
-mq doctor --repo .
-mq status --repo .
-mq submit --repo /path/to/feature-worktree
-mq run-once --repo /path/to/repo
-mq retry --repo /path/to/repo --submission 17
-mq cancel --repo /path/to/repo --publish 4
-mq logs --repo /path/to/repo --follow
-mq watch --repo /path/to/repo
-mq events --repo /path/to/repo --follow
-mq publish --repo /path/to/repo
+mq submit --repo /path/to/topic-worktree
+mq run-once --repo /path/to/main
+mq publish --repo /path/to/main
+mq watch --repo /path/to/main
 ```
+
+### Land a branch
+
+![Land a branch with mq](docs/demos/gifs/land.gif)
+
+### Inspect durable queue history
+
+![Inspect queue history with mq logs](docs/demos/gifs/logs.gif)
+
+### Watch protected-branch state live
+
+![Watch mainline operator state](docs/demos/gifs/watch.gif)
+
+These demos are generated from source-controlled VHS tapes in
+[`docs/demos/tapes/`](docs/demos/tapes/) and can be re-rendered with:
+
+```bash
+./docs/demos/scripts/render.sh
+```
+
+## Why This Works
+
+Because it draws one hard line:
+
+`main` is not where feature work happens.
+
+That one rule unlocks the rest:
+
+- all commits happen in topic worktrees
+- conflicts are resolved in the source worktree, not on protected `main`
+- integrations are serialized instead of "whoever pushes last"
+- publish is treated as its own queue with coalescing semantics
+- operator actions like retry and cancel become explicit state transitions instead of shell folklore
+
+`mainline` does not replace Git discipline. It enforces the parts that matter
+when many actors share the same machine.
+
+## For Teams Running Agents
+
+This project is built for the exact setup that breaks most local Git habits:
+
+- multiple coding agents on one machine
+- many linked worktrees
+- a protected local `main`
+- regular pushes to remote
+- a need to know what is happening without reading raw `.git` state
+
+The repo itself dogfoods this workflow. The committed worktree skill lives at
+[.agents/skills/worktree/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/worktree/SKILL.md),
+and the repo-specific guardrails live at
+[AGENTS.md](/Users/devrel/Projects/recallnet/mainline/AGENTS.md).
+
+The rule is simple:
+
+- do all work in a feature worktree
+- never mutate protected `main` with native `git`
+- land through `mq`
+
+## What Ships Today
+
+`mainline` is already a real tool, not a sketch:
+
+- repository discovery for standard repos and bare-clone-plus-worktree layouts
+- durable SQLite state stored with shared Git storage
+- per-repo integration and publish locking
+- branch submission from feature worktrees
+- serialized `run-once` integration onto protected `main`
+- publish queue with newest-tip coalescing
+- polling daemon mode through `mainlined`
+- retry and cancel as explicit operator controls
+- live operator surfaces through `status`, `watch`, `logs`, and `events`
+- policy checks, hook coordination, and worktree layout warnings
+- shell completions for `bash`, `zsh`, and `fish`
+- Homebrew and Nix packaging
 
 ## Install
 
@@ -160,12 +161,6 @@ cd mainline
 make build
 ```
 
-Binaries are written to `./bin`:
-
-- `./bin/mainline`
-- `./bin/mq`
-- `./bin/mainlined`
-
 With `go install`:
 
 ```bash
@@ -174,215 +169,85 @@ go install github.com/recallnet/mainline/cmd/mq@latest
 go install github.com/recallnet/mainline/cmd/mainlined@latest
 ```
 
-Homebrew and Nix install commands live in [docs/install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md), with the packaging sources in [Formula/mainline.rb](/Users/devrel/Projects/recallnet/mainline/Formula/mainline.rb), [flake.nix](/Users/devrel/Projects/recallnet/mainline/flake.nix), and [package.nix](/Users/devrel/Projects/recallnet/mainline/nix/package.nix).
+Homebrew and Nix install details are in
+[install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md).
 
-## Shell Completion
+## The Core Commands
 
-Generate completion scripts from the current binary:
+Repo setup:
 
 ```bash
-mainline completion bash
-mainline completion zsh
-mainline completion fish
+mq repo init --repo /path/to/main --main-worktree /path/to/main
+mq doctor --repo /path/to/main
+mq repo show --repo /path/to/main --json
 ```
 
-The same completion command works through `mq`. Install snippets are in [docs/install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md).
+Queue work:
+
+```bash
+mq submit --repo /path/to/topic-worktree
+mq run-once --repo /path/to/main
+mq publish --repo /path/to/main
+```
+
+Operate the queue:
+
+```bash
+mq status --repo /path/to/main --json
+mq watch --repo /path/to/main
+mq logs --repo /path/to/main --follow
+mq retry --repo /path/to/main --submission 17
+mq cancel --repo /path/to/main --publish 4
+```
+
+Daemon mode:
+
+```bash
+mainlined --repo /path/to/main --interval 2s --json
+```
+
+## Repository Layouts
+
+`mainline` supports both:
+
+- normal repos with `.git/` in the checked-out worktree
+- bare-clone storage with linked worktrees, such as
+  `~/Projects/.bare/owner/repo.git` plus `~/Projects/owner/repo`
+
+For bare-clone layouts, queue state and locks live with shared Git storage so
+every worktree sees the same truth.
+
+## Architecture
+
+The design is intentionally conservative.
+
+- `go-git` handles repository inspection, config, and ordinary ref/worktree operations
+- native `git` is used where exact Git behavior matters, especially on the write path
+- Git answers topology and branch semantics
+- SQLite answers ordering, durability, coordination, and audit history
+
+More detail is in [ARCHITECTURE.md](/Users/devrel/Projects/recallnet/mainline/docs/ARCHITECTURE.md).
+
+## When To Use It
+
+Use `mainline` when:
+
+- your repo already uses worktrees
+- `main` must stay clean and pushable
+- multiple engineers or agents share one machine
+- you want branch landing and publish to be deterministic
+- you want an operator-visible record of queue state
+
+Do not use it if your workflow is one person, one branch, one push, and no
+parallelism. Git alone is already good at that.
 
 ## Development
 
-Common tasks:
-
 ```bash
 make fmt
-make lint
 make test
 make build
 ```
 
-Verification currently used by CI:
-
-- `gofmt -w`
-- `go vet ./...`
-- `go test ./...`
-- build all binaries
-
-## Durable State
-
-Milestone 2 adds a repo-local SQLite state store and file-lock exclusivity.
-
-Current durable entities:
-
-- repositories
-- integration submissions
-- publish requests
-- events
-
-Current submission behavior:
-
-- submits the checked-out branch by default
-- allows explicit `--branch` and `--worktree`
-- rejects protected-branch submits
-- rejects dirty source worktrees
-- rejects detached HEAD without an explicit branch worktree
-- stores submission metadata and emits a `submission.created` event
-
-Current integration behavior:
-
-- processes the oldest queued submission first
-- acquires a per-repo integration lock
-- validates a clean protected-branch worktree before integrating
-- rebases the submitted branch in its source worktree
-- fast-forwards the protected branch on success
-- marks rebase conflicts as `blocked` without touching the protected branch
-- marks stale or invalid submissions as `failed` with actionable error text
-- emits publish requests automatically when `[publish].mode = "auto"`
-
-Current publish behavior:
-
-- queues the current protected-branch tip with `publish`
-- processes publish work through the per-repo publish lock
-- supersedes older queued publish requests before pushing
-- pushes only the latest queued protected-branch tip
-- can interrupt a stale local in-flight push when `[publish].interrupt_inflight = true`
-- marks publish requests `succeeded`, `failed`, or `superseded`
-- lets `run-once` drain publish work when no integration submission is waiting
-
-Current daemon behavior:
-
-- polls the repo on a configurable interval
-- reuses the real `run-once` worker path instead of a separate codepath
-- can emit structured JSON logs
-- exits cleanly on `SIGINT` or `SIGTERM`
-- preserves queue truth across restarts because durable state remains in SQLite
-
-Current status behavior:
-
-- summarizes queued, running, blocked, failed, and succeeded work
-- includes cancelled queue items
-- shows the latest submission and publish request
-- exposes active queued, running, and blocked work directly
-- emits machine-readable JSON with `status --json`
-- includes recent durable events for quick operator context
-
-Current live-operator behavior:
-
-- `logs` exposes durable queue history under an operator-friendly command name
-- `watch` refreshes queue state continuously without rerunning `status` by hand
-- `events` prints durable queue history in chronological order
-- `events --follow` streams newly appended events without reading raw SQLite manually
-- active integrations, publishes, retries, and cancels are visible through `status`, `watch`, `logs`, and `events`
-
-Current operator-control behavior:
-
-- `retry` requeues blocked, failed, or cancelled submissions
-- `retry` requeues failed or cancelled publish requests
-- `cancel` marks queued, blocked, or failed submissions cancelled
-- `cancel` marks queued or failed publish requests cancelled
-- every operator action appends a durable event
-
-Current policy behavior:
-
-- repo config now includes hook policy, dirty-worktree policy, worktree layout policy, and shell checks
-- pre-integrate checks run in the source worktree before protected-branch mutation
-- pre-publish checks run in the main worktree before push
-- check execution uses a configurable command timeout
-- `replace-with-mainline-checks` and `bypass-with-explicit-command` bypass `git push` hooks with `--no-verify`
-- `doctor` warns when linked worktrees fall outside an enforced prefix
-
-Current lock domains:
-
-- integration
-- publish
-
-The state path is derived from shared Git storage, not from whichever worktree
-happened to invoke the command.
-
-## Architecture
-
-Key packages:
-
-- `cmd/mainline`: main CLI
-- `cmd/mq`: short CLI alias
-- `cmd/mainlined`: daemon entrypoint
-- `internal/app`: command wiring
-- `internal/git`: repository discovery and health inspection
-- `internal/policy`: repo config types and persistence
-- `internal/state`: SQLite state and per-repo locks
-- `internal/queue`: queue boundary
-- `internal/worker`: worker boundary
-
-## Design Direction
-
-Implementation principles:
-
-- use mature Go libraries where they fit the product model
-- use `go-git` as the default repository engine for inspection and config
-- preserve real Git semantics instead of inventing custom repo metadata
-- use native `git` only where the library surface is not sufficient for the
-  required workflow, with the integration rebase path expected to be one of
-  those cases
-
-The project plan and spec live in:
-
-- `PLAN.md`
-- `SPEC.md`
-- [docs/ARCHITECTURE.md](/Users/devrel/Projects/recallnet/mainline/docs/ARCHITECTURE.md)
-- [docs/FLOWS.md](/Users/devrel/Projects/recallnet/mainline/docs/FLOWS.md)
-
-Example policy config:
-
-```toml
-[repo]
-ProtectedBranch = "main"
-RemoteName = "origin"
-MainWorktree = "/Users/alice/Projects/recallnet/mainline"
-WorktreeLayoutPolicy = "enforce-prefix"
-WorktreeRootPrefix = "/Users/alice/Projects/_wt/recallnet/mainline"
-HookPolicy = "replace-with-mainline-checks"
-
-[integration]
-Strategy = "rebase-then-ff"
-SyncPolicy = "sync-before-integrate"
-DirtyWorktreePolicy = "reject"
-
-[publish]
-Mode = "auto"
-Coalesced = true
-InterruptInflight = false
-
-[checks]
-PreIntegrate = ["go test ./..."]
-PrePublish = ["go test ./..."]
-CommandTimeout = "30s"
-```
-
-## Dogfooding Flows
-
-Example solo loop:
-
-```bash
-mq repo init --repo .
-mq status --repo .
-mq submit --repo /path/to/topic-worktree
-mq run-once --repo .
-mq publish --repo .
-```
-
-Example agent-heavy loop:
-
-```bash
-mq status --repo . --json
-mainlined --repo . --interval 2s --json
-```
-
-The full worktree-first examples are in [docs/FLOWS.md](/Users/devrel/Projects/recallnet/mainline/docs/FLOWS.md).
-
-This repo also ships a repo-local worktree skill for agents at [.agents/skills/worktree/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/worktree/SKILL.md). It is the canonical self-hosting path for landing work through `mq`.
-
-## Contributing
-
-Development workflow, verification expectations, and doc conventions are in [CONTRIBUTING.md](/Users/devrel/Projects/recallnet/mainline/CONTRIBUTING.md).
-
-## License
-
-TBD
+The deeper workflow examples live in
+[FLOWS.md](/Users/devrel/Projects/recallnet/mainline/docs/FLOWS.md).
