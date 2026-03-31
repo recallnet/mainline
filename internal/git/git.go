@@ -20,6 +20,7 @@ const noUpstream = "(no upstream)"
 
 var ErrRebaseConflict = errors.New("git rebase reported conflicts")
 var ErrFastForwardRejected = errors.New("fast-forward update was rejected")
+var ErrPushRejected = errors.New("git push was rejected")
 
 // Engine holds repository-local Git execution context.
 type Engine struct {
@@ -327,6 +328,21 @@ func (e Engine) FastForwardCurrentBranch(worktreePath string, targetRef string) 
 	}
 	if strings.Contains(output, "Not possible to fast-forward") || strings.Contains(output, "fatal: Not possible to fast-forward") {
 		return fmt.Errorf("%w: %s", ErrFastForwardRejected, strings.TrimSpace(output))
+	}
+	return err
+}
+
+// PushBranch pushes a local branch ref to the configured remote branch.
+func (e Engine) PushBranch(worktreePath string, remote string, branch string) error {
+	if remote == "" {
+		return fmt.Errorf("remote name is empty")
+	}
+	output, err := e.runGit(worktreePath, "push", remote, branch+":"+branch)
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(output, "[rejected]") || strings.Contains(output, "failed to push some refs") {
+		return fmt.Errorf("%w: %s", ErrPushRejected, strings.TrimSpace(output))
 	}
 	return err
 }

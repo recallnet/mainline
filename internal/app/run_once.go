@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -25,18 +26,9 @@ func runRunOnce(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 
-	layout, err := git.DiscoverRepositoryLayout(repoPath)
+	layout, repoRoot, cfg, repoRecord, store, err := loadRepoContext(repoPath)
 	if err != nil {
 		return err
-	}
-	repoRoot := layout.RepositoryRoot
-
-	cfg, _, err := policy.LoadOrDefault(repoRoot)
-	if err != nil {
-		return err
-	}
-	if cfg.Repo.MainWorktree == "" {
-		cfg.Repo.MainWorktree = layout.WorktreeRoot
 	}
 
 	mainLayout, err := git.DiscoverRepositoryLayout(cfg.Repo.MainWorktree)
@@ -64,49 +56,56 @@ func runRunOnce(args []string, stdout io.Writer, stderr io.Writer) error {
 		return fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, report.UpstreamRef)
 	}
 
-	store := state.NewStore(state.DefaultPath(layout.GitDir))
-	if !store.Exists() {
-		return fmt.Errorf("repository is not initialized; run `mainline repo init` first")
-	}
-
-	ctx := context.Background()
-	repoRecord, err := store.GetRepositoryByPath(ctx, repoRoot)
-	if err != nil {
-		return err
-	}
-
 	lockManager := state.NewLockManager(repoRoot, layout.GitDir)
+	ctx := context.Background()
+
 	lease, err := lockManager.Acquire(state.IntegrationLock, "run-once")
 	if err != nil {
 		return err
 	}
-	defer lease.Release()
 
 	submission, err := store.NextQueuedIntegrationSubmission(ctx, repoRecord.ID)
 	if err != nil {
-		if errors.Is(err, state.ErrNotFound) {
-			fmt.Fprintln(stdout, "No queued submissions.")
-			return nil
+		lease.Release()
+		if !errors.Is(err, state.ErrNotFound) {
+			return err
+		}
+	} else {
+		defer lease.Release()
+
+		if _, err := store.UpdateIntegrationSubmissionStatus(ctx, submission.ID, "running", ""); err != nil {
+			return err
+		}
+		if err := appendSubmissionEvent(ctx, store, repoRecord.ID, submission.ID, "integration.started", map[string]string{
+			"branch":           submission.BranchName,
+			"source_worktree":  submission.SourceWorktree,
+			"submitted_source": submission.SourceSHA,
+		}); err != nil {
+			return err
+		}
+
+		result, err := processIntegrationSubmission(ctx, store, repoRecord, cfg, layout.GitDir, submission)
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintln(stdout, result)
+		return nil
+	}
+
+	publishLease, err := lockManager.Acquire(state.PublishLock, "run-once")
+	if err != nil {
+		if errors.Is(err, state.ErrLockHeld) {
+			return err
 		}
 		return err
 	}
+	defer publishLease.Release()
 
-	if _, err := store.UpdateIntegrationSubmissionStatus(ctx, submission.ID, "running", ""); err != nil {
-		return err
-	}
-	if err := appendSubmissionEvent(ctx, store, repoRecord.ID, submission.ID, "integration.started", map[string]string{
-		"branch":           submission.BranchName,
-		"source_worktree":  submission.SourceWorktree,
-		"submitted_source": submission.SourceSHA,
-	}); err != nil {
-		return err
-	}
-
-	result, err := processIntegrationSubmission(ctx, store, repoRecord, cfg, layout.GitDir, submission)
+	result, err := processPublishRequest(ctx, store, repoRecord, cfg)
 	if err != nil {
 		return err
 	}
-
 	fmt.Fprintln(stdout, result)
 	return nil
 }
@@ -242,6 +241,140 @@ func syncProtectedBranch(engine git.Engine, cfg policy.File) error {
 	}
 
 	return engine.FastForwardCurrentBranch(cfg.Repo.MainWorktree, status.Upstream)
+}
+
+func processPublishRequest(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File) (string, error) {
+	mainEngine := git.NewEngine(cfg.Repo.MainWorktree)
+
+	request, err := store.LatestQueuedPublishRequest(ctx, repoRecord.ID)
+	if err != nil {
+		if errors.Is(err, state.ErrNotFound) {
+			return "No queued publish requests.", nil
+		}
+		return "", err
+	}
+
+	if err := store.SupersedeOlderQueuedPublishRequests(ctx, repoRecord.ID, request.ID); err != nil {
+		return "", err
+	}
+	if _, err := store.UpdatePublishRequestStatus(ctx, request.ID, "running", sql.NullInt64{}); err != nil {
+		return "", err
+	}
+	if err := appendStateEvent(ctx, store, state.EventRecord{
+		RepoID:    repoRecord.ID,
+		ItemType:  "publish_request",
+		ItemID:    state.NullInt64(request.ID),
+		EventType: "publish.started",
+		Payload: mustJSON(map[string]string{
+			"target_sha": request.TargetSHA,
+		}),
+	}); err != nil {
+		return "", err
+	}
+
+	currentProtectedSHA, err := mainEngine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+	if err != nil {
+		return "", err
+	}
+	if currentProtectedSHA != request.TargetSHA {
+		updated, err := store.UpdatePublishRequestStatus(ctx, request.ID, "superseded", sql.NullInt64{})
+		if err != nil {
+			return "", err
+		}
+		if err := appendStateEvent(ctx, store, state.EventRecord{
+			RepoID:    repoRecord.ID,
+			ItemType:  "publish_request",
+			ItemID:    state.NullInt64(updated.ID),
+			EventType: "publish.superseded",
+			Payload: mustJSON(map[string]string{
+				"target_sha":        request.TargetSHA,
+				"new_protected_sha": currentProtectedSHA,
+				"reason":            "protected_branch_advanced_before_publish",
+			}),
+		}); err != nil {
+			return "", err
+		}
+		return ensureLatestPublishRequest(ctx, store, repoRecord.ID, currentProtectedSHA)
+	}
+
+	if err := mainEngine.PushBranch(cfg.Repo.MainWorktree, cfg.Repo.RemoteName, cfg.Repo.ProtectedBranch); err != nil {
+		if _, updateErr := store.UpdatePublishRequestStatus(ctx, request.ID, "failed", sql.NullInt64{}); updateErr != nil {
+			return "", updateErr
+		}
+		if eventErr := appendStateEvent(ctx, store, state.EventRecord{
+			RepoID:    repoRecord.ID,
+			ItemType:  "publish_request",
+			ItemID:    state.NullInt64(request.ID),
+			EventType: "publish.failed",
+			Payload: mustJSON(map[string]string{
+				"target_sha": request.TargetSHA,
+				"error":      err.Error(),
+			}),
+		}); eventErr != nil {
+			return "", eventErr
+		}
+		return fmt.Sprintf("Failed publish request %d: %s", request.ID, err.Error()), nil
+	}
+
+	latestProtectedSHA, err := mainEngine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+	if err != nil {
+		return "", err
+	}
+	if _, err := store.UpdatePublishRequestStatus(ctx, request.ID, "succeeded", sql.NullInt64{}); err != nil {
+		return "", err
+	}
+	if err := appendStateEvent(ctx, store, state.EventRecord{
+		RepoID:    repoRecord.ID,
+		ItemType:  "publish_request",
+		ItemID:    state.NullInt64(request.ID),
+		EventType: "publish.completed",
+		Payload: mustJSON(map[string]string{
+			"target_sha": latestProtectedSHA,
+		}),
+	}); err != nil {
+		return "", err
+	}
+
+	if latestProtectedSHA != request.TargetSHA {
+		return ensureLatestPublishRequest(ctx, store, repoRecord.ID, latestProtectedSHA)
+	}
+
+	return fmt.Sprintf("Published request %d for %s", request.ID, latestProtectedSHA), nil
+}
+
+func ensureLatestPublishRequest(ctx context.Context, store state.Store, repoID int64, targetSHA string) (string, error) {
+	requests, err := store.ListPublishRequests(ctx, repoID)
+	if err != nil {
+		return "", err
+	}
+	for _, request := range requests {
+		if request.TargetSHA == targetSHA && (request.Status == "queued" || request.Status == "running" || request.Status == "succeeded") {
+			return fmt.Sprintf("Superseded older publish requests; latest target is %s", targetSHA), nil
+		}
+	}
+
+	request, err := store.CreatePublishRequest(ctx, state.PublishRequest{
+		RepoID:    repoID,
+		TargetSHA: targetSHA,
+		Status:    "queued",
+	})
+	if err != nil {
+		return "", err
+	}
+	if err := appendStateEvent(ctx, store, state.EventRecord{
+		RepoID:    repoID,
+		ItemType:  "publish_request",
+		ItemID:    state.NullInt64(request.ID),
+		EventType: "publish.requested",
+		Payload: mustJSON(map[string]string{
+			"target_sha": targetSHA,
+			"reason":     "protected_branch_advanced_after_publish",
+		}),
+	}); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("Queued follow-up publish request %d for %s", request.ID, targetSHA), nil
 }
 
 func failIntegrationSubmission(ctx context.Context, store state.Store, repoID int64, submissionID int64, cause error) (string, error) {

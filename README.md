@@ -25,6 +25,7 @@ Today the repo implements the foundation for that model:
 - per-repo integration and publish locks
 - branch submission into durable queue state
 - ordered single-repo integration with `run-once`
+- coalesced latest-tip publish queue with `publish` and `run-once`
 - support for standard repos and bare-clone-plus-worktree layouts
 
 ## Current Status
@@ -36,15 +37,16 @@ Implemented milestones:
 - Milestone 2: durable state and locking
 - Milestone 3: branch submission
 - Milestone 4: integration queue MVP
+- Milestone 5: publish queue MVP
 
 Not implemented yet:
 
-- publish worker
 - daemon loop
 
 The current CLI can initialize a repo, inspect health, queue clean topic
-branches, and run one serialized integration cycle locally. It does not push or
-publish branches yet.
+branches, run one serialized integration cycle locally, queue manual publish
+requests, and push the latest protected-branch tip through the coalesced
+publish queue.
 
 ## Why This Exists
 
@@ -96,6 +98,7 @@ mainline doctor --repo .
 mainline submit --repo /path/to/feature-worktree
 mainline submit --repo /path/to/repo --branch fix-login --worktree /path/to/feature-worktree
 mainline run-once --repo /path/to/repo
+mainline publish --repo /path/to/repo
 ```
 
 The same commands work through `mq`:
@@ -106,6 +109,7 @@ mq repo show --repo .
 mq doctor --repo .
 mq submit --repo /path/to/feature-worktree
 mq run-once --repo /path/to/repo
+mq publish --repo /path/to/repo
 ```
 
 ## Build
@@ -173,6 +177,15 @@ Current integration behavior:
 - marks stale or invalid submissions as `failed` with actionable error text
 - emits publish requests automatically when `[publish].mode = "auto"`
 
+Current publish behavior:
+
+- queues the current protected-branch tip with `publish`
+- processes publish work through the per-repo publish lock
+- supersedes older queued publish requests before pushing
+- pushes only the latest queued protected-branch tip
+- marks publish requests `succeeded`, `failed`, or `superseded`
+- lets `run-once` drain publish work when no integration submission is waiting
+
 Current lock domains:
 
 - integration
@@ -210,8 +223,7 @@ Implementation principles:
 
 Next milestones:
 
-1. publish queue MVP
-2. daemon mode
+1. daemon mode
 
 The project plan and spec live in:
 

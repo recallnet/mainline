@@ -309,6 +309,100 @@ func (s Store) CreatePublishRequest(ctx context.Context, request PublishRequest)
 	return scanPublishRequest(row)
 }
 
+// GetPublishRequest returns a publish request by id.
+func (s Store) GetPublishRequest(ctx context.Context, requestID int64) (PublishRequest, error) {
+	db, err := s.open()
+	if err != nil {
+		return PublishRequest{}, err
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(ctx, `
+		SELECT id, repo_id, target_sha, status, superseded_by, created_at, updated_at
+		FROM publish_requests
+		WHERE id = ?
+	`, requestID)
+
+	request, err := scanPublishRequest(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublishRequest{}, ErrNotFound
+		}
+		return PublishRequest{}, err
+	}
+
+	return request, nil
+}
+
+// LatestQueuedPublishRequest returns the newest queued publish request for a repo.
+func (s Store) LatestQueuedPublishRequest(ctx context.Context, repoID int64) (PublishRequest, error) {
+	db, err := s.open()
+	if err != nil {
+		return PublishRequest{}, err
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(ctx, `
+		SELECT id, repo_id, target_sha, status, superseded_by, created_at, updated_at
+		FROM publish_requests
+		WHERE repo_id = ? AND status = 'queued'
+		ORDER BY created_at DESC, id DESC
+		LIMIT 1
+	`, repoID)
+
+	request, err := scanPublishRequest(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublishRequest{}, ErrNotFound
+		}
+		return PublishRequest{}, err
+	}
+
+	return request, nil
+}
+
+// SupersedeOlderQueuedPublishRequests marks older queued requests as superseded.
+func (s Store) SupersedeOlderQueuedPublishRequests(ctx context.Context, repoID int64, keepID int64) error {
+	db, err := s.open()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.ExecContext(ctx, `
+		UPDATE publish_requests
+		SET status = 'superseded', superseded_by = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE repo_id = ? AND status = 'queued' AND id <> ?
+	`, keepID, repoID, keepID)
+	return err
+}
+
+// UpdatePublishRequestStatus updates publish request state and superseded link.
+func (s Store) UpdatePublishRequestStatus(ctx context.Context, requestID int64, status string, supersededBy sql.NullInt64) (PublishRequest, error) {
+	db, err := s.open()
+	if err != nil {
+		return PublishRequest{}, err
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(ctx, `
+		UPDATE publish_requests
+		SET status = ?, superseded_by = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+		RETURNING id, repo_id, target_sha, status, superseded_by, created_at, updated_at
+	`, status, supersededBy, requestID)
+
+	request, err := scanPublishRequest(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublishRequest{}, ErrNotFound
+		}
+		return PublishRequest{}, err
+	}
+
+	return request, nil
+}
+
 // ListPublishRequests returns publish requests for a repo ordered by creation time.
 func (s Store) ListPublishRequests(ctx context.Context, repoID int64) ([]PublishRequest, error) {
 	db, err := s.open()

@@ -50,3 +50,27 @@ func createBareCloneWorktree(t *testing.T) (string, string) {
 
 	return bareDir, worktreePath
 }
+
+func createTestRepoWithRemote(t *testing.T) (string, string) {
+	t.Helper()
+
+	remoteDir := filepath.Join(t.TempDir(), "origin.git")
+	runTestCommand(t, t.TempDir(), "git", "init", "--bare", remoteDir)
+
+	repoRoot := t.TempDir()
+	runTestCommand(t, repoRoot, "git", "init", "-b", "main")
+	runTestCommand(t, repoRoot, "git", "config", "user.name", "Test User")
+	runTestCommand(t, repoRoot, "git", "config", "user.email", "test@example.com")
+
+	readme := filepath.Join(repoRoot, "README.md")
+	if err := os.WriteFile(readme, []byte("# test\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+
+	runTestCommand(t, repoRoot, "git", "add", "README.md")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "initial")
+	runTestCommand(t, repoRoot, "git", "remote", "add", "origin", remoteDir)
+	runTestCommand(t, repoRoot, "git", "push", "-u", "origin", "main")
+
+	return repoRoot, remoteDir
+}

@@ -31,6 +31,8 @@ func handleCommand(command string, args []string, stdout io.Writer, stderr io.Wr
 		return runSubmit(args, stdout, stderr)
 	case "run-once":
 		return runRunOnce(args, stdout, stderr)
+	case "publish":
+		return runPublish(args, stdout, stderr)
 	case "repo init":
 		return runRepoInit(args, stdout, stderr)
 	case "repo show":

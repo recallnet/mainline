@@ -1,0 +1,164 @@
+package app
+
+import (
+	"bytes"
+	"context"
+	"path/filepath"
+	"testing"
+
+	"github.com/recallnet/mainline/internal/git"
+	"github.com/recallnet/mainline/internal/policy"
+	"github.com/recallnet/mainline/internal/state"
+)
+
+func TestPublishQueuesCurrentProtectedTip(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	protectedHead := runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD")
+
+	var publishOut bytes.Buffer
+	var publishErr bytes.Buffer
+	if err := runPublish([]string{"--repo", repoRoot}, &publishOut, &publishErr); err != nil {
+		t.Fatalf("runPublish returned error: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 publish request, got %d", len(requests))
+	}
+	if requests[0].TargetSHA != protectedHead[:len(protectedHead)-1] {
+		t.Fatalf("expected target sha %q, got %q", protectedHead, requests[0].TargetSHA)
+	}
+	if requests[0].Status != "queued" {
+		t.Fatalf("expected queued publish request, got %q", requests[0].Status)
+	}
+}
+
+func TestRunOncePublishesLatestQueuedTipAndSupersedesOlderRequests(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	writeFileAndCommit(t, repoRoot, "one.txt", "one\n", "main change one")
+	queuePublish(t, repoRoot)
+
+	writeFileAndCommit(t, repoRoot, "two.txt", "two\n", "main change two")
+	currentHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("expected 2 publish requests, got %d", len(requests))
+	}
+	if requests[0].Status != "superseded" {
+		t.Fatalf("expected first request superseded, got %q", requests[0].Status)
+	}
+	if !requests[0].SupersededBy.Valid || requests[0].SupersededBy.Int64 != requests[1].ID {
+		t.Fatalf("expected first request superseded by second, got %+v", requests[0].SupersededBy)
+	}
+	if requests[1].Status != "succeeded" {
+		t.Fatalf("expected second request succeeded, got %q", requests[1].Status)
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != currentHead {
+		t.Fatalf("expected remote head %q, got %q", currentHead, remoteHead)
+	}
+}
+
+func TestRunOnceWithNoQueueReportsNoPublishWork(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if trimNewline(runOut.String()) != "No queued publish requests." {
+		t.Fatalf("expected no publish work output, got %q", runOut.String())
+	}
+}
+
+func queuePublish(t *testing.T, repoRoot string) {
+	t.Helper()
+
+	var publishOut bytes.Buffer
+	var publishErr bytes.Buffer
+	if err := runPublish([]string{"--repo", repoRoot}, &publishOut, &publishErr); err != nil {
+		t.Fatalf("runPublish returned error: %v", err)
+	}
+}
+
+func trimNewline(s string) string {
+	if len(s) > 0 && s[len(s)-1] == '\n' {
+		return s[:len(s)-1]
+	}
+	return s
+}
+
+func TestRunOnceAutoPublishQueuesAndPublishesOnSecondCycle(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	updatePublishMode(t, repoRoot, "auto")
+
+	featureOne := filepath.Join(t.TempDir(), "feature-one")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/one", featureOne)
+	writeFileAndCommit(t, featureOne, "one.txt", "feature one\n", "feature one")
+	submitBranch(t, featureOne)
+
+	runOnce(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+}
+
+func updatePublishMode(t *testing.T, repoRoot string, mode string) {
+	t.Helper()
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Publish.Mode = mode
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "update publish mode")
+}
