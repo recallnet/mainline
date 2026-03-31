@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -129,6 +130,44 @@ func TestRepoInitFromBareCloneWorktreeUsesSharedStorage(t *testing.T) {
 
 	if strings.Contains(initOut.String(), filepath.Join(worktreePath, ".git")) {
 		t.Fatalf("expected shared storage state path, got output %q", initOut.String())
+	}
+}
+
+func TestDoctorSucceedsFromBareCloneWorktree(t *testing.T) {
+	bareDir, worktreePath := createBareCloneWorktree(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", worktreePath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", worktreePath, "--json"}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	var report map[string]any
+	if err := json.Unmarshal(doctorOut.Bytes(), &report); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	wantBareDir, err := filepath.EvalSymlinks(bareDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(bareDir): %v", err)
+	}
+	wantWorktreePath, err := filepath.EvalSymlinks(worktreePath)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(worktreePath): %v", err)
+	}
+
+	if got := report["repository_root"]; got != wantBareDir {
+		t.Fatalf("expected repository root %q, got %#v", wantBareDir, got)
+	}
+
+	if got := report["main_worktree_path"]; got != wantWorktreePath {
+		t.Fatalf("expected main worktree path %q, got %#v", wantWorktreePath, got)
 	}
 }
 

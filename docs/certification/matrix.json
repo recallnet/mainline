@@ -1,0 +1,40 @@
+{
+  "repos": [
+    {
+      "id": "mainline-dogfood",
+      "source": ".",
+      "layout": "regular",
+      "classes": ["agent-heavy", "dogfood"],
+      "policy_defaults": {
+        "hook_policy": "replace-with-mainline-checks"
+      },
+      "findings": [
+        "Use mainline-managed checks instead of inheriting raw repo push hooks during certification."
+      ]
+    },
+    {
+      "id": "codecontext-hook-heavy",
+      "source": "../codecontext",
+      "layout": "regular",
+      "classes": ["hook-heavy"],
+      "policy_defaults": {
+        "hook_policy": "replace-with-mainline-checks"
+      },
+      "findings": [
+        "The source repo ships heavyweight Husky pre-push gates, so safe adoption expects mainline-managed checks instead of inherited push hooks."
+      ]
+    },
+    {
+      "id": "tradecore-bare-hook-heavy",
+      "source": "../tradecore",
+      "layout": "bare-worktree",
+      "classes": ["hook-heavy", "bare-clone"],
+      "policy_defaults": {
+        "hook_policy": "replace-with-mainline-checks"
+      },
+      "findings": [
+        "The source repo uses a bare-clone-plus-worktree layout and heavyweight pre-push policy. Certification expects shared Git storage plus mainline-managed publish checks."
+      ]
+    }
+  ]
+}

@@ -234,6 +234,7 @@ This is already a working system:
 - Homebrew and Nix packaging
 - tagged release archives, checksums, and release manifests
 - multi-agent stress coverage that simulates parallel worktree submission and publish coalescing
+- a real-repo certification matrix runner for disposable mirrors of local sibling repos
 
 ## The Stress Result
 
@@ -278,6 +279,16 @@ make soak-randomized
 
 That runs the randomized stress harness, records the seed used for each run,
 and persists enough metadata to replay the same failure class later.
+
+For disposable real-repo certification against the committed local matrix:
+
+```bash
+make certify-matrix
+```
+
+That exercises `mq` against disposable mirrors of the configured real repos,
+records the required repo-specific policy defaults, and writes a machine-readable
+report under `docs/certification/`.
 
 ## Install
 

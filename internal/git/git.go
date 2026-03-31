@@ -509,12 +509,13 @@ func (e Engine) BranchStatus(branch string, protectedBranch string) (BranchStatu
 
 // InspectHealth reports doctor-level repository health.
 func (e Engine) InspectHealth(protectedBranch string, mainWorktreePath string) (HealthReport, error) {
-	repoRoot, err := DiscoverRepositoryRoot(e.RepositoryRoot)
+	layout, err := DiscoverRepositoryLayout(e.RepositoryRoot)
 	if err != nil {
 		return HealthReport{RepositoryRoot: filepath.Clean(e.RepositoryRoot)}, err
 	}
+	repoRoot := layout.RepositoryRoot
 
-	engine := NewEngine(repoRoot)
+	engine := NewEngine(layout.WorktreeRoot)
 	report := HealthReport{
 		RepositoryRoot:       repoRoot,
 		ProtectedBranch:      protectedBranch,

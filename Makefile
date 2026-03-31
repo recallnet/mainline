@@ -5,7 +5,7 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS ?= -X github.com/recallnet/mainline/internal/app.Version=$(VERSION) -X github.com/recallnet/mainline/internal/app.Commit=$(COMMIT) -X github.com/recallnet/mainline/internal/app.Date=$(DATE)
 
-.PHONY: fmt lint test test-invariants test-stress soak soak-randomized build release-snapshot install-hooks test-hooks
+.PHONY: fmt lint test test-invariants test-stress soak soak-randomized certify-matrix build release-snapshot install-hooks test-hooks
 
 fmt:
 	$(GO) fmt ./...
@@ -27,6 +27,9 @@ soak:
 
 soak-randomized:
 	./scripts/run-soak.sh --randomized --runs $${SOAK_RUNS:-25} --seed-base $${SOAK_SEED_BASE:-20260331} --output $${SOAK_OUT:-artifacts/soak-randomized}
+
+certify-matrix:
+	python3 ./scripts/run-certification-matrix.py --matrix $${CERT_MATRIX:-docs/certification/matrix.json} --output $${CERT_OUT:-docs/certification/latest-report.json}
 
 build:
 	mkdir -p bin

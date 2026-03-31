@@ -622,12 +622,14 @@ Deliverables:
 - certification checklist for at least a small matrix of real repos
 - exercised repo classes including bare-clone-plus-worktree layouts, heavy hook repos, and agent-heavy repos
 - captured findings and any repo-specific policy defaults required for safe adoption
+- a repeatable certification runner that executes the committed matrix on disposable mirrors
 
 Acceptance criteria:
 
 - `mainline` passes end-to-end dogfood runs on multiple real repositories, not just temporary test repos
 - at least one hook-heavy repo and one bare-clone layout repo complete repeated landing/publish cycles cleanly
 - any repo-specific incompatibilities are documented as either fixed, policy-gated, or explicit non-goals
+- maintainers can rerun the same matrix without hand-building disposable clone setups
 
 ## Milestone 27: Observability And Confidence Reporting
 

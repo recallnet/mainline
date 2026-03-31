@@ -1,0 +1,544 @@
+{
+  "generated_at": "2026-03-31T21:16:53Z",
+  "mq_bin": "./bin/mq",
+  "matrix": "docs/certification/matrix.json",
+  "result": "passed",
+  "repos": [
+    {
+      "id": "mainline-dogfood",
+      "source": ".",
+      "layout": "regular",
+      "classes": [
+        "agent-heavy",
+        "dogfood"
+      ],
+      "policy_defaults": {
+        "hook_policy": "replace-with-mainline-checks"
+      },
+      "findings": [
+        "Use mainline-managed checks instead of inheriting raw repo push hooks during certification."
+      ],
+      "result": "passed",
+      "cycles": [
+        {
+          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/mainline-dogfood/feature-1",
+          "integrate_result": "Integrated submission 1 from cert/mainline-dogfood-1 onto main",
+          "publish_result": "Queued publish request 1\nTarget SHA: 443286098b71834190c1babcfb07e64e3ea299d4\nState path: /private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main/.git/mainline/state.db",
+          "publish_run_result": "Published request 1 for 443286098b71834190c1babcfb07e64e3ea299d4"
+        },
+        {
+          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/mainline-dogfood/feature-2",
+          "integrate_result": "Integrated submission 2 from cert/mainline-dogfood-2 onto main",
+          "publish_result": "Queued publish request 2\nTarget SHA: d8b4ef3dcb8cd204c0bb52b78807109f514500f3\nState path: /private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main/.git/mainline/state.db",
+          "publish_run_result": "Published request 2 for d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+        }
+      ],
+      "local_head": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
+      "remote_head": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
+      "status": {
+        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main",
+        "state_path": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main/.git/mainline/state.db",
+        "current_worktree": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main",
+        "current_branch": "main",
+        "protected_branch": "main",
+        "protected_branch_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
+        "protected_upstream": {
+          "name": "main",
+          "head_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
+          "upstream": "origin/main",
+          "ahead_count": 0,
+          "behind_count": 0,
+          "has_upstream": true,
+          "is_protected_branch": true
+        },
+        "counts": {
+          "queued_submissions": 0,
+          "running_submissions": 0,
+          "blocked_submissions": 0,
+          "failed_submissions": 0,
+          "cancelled_submissions": 0,
+          "queued_publishes": 0,
+          "running_publishes": 0,
+          "failed_publishes": 0,
+          "cancelled_publishes": 0,
+          "succeeded_publishes": 2
+        },
+        "latest_submission": {
+          "ID": 2,
+          "RepoID": 1,
+          "BranchName": "cert/mainline-dogfood-2",
+          "SourceWorktree": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/feature-2",
+          "SourceSHA": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
+          "RequestedBy": "devrel",
+          "Status": "succeeded",
+          "LastError": "",
+          "CreatedAt": "2026-03-31T21:16:44Z",
+          "UpdatedAt": "2026-03-31T21:16:44Z"
+        },
+        "latest_publish": {
+          "ID": 2,
+          "RepoID": 1,
+          "TargetSHA": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
+          "Status": "succeeded",
+          "SupersededBy": {
+            "Int64": 0,
+            "Valid": false
+          },
+          "CreatedAt": "2026-03-31T21:16:44Z",
+          "UpdatedAt": "2026-03-31T21:16:44Z"
+        },
+        "recent_events": [
+          {
+            "ID": 13,
+            "RepoID": 1,
+            "ItemType": "publish_request",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "publish.completed",
+            "Payload": {
+              "target_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+            },
+            "CreatedAt": "2026-03-31T21:16:44Z"
+          },
+          {
+            "ID": 12,
+            "RepoID": 1,
+            "ItemType": "publish_request",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "publish.started",
+            "Payload": {
+              "target_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+            },
+            "CreatedAt": "2026-03-31T21:16:44Z"
+          },
+          {
+            "ID": 11,
+            "RepoID": 1,
+            "ItemType": "publish_request",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "publish.requested",
+            "Payload": {
+              "reason": "manual",
+              "repo_root": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main",
+              "target_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+            },
+            "CreatedAt": "2026-03-31T21:16:44Z"
+          },
+          {
+            "ID": 10,
+            "RepoID": 1,
+            "ItemType": "integration_submission",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "integration.succeeded",
+            "Payload": {
+              "branch": "cert/mainline-dogfood-2",
+              "protected_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+            },
+            "CreatedAt": "2026-03-31T21:16:44Z"
+          },
+          {
+            "ID": 9,
+            "RepoID": 1,
+            "ItemType": "integration_submission",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "integration.started",
+            "Payload": {
+              "branch": "cert/mainline-dogfood-2",
+              "source_worktree": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/feature-2",
+              "submitted_source": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+            },
+            "CreatedAt": "2026-03-31T21:16:44Z"
+          }
+        ]
+      },
+      "doctor": {
+        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main",
+        "protected_branch": "main",
+        "main_worktree_path": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main",
+        "is_git_repository": true,
+        "protected_branch_exists": true,
+        "main_worktree_exists": true,
+        "protected_branch_clean": true,
+        "has_upstream": true,
+        "upstream_ref": "origin/main",
+        "is_behind_upstream": false,
+        "is_ahead_of_upstream": false,
+        "has_diverged_upstream": false,
+        "stale_locks": [],
+        "unfinished_queue_items": [],
+        "warnings": []
+      }
+    },
+    {
+      "id": "codecontext-hook-heavy",
+      "source": "../codecontext",
+      "layout": "regular",
+      "classes": [
+        "hook-heavy"
+      ],
+      "policy_defaults": {
+        "hook_policy": "replace-with-mainline-checks"
+      },
+      "findings": [
+        "The source repo ships heavyweight Husky pre-push gates, so safe adoption expects mainline-managed checks instead of inherited push hooks."
+      ],
+      "result": "passed",
+      "cycles": [
+        {
+          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/feature-1",
+          "integrate_result": "Integrated submission 1 from cert/codecontext-hook-heavy-1 onto main",
+          "publish_result": "Queued publish request 1\nTarget SHA: ead0e5dcaaf9d51b4e08daf814855865b2fb46cc\nState path: /private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main/.git/mainline/state.db",
+          "publish_run_result": "Published request 1 for ead0e5dcaaf9d51b4e08daf814855865b2fb46cc"
+        },
+        {
+          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/feature-2",
+          "integrate_result": "Integrated submission 2 from cert/codecontext-hook-heavy-2 onto main",
+          "publish_result": "Queued publish request 2\nTarget SHA: 1d83a82fdc4ef551264696d46cc05816e3df1379\nState path: /private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main/.git/mainline/state.db",
+          "publish_run_result": "Published request 2 for 1d83a82fdc4ef551264696d46cc05816e3df1379"
+        }
+      ],
+      "local_head": "1d83a82fdc4ef551264696d46cc05816e3df1379",
+      "remote_head": "1d83a82fdc4ef551264696d46cc05816e3df1379",
+      "status": {
+        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main",
+        "state_path": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main/.git/mainline/state.db",
+        "current_worktree": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main",
+        "current_branch": "main",
+        "protected_branch": "main",
+        "protected_branch_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379",
+        "protected_upstream": {
+          "name": "main",
+          "head_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379",
+          "upstream": "origin/main",
+          "ahead_count": 0,
+          "behind_count": 0,
+          "has_upstream": true,
+          "is_protected_branch": true
+        },
+        "counts": {
+          "queued_submissions": 0,
+          "running_submissions": 0,
+          "blocked_submissions": 0,
+          "failed_submissions": 0,
+          "cancelled_submissions": 0,
+          "queued_publishes": 0,
+          "running_publishes": 0,
+          "failed_publishes": 0,
+          "cancelled_publishes": 0,
+          "succeeded_publishes": 2
+        },
+        "latest_submission": {
+          "ID": 2,
+          "RepoID": 1,
+          "BranchName": "cert/codecontext-hook-heavy-2",
+          "SourceWorktree": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/feature-2",
+          "SourceSHA": "1d83a82fdc4ef551264696d46cc05816e3df1379",
+          "RequestedBy": "devrel",
+          "Status": "succeeded",
+          "LastError": "",
+          "CreatedAt": "2026-03-31T21:16:46Z",
+          "UpdatedAt": "2026-03-31T21:16:46Z"
+        },
+        "latest_publish": {
+          "ID": 2,
+          "RepoID": 1,
+          "TargetSHA": "1d83a82fdc4ef551264696d46cc05816e3df1379",
+          "Status": "succeeded",
+          "SupersededBy": {
+            "Int64": 0,
+            "Valid": false
+          },
+          "CreatedAt": "2026-03-31T21:16:46Z",
+          "UpdatedAt": "2026-03-31T21:16:46Z"
+        },
+        "recent_events": [
+          {
+            "ID": 13,
+            "RepoID": 1,
+            "ItemType": "publish_request",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "publish.completed",
+            "Payload": {
+              "target_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379"
+            },
+            "CreatedAt": "2026-03-31T21:16:46Z"
+          },
+          {
+            "ID": 12,
+            "RepoID": 1,
+            "ItemType": "publish_request",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "publish.started",
+            "Payload": {
+              "target_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379"
+            },
+            "CreatedAt": "2026-03-31T21:16:46Z"
+          },
+          {
+            "ID": 11,
+            "RepoID": 1,
+            "ItemType": "publish_request",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "publish.requested",
+            "Payload": {
+              "reason": "manual",
+              "repo_root": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main",
+              "target_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379"
+            },
+            "CreatedAt": "2026-03-31T21:16:46Z"
+          },
+          {
+            "ID": 10,
+            "RepoID": 1,
+            "ItemType": "integration_submission",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "integration.succeeded",
+            "Payload": {
+              "branch": "cert/codecontext-hook-heavy-2",
+              "protected_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379"
+            },
+            "CreatedAt": "2026-03-31T21:16:46Z"
+          },
+          {
+            "ID": 9,
+            "RepoID": 1,
+            "ItemType": "integration_submission",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "integration.started",
+            "Payload": {
+              "branch": "cert/codecontext-hook-heavy-2",
+              "source_worktree": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/feature-2",
+              "submitted_source": "1d83a82fdc4ef551264696d46cc05816e3df1379"
+            },
+            "CreatedAt": "2026-03-31T21:16:46Z"
+          }
+        ]
+      },
+      "doctor": {
+        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main",
+        "protected_branch": "main",
+        "main_worktree_path": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main",
+        "is_git_repository": true,
+        "protected_branch_exists": true,
+        "main_worktree_exists": true,
+        "protected_branch_clean": true,
+        "has_upstream": true,
+        "upstream_ref": "origin/main",
+        "is_behind_upstream": false,
+        "is_ahead_of_upstream": false,
+        "has_diverged_upstream": false,
+        "stale_locks": [],
+        "unfinished_queue_items": [],
+        "warnings": []
+      }
+    },
+    {
+      "id": "tradecore-bare-hook-heavy",
+      "source": "../tradecore",
+      "layout": "bare-worktree",
+      "classes": [
+        "hook-heavy",
+        "bare-clone"
+      ],
+      "policy_defaults": {
+        "hook_policy": "replace-with-mainline-checks"
+      },
+      "findings": [
+        "The source repo uses a bare-clone-plus-worktree layout and heavyweight pre-push policy. Certification expects shared Git storage plus mainline-managed publish checks."
+      ],
+      "result": "passed",
+      "cycles": [
+        {
+          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/feature-1",
+          "integrate_result": "Integrated submission 1 from cert/tradecore-bare-hook-heavy-1 onto main",
+          "publish_result": "Queued publish request 1\nTarget SHA: 666f399c4ad7e6e6a4db4f6c0fd04d0ff9afb8ed\nState path: /private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git/mainline/state.db",
+          "publish_run_result": "Published request 1 for 666f399c4ad7e6e6a4db4f6c0fd04d0ff9afb8ed"
+        },
+        {
+          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/feature-2",
+          "integrate_result": "Integrated submission 2 from cert/tradecore-bare-hook-heavy-2 onto main",
+          "publish_result": "Queued publish request 2\nTarget SHA: 74701cbbca420b496581b979722f9ad1c75e03d5\nState path: /private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git/mainline/state.db",
+          "publish_run_result": "Published request 2 for 74701cbbca420b496581b979722f9ad1c75e03d5"
+        }
+      ],
+      "local_head": "74701cbbca420b496581b979722f9ad1c75e03d5",
+      "remote_head": "74701cbbca420b496581b979722f9ad1c75e03d5",
+      "status": {
+        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git",
+        "state_path": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git/mainline/state.db",
+        "current_worktree": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/main",
+        "current_branch": "main",
+        "protected_branch": "main",
+        "protected_branch_sha": "74701cbbca420b496581b979722f9ad1c75e03d5",
+        "protected_upstream": {
+          "name": "main",
+          "head_sha": "74701cbbca420b496581b979722f9ad1c75e03d5",
+          "upstream": "(no upstream)",
+          "ahead_count": 0,
+          "behind_count": 0,
+          "has_upstream": false,
+          "is_protected_branch": true
+        },
+        "counts": {
+          "queued_submissions": 0,
+          "running_submissions": 0,
+          "blocked_submissions": 0,
+          "failed_submissions": 0,
+          "cancelled_submissions": 0,
+          "queued_publishes": 0,
+          "running_publishes": 0,
+          "failed_publishes": 0,
+          "cancelled_publishes": 0,
+          "succeeded_publishes": 2
+        },
+        "latest_submission": {
+          "ID": 2,
+          "RepoID": 1,
+          "BranchName": "cert/tradecore-bare-hook-heavy-2",
+          "SourceWorktree": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/feature-2",
+          "SourceSHA": "74701cbbca420b496581b979722f9ad1c75e03d5",
+          "RequestedBy": "devrel",
+          "Status": "succeeded",
+          "LastError": "",
+          "CreatedAt": "2026-03-31T21:16:52Z",
+          "UpdatedAt": "2026-03-31T21:16:52Z"
+        },
+        "latest_publish": {
+          "ID": 2,
+          "RepoID": 1,
+          "TargetSHA": "74701cbbca420b496581b979722f9ad1c75e03d5",
+          "Status": "succeeded",
+          "SupersededBy": {
+            "Int64": 0,
+            "Valid": false
+          },
+          "CreatedAt": "2026-03-31T21:16:53Z",
+          "UpdatedAt": "2026-03-31T21:16:53Z"
+        },
+        "recent_events": [
+          {
+            "ID": 13,
+            "RepoID": 1,
+            "ItemType": "publish_request",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "publish.completed",
+            "Payload": {
+              "target_sha": "74701cbbca420b496581b979722f9ad1c75e03d5"
+            },
+            "CreatedAt": "2026-03-31T21:16:53Z"
+          },
+          {
+            "ID": 12,
+            "RepoID": 1,
+            "ItemType": "publish_request",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "publish.started",
+            "Payload": {
+              "target_sha": "74701cbbca420b496581b979722f9ad1c75e03d5"
+            },
+            "CreatedAt": "2026-03-31T21:16:53Z"
+          },
+          {
+            "ID": 11,
+            "RepoID": 1,
+            "ItemType": "publish_request",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "publish.requested",
+            "Payload": {
+              "reason": "manual",
+              "repo_root": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git",
+              "target_sha": "74701cbbca420b496581b979722f9ad1c75e03d5"
+            },
+            "CreatedAt": "2026-03-31T21:16:53Z"
+          },
+          {
+            "ID": 10,
+            "RepoID": 1,
+            "ItemType": "integration_submission",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "integration.succeeded",
+            "Payload": {
+              "branch": "cert/tradecore-bare-hook-heavy-2",
+              "protected_sha": "74701cbbca420b496581b979722f9ad1c75e03d5"
+            },
+            "CreatedAt": "2026-03-31T21:16:52Z"
+          },
+          {
+            "ID": 9,
+            "RepoID": 1,
+            "ItemType": "integration_submission",
+            "ItemID": {
+              "Int64": 2,
+              "Valid": true
+            },
+            "EventType": "integration.started",
+            "Payload": {
+              "branch": "cert/tradecore-bare-hook-heavy-2",
+              "source_worktree": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/feature-2",
+              "submitted_source": "74701cbbca420b496581b979722f9ad1c75e03d5"
+            },
+            "CreatedAt": "2026-03-31T21:16:52Z"
+          }
+        ]
+      },
+      "doctor": {
+        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git",
+        "protected_branch": "main",
+        "main_worktree_path": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/main",
+        "is_git_repository": true,
+        "protected_branch_exists": true,
+        "main_worktree_exists": true,
+        "protected_branch_clean": true,
+        "has_upstream": false,
+        "upstream_ref": "(no upstream)",
+        "is_behind_upstream": false,
+        "is_ahead_of_upstream": false,
+        "has_diverged_upstream": false,
+        "stale_locks": [],
+        "unfinished_queue_items": [],
+        "warnings": []
+      }
+    }
+  ]
+}
