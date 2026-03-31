@@ -229,6 +229,7 @@ This is already a working system:
 - the full operator surface: `submit`, `run-once`, `publish`, `status`, `watch`, `logs`, `events`, `retry`, and `cancel`
 - daemon mode through `mainlined`
 - hook-aware direct-to-`main` safety gates
+- crash/restart recovery for orphaned running submissions and publishes
 - shell completions for `bash`, `zsh`, and `fish`
 - Homebrew and Nix packaging
 - tagged release archives, checksums, and release manifests
