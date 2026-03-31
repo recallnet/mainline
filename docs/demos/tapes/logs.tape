@@ -15,10 +15,10 @@ Type "cd $(cat /tmp/mainline-demo-repo.txt)"
 Enter
 Sleep 500ms
 
-Type "mq submit --repo ../feature-login >/dev/null && mq run-once --repo . >/dev/null && mq publish --repo . >/dev/null"
+Type "./bin/mq submit --repo ../feature-login >/dev/null && ./bin/mq run-once --repo . >/dev/null && ./bin/mq publish --repo . >/dev/null"
 Enter
 Sleep 2s
 
-Type "mq logs --repo . --limit 10"
+Type "./bin/mq logs --repo . --limit 10"
 Enter
 Sleep 3s

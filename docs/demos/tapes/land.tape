@@ -15,14 +15,14 @@ Type "cd $(cat /tmp/mainline-demo-repo.txt)"
 Enter
 Sleep 500ms
 
-Type "mq submit --repo ../feature-login"
+Type "./bin/mq submit --repo ../feature-login"
 Enter
 Sleep 2s
 
-Type "mq run-once --repo ."
+Type "./bin/mq run-once --repo ."
 Enter
 Sleep 2s
 
-Type "mq publish --repo ."
+Type "./bin/mq publish --repo ."
 Enter
 Sleep 2s
