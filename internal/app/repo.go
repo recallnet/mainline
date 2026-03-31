@@ -1,15 +1,18 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"path/filepath"
+	"time"
 
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
+	"github.com/recallnet/mainline/internal/state"
 )
 
 type repoShowResult struct {
@@ -64,12 +67,13 @@ func runRepoInit(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 
-	repoRoot, err := git.DiscoverRepositoryRoot(repoPath)
+	layout, err := git.DiscoverRepositoryLayout(repoPath)
 	if err != nil {
 		return err
 	}
+	repoRoot := layout.RepositoryRoot
 
-	engine := git.NewEngine(repoRoot)
+	engine := git.NewEngine(layout.WorktreeRoot)
 	currentBranch, err := engine.CurrentBranch()
 	if err != nil {
 		return err
@@ -83,7 +87,7 @@ func runRepoInit(args []string, stdout io.Writer, stderr io.Writer) error {
 		remote = cfg.Repo.RemoteName
 	}
 	if mainWorktree == "" {
-		mainWorktree = repoRoot
+		mainWorktree = layout.WorktreeRoot
 	}
 
 	cfg.Repo.ProtectedBranch = protectedBranch
@@ -94,9 +98,43 @@ func runRepoInit(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	ctx := context.Background()
+	if err := store.EnsureSchema(ctx); err != nil {
+		return err
+	}
+
+	record, err := store.UpsertRepository(ctx, state.RepositoryRecord{
+		CanonicalPath:   repoRoot,
+		ProtectedBranch: cfg.Repo.ProtectedBranch,
+		RemoteName:      cfg.Repo.RemoteName,
+		MainWorktree:    cfg.Repo.MainWorktree,
+		PolicyVersion:   "v1",
+	})
+	if err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(map[string]string{
+		"protected_branch": cfg.Repo.ProtectedBranch,
+		"main_worktree":    cfg.Repo.MainWorktree,
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := store.AppendEvent(ctx, state.EventRecord{
+		RepoID:    record.ID,
+		ItemType:  "repository",
+		EventType: "repository.initialized",
+		Payload:   payload,
+	}); err != nil {
+		return err
+	}
+
 	fmt.Fprintf(stdout, "Initialized %s\n", policy.ConfigPath(repoRoot))
 	fmt.Fprintf(stdout, "Protected branch: %s\n", cfg.Repo.ProtectedBranch)
 	fmt.Fprintf(stdout, "Main worktree: %s\n", cfg.Repo.MainWorktree)
+	fmt.Fprintf(stdout, "State path: %s\n", state.DefaultPath(layout.GitDir))
 	return nil
 }
 
@@ -114,10 +152,11 @@ func runRepoShow(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 
-	repoRoot, err := git.DiscoverRepositoryRoot(repoPath)
+	layout, err := git.DiscoverRepositoryLayout(repoPath)
 	if err != nil {
 		return err
 	}
+	repoRoot := layout.RepositoryRoot
 
 	cfg, present, err := policy.LoadOrDefault(repoRoot)
 	if err != nil {
@@ -125,10 +164,17 @@ func runRepoShow(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	if cfg.Repo.MainWorktree == "" {
-		cfg.Repo.MainWorktree = repoRoot
+		cfg.Repo.MainWorktree = layout.WorktreeRoot
 	}
 
-	engine := git.NewEngine(repoRoot)
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	ctx := context.Background()
+	var record state.RepositoryRecord
+	if found, err := store.GetRepositoryByPath(ctx, repoRoot); err == nil {
+		record = found
+	}
+
+	engine := git.NewEngine(layout.WorktreeRoot)
 	branch, err := engine.CurrentBranch()
 	if err != nil {
 		return err
@@ -172,6 +218,9 @@ func runRepoShow(args []string, stdout io.Writer, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "Main worktree: %s\n", result.Config.Repo.MainWorktree)
 	fmt.Fprintf(stdout, "Remote: %s\n", result.Config.Repo.RemoteName)
 	fmt.Fprintf(stdout, "Worktrees: %d\n", len(result.Worktrees))
+	if record.ID != 0 {
+		fmt.Fprintf(stdout, "State path: %s\n", state.DefaultPath(layout.GitDir))
+	}
 	if result.BranchStatus.HasUpstream {
 		fmt.Fprintf(stdout, "Protected upstream: %s (ahead %d, behind %d)\n", result.BranchStatus.Upstream, result.BranchStatus.AheadCount, result.BranchStatus.BehindCount)
 	} else {
@@ -194,10 +243,11 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 
-	repoRoot, err := git.DiscoverRepositoryRoot(repoPath)
+	layout, err := git.DiscoverRepositoryLayout(repoPath)
 	if err != nil {
 		return err
 	}
+	repoRoot := layout.RepositoryRoot
 
 	cfg, _, err := policy.LoadOrDefault(repoRoot)
 	if err != nil {
@@ -205,12 +255,34 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	if cfg.Repo.MainWorktree == "" {
-		cfg.Repo.MainWorktree = repoRoot
+		cfg.Repo.MainWorktree = layout.WorktreeRoot
 	}
 
-	report, err := git.NewEngine(repoRoot).InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
+	report, err := git.NewEngine(layout.WorktreeRoot).InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
 	if err != nil {
 		return err
+	}
+
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	ctx := context.Background()
+	if err := store.EnsureSchema(ctx); err != nil {
+		return err
+	}
+	if record, err := store.GetRepositoryByPath(ctx, repoRoot); err == nil {
+		count, err := store.CountUnfinishedItems(ctx, record.ID)
+		if err != nil {
+			return err
+		}
+		report.UnfinishedQueueItems = make([]string, count)
+	}
+
+	lockManager := state.NewLockManager(repoRoot, layout.GitDir)
+	staleLocks, err := lockManager.InspectStale(time.Hour)
+	if err != nil {
+		return err
+	}
+	for _, stale := range staleLocks {
+		report.StaleLocks = append(report.StaleLocks, stale.Domain+":"+stale.Owner)
 	}
 
 	if asJSON {

@@ -22,6 +22,13 @@ type Engine struct {
 	RepositoryRoot string
 }
 
+// RepositoryLayout describes the shared storage and canonical worktree identity.
+type RepositoryLayout struct {
+	RepositoryRoot string `json:"repository_root"`
+	WorktreeRoot   string `json:"worktree_root"`
+	GitDir         string `json:"git_dir"`
+}
+
 // BranchStatus describes a branch and its upstream relationship.
 type BranchStatus struct {
 	Name              string `json:"name"`
@@ -68,9 +75,19 @@ func NewEngine(repositoryRoot string) Engine {
 
 // DiscoverRepositoryRoot resolves the git repository root from a starting path.
 func DiscoverRepositoryRoot(startPath string) (string, error) {
-	absPath, err := filepath.Abs(startPath)
+	layout, err := DiscoverRepositoryLayout(startPath)
 	if err != nil {
 		return "", err
+	}
+
+	return layout.RepositoryRoot, nil
+}
+
+// DiscoverRepositoryLayout resolves the canonical worktree root and shared git storage path.
+func DiscoverRepositoryLayout(startPath string) (RepositoryLayout, error) {
+	absPath, err := filepath.Abs(startPath)
+	if err != nil {
+		return RepositoryLayout{}, err
 	}
 
 	info, err := os.Stat(absPath)
@@ -86,8 +103,8 @@ func DiscoverRepositoryRoot(startPath string) (string, error) {
 			continue
 		}
 
-		if commonRoot, err := resolveRepositoryRootFromWorktree(current); err == nil {
-			return commonRoot, nil
+		if layout, err := resolveRepositoryLayoutFromWorktree(current); err == nil {
+			return layout, nil
 		}
 
 		if parent := filepath.Dir(current); parent == current {
@@ -95,7 +112,7 @@ func DiscoverRepositoryRoot(startPath string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("%s is not a git repository", startPath)
+	return RepositoryLayout{}, fmt.Errorf("%s is not a git repository", startPath)
 }
 
 // CurrentBranch returns the currently checked out branch name.
@@ -150,12 +167,12 @@ func (e Engine) BranchExists(branch string) bool {
 
 // ListWorktrees returns the main and linked worktrees associated with the repository.
 func (e Engine) ListWorktrees() ([]Worktree, error) {
-	repoRoot, err := DiscoverRepositoryRoot(e.RepositoryRoot)
+	layout, err := DiscoverRepositoryLayout(e.RepositoryRoot)
 	if err != nil {
 		return nil, err
 	}
 
-	worktreePaths, err := discoverWorktreePaths(repoRoot)
+	worktreePaths, err := discoverWorktreePaths(layout)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +193,7 @@ func (e Engine) ListWorktrees() ([]Worktree, error) {
 			Path:       filepath.Clean(wtPath),
 			HeadSHA:    head.Hash().String(),
 			IsDetached: !head.Name().IsBranch(),
-			IsCurrent:  filepath.Clean(wtPath) == repoRoot,
+			IsCurrent:  filepath.Clean(wtPath) == layout.WorktreeRoot,
 		}
 		if head.Name().IsBranch() {
 			wt.Branch = head.Name().Short()
@@ -347,12 +364,12 @@ func IsNotRepositoryError(err error) bool {
 }
 
 func (e Engine) open() (*gogit.Repository, error) {
-	repoRoot, err := DiscoverRepositoryRoot(e.RepositoryRoot)
+	layout, err := DiscoverRepositoryLayout(e.RepositoryRoot)
 	if err != nil {
 		return nil, err
 	}
 
-	return openRepository(repoRoot)
+	return openRepository(layout.WorktreeRoot)
 }
 
 func openRepository(path string) (*gogit.Repository, error) {
@@ -362,9 +379,20 @@ func openRepository(path string) (*gogit.Repository, error) {
 	})
 }
 
-func discoverWorktreePaths(repoRoot string) ([]string, error) {
-	paths := []string{filepath.Clean(repoRoot)}
-	worktreesDir := filepath.Join(repoRoot, ".git", "worktrees")
+func discoverWorktreePaths(layout RepositoryLayout) ([]string, error) {
+	seen := map[string]struct{}{}
+	paths := make([]string, 0, 4)
+	appendPath := func(path string) {
+		clean := filepath.Clean(path)
+		if _, ok := seen[clean]; ok {
+			return
+		}
+		seen[clean] = struct{}{}
+		paths = append(paths, clean)
+	}
+
+	appendPath(layout.WorktreeRoot)
+	worktreesDir := filepath.Join(layout.GitDir, "worktrees")
 
 	entries, err := os.ReadDir(worktreesDir)
 	if err != nil {
@@ -389,7 +417,7 @@ func discoverWorktreePaths(repoRoot string) ([]string, error) {
 			gitdirPath = filepath.Clean(filepath.Join(worktreesDir, entry.Name(), gitdirPath))
 		}
 
-		paths = append(paths, filepath.Dir(gitdirPath))
+		appendPath(filepath.Dir(gitdirPath))
 	}
 
 	return paths, nil
@@ -402,35 +430,44 @@ func hasDotGitMarker(dir string) bool {
 	return false
 }
 
-func resolveRepositoryRootFromWorktree(worktreePath string) (string, error) {
+func resolveRepositoryLayoutFromWorktree(worktreePath string) (RepositoryLayout, error) {
 	dotGitPath := filepath.Join(worktreePath, ".git")
 	info, err := os.Stat(dotGitPath)
 	if err != nil {
-		return "", err
+		return RepositoryLayout{}, err
 	}
 
 	if info.IsDir() {
 		if _, err := openRepository(worktreePath); err != nil {
-			return "", err
+			return RepositoryLayout{}, err
 		}
-		return filepath.Clean(worktreePath), nil
+		return RepositoryLayout{
+			RepositoryRoot: filepath.Clean(worktreePath),
+			WorktreeRoot:   filepath.Clean(worktreePath),
+			GitDir:         filepath.Join(filepath.Clean(worktreePath), ".git"),
+		}, nil
 	}
 
 	gitDir, err := resolveGitDirFromFile(worktreePath, dotGitPath)
 	if err != nil {
-		return "", err
+		return RepositoryLayout{}, err
 	}
 
 	commonDir, err := resolveCommonDir(gitDir)
 	if err != nil {
-		return "", err
+		return RepositoryLayout{}, err
 	}
 
-	if filepath.Base(commonDir) != ".git" {
-		return "", fmt.Errorf("unsupported common git dir layout: %s", commonDir)
+	repositoryRoot := commonDir
+	if filepath.Base(commonDir) == ".git" {
+		repositoryRoot = filepath.Dir(commonDir)
 	}
 
-	return filepath.Dir(commonDir), nil
+	return RepositoryLayout{
+		RepositoryRoot: filepath.Clean(repositoryRoot),
+		WorktreeRoot:   filepath.Clean(worktreePath),
+		GitDir:         filepath.Clean(commonDir),
+	}, nil
 }
 
 func resolveGitDirFromFile(worktreePath string, dotGitPath string) (string, error) {

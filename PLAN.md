@@ -17,6 +17,10 @@ Implementation guidance:
 
 - use `go-git` as the default Git engine instead of shelling out to raw `git` for ordinary repository inspection and mutation paths
 - only build thin `mainline`-specific adapters around library behavior and product policy
+- explicitly support bare-clone-plus-worktree layouts, where the canonical repository storage lives separately from the checked-out worktree
+- keep durable queue state with the shared repository storage or a global state root, never in per-worktree mutable directories
+- use native `git` only for workflow-critical operations that `go-git` does not expose or support correctly enough
+- `go-git` may read and write rebase-related branch config, but the actual integration rebase step should still be expected to run through native `git rebase`
 
 ## Product Milestones
 
@@ -53,6 +57,7 @@ Deliverables:
 - detect repo root from current directory
 - inspect worktrees and refs using `go-git`-backed repository access
 - identify canonical protected branch worktree
+- detect and model bare repo storage path separately from worktree path
 - config file support
 - `mainline repo init`
 - `mainline repo show`
@@ -63,9 +68,11 @@ Checks in `doctor`:
 - is this a Git repo
 - which branch is protected
 - where is the canonical worktree
+- where the shared repository storage lives
 - is the protected branch clean
 - does upstream exist
 - does protected branch diverge from upstream
+- are worktrees in an expected location for this machine policy
 - are there stale locks or unfinished queue items
 
 Acceptance criteria:
@@ -73,6 +80,7 @@ Acceptance criteria:
 - can point `mainline` at a repo and get an accurate health report
 - can detect dirty `main`
 - can detect missing canonical worktree
+- can operate correctly when invoked from a linked worktree of a bare-clone layout
 
 ## Milestone 2: Durable State and Locking
 
@@ -89,12 +97,14 @@ Deliverables:
 - event log table
 - lock abstraction
 - stale lock detection and recovery rules
+- state root resolution that prefers shared repo storage or configurable global state over per-worktree paths
 
 Acceptance criteria:
 
 - queue items persist across process restarts
 - only one integration worker can run per repo
 - only one publish worker can run per repo
+- all worktrees for the same underlying repo observe the same queue state
 
 ## Milestone 3: Branch Submission
 
@@ -136,16 +146,22 @@ Worker flow:
 5. fast-forward protected branch from upstream if configured and possible
 6. validate source branch still exists
 7. ensure source worktree is clean
-8. attempt rebase of source branch onto protected branch in source worktree
-9. if successful, fast-forward protected branch to source branch tip
-10. mark submission succeeded
-11. emit publish request if auto-publish is enabled
+8. if source worktree is dirty, apply configured dirty-worktree policy before integration
+9. attempt rebase of source branch onto protected branch in source worktree
+10. if successful, fast-forward protected branch to source branch tip
+11. mark submission succeeded
+12. emit publish request if auto-publish is enabled
 
 Blocked behavior:
 
 - if rebase conflicts, mark submission blocked
 - do not modify protected branch
 - preserve source worktree as resolution site
+
+Dirty worktree behavior:
+
+- default MVP policy should reject dirty source worktrees with precise recovery instructions
+- stash/rebase/unstash may be added later as an explicit opt-in policy, not an implicit default
 
 Deliverables:
 
@@ -190,6 +206,11 @@ Reason:
 - simpler and safer first release
 - still achieves “latest wins” semantically
 
+Important machine-level constraint:
+
+- `mainline` may not be the only writer to `origin/<protected>` during early adoption
+- publish logic must coexist with direct `git push` from agents or factory daemons by re-checking protected-branch tip before and after publish attempts
+
 Deliverables:
 
 - publish queue schema and worker
@@ -233,12 +254,17 @@ Deliverables:
 - pre-integrate checks
 - pre-publish checks
 - command timeout controls
+- hook coordination policy so `mainline` checks do not naively stack on heavyweight repo hooks
+- worktree location policy, including machine-specific path expectations and doctor warnings
 
 Suggested initial policy matrix:
 
 - `sync_policy`: `manual`, `sync-before-integrate`
 - `publish_mode`: `manual`, `auto`
 - `integration_strategy`: `rebase-then-ff`, `ff-only`
+- `dirty_worktree_policy`: `reject`, `stash-and-restore`
+- `worktree_layout_policy`: `any`, `enforce-prefix`
+- `hook_policy`: `inherit`, `replace-with-mainline-checks`, `bypass-with-explicit-command`
 
 Acceptance criteria:
 

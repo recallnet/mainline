@@ -14,4 +14,5 @@ test:
 build:
 	mkdir -p bin
 	$(GO) build -o ./bin/mainline ./cmd/mainline
+	$(GO) build -o ./bin/mq ./cmd/mq
 	$(GO) build -o ./bin/mainlined ./cmd/mainlined

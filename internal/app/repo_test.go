@@ -108,6 +108,28 @@ func TestRepoInitFromLinkedWorktreeWritesSharedConfig(t *testing.T) {
 	}
 }
 
+func TestRepoInitFromBareCloneWorktreeUsesSharedStorage(t *testing.T) {
+	bareDir, worktreePath := createBareCloneWorktree(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", worktreePath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(bareDir, "mainline.toml")); err != nil {
+		t.Fatalf("expected config in bare repo storage: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(bareDir, "mainline", "state.db")); err != nil {
+		t.Fatalf("expected state db in bare repo storage: %v", err)
+	}
+
+	if strings.Contains(initOut.String(), filepath.Join(worktreePath, ".git")) {
+		t.Fatalf("expected shared storage state path, got output %q", initOut.String())
+	}
+}
+
 func createTestRepo(t *testing.T) (string, string) {
 	t.Helper()
 

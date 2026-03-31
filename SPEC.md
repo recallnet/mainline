@@ -354,6 +354,11 @@ Responsibilities:
 - fetch, rebase, fast-forward, push
 - translate library behavior into `mainline` health, queue, and policy results
 
+Implementation note:
+
+- `go-git` is the default engine for repository inspection, config handling, and ordinary ref/worktree operations
+- `go-git` can represent rebase-related config, but the actual integration rebase step should be expected to use native `git rebase` until a first-class library implementation exists and proves trustworthy
+
 ### Queue Engine
 
 Owns:

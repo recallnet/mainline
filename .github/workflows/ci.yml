@@ -30,4 +30,5 @@ jobs:
       - name: Release build
         run: |
           go build ./cmd/mainline
+          go build ./cmd/mq
           go build ./cmd/mainlined
