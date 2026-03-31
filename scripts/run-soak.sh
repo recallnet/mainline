@@ -29,12 +29,13 @@ fi
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ "${output_dir}" = /* ]]; then
-  soak_root="${output_dir}"
+  output_root="${output_dir}"
 else
-  soak_root="${repo_root}/${output_dir}"
+  output_root="${repo_root}/${output_dir}"
 fi
 
-rm -rf "${soak_root}"
+run_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+soak_root="${output_root}/${run_stamp}"
 mkdir -p "${soak_root}/runs"
 
 pass_count=0
@@ -129,3 +130,5 @@ summary = {
 (soak_root / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 print(json.dumps(summary, indent=2))
 PY
+
+ln -sfn "${soak_root}" "${output_root}/latest"

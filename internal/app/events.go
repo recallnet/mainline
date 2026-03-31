@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -89,6 +90,9 @@ func runEventStream(ctx context.Context, opts eventOptions, stdout io.Writer) er
 		case <-ticker.C:
 			events, err := store.ListEventsAfter(ctx, repoRecord.ID, lastID, 100)
 			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return nil
+				}
 				return err
 			}
 			if len(events) == 0 {
