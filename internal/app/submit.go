@@ -407,6 +407,9 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 			Message: "repository is not initialized; run `mainline repo init` first",
 		}
 	}
+	if err := store.EnsureSchema(context.Background()); err != nil {
+		return preparedSubmission{}, err
+	}
 
 	ctx := context.Background()
 	repoRecord, err := store.GetRepositoryByPath(ctx, repoRoot)

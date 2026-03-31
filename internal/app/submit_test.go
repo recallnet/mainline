@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -349,6 +350,98 @@ func TestSubmitReprioritizesAlreadyQueuedSubmission(t *testing.T) {
 	}
 	if len(submissions) != 1 || submissions[0].Priority != submissionPriorityHigh {
 		t.Fatalf("expected one reprioritized queued submission, got %+v", submissions)
+	}
+}
+
+func TestSubmitUpgradesExistingLegacyStateSchema(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-legacy-submit")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/legacy-submit", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+
+	layout, err := git.DiscoverRepositoryLayout(featurePath)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	statePath := state.DefaultPath(layout.GitDir)
+	if err := os.Remove(statePath); err != nil {
+		t.Fatalf("Remove(state db): %v", err)
+	}
+
+	db, err := sql.Open("sqlite", statePath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	if _, err := db.Exec(`
+		CREATE TABLE repositories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			canonical_path TEXT NOT NULL UNIQUE,
+			protected_branch TEXT NOT NULL,
+			remote_name TEXT NOT NULL,
+			main_worktree_path TEXT NOT NULL,
+			policy_version TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE integration_submissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			repo_id INTEGER NOT NULL,
+			branch_name TEXT NOT NULL,
+			source_worktree_path TEXT NOT NULL,
+			source_sha TEXT NOT NULL,
+			requested_by TEXT NOT NULL,
+			status TEXT NOT NULL,
+			last_error TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE publish_requests (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			repo_id INTEGER NOT NULL,
+			target_sha TEXT NOT NULL,
+			status TEXT NOT NULL,
+			superseded_by INTEGER,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			repo_id INTEGER NOT NULL,
+			item_type TEXT NOT NULL,
+			item_id INTEGER,
+			event_type TEXT NOT NULL,
+			payload BLOB NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		INSERT INTO repositories (canonical_path, protected_branch, remote_name, main_worktree_path, policy_version)
+		VALUES (?, 'main', 'origin', ?, 'v1');
+		PRAGMA user_version = 1;
+	`, layout.RepositoryRoot, repoRoot); err != nil {
+		t.Fatalf("create legacy state schema: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("db.Close: %v", err)
+	}
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.OK || !result.Queued || result.Priority != submissionPriorityHigh {
+		t.Fatalf("expected successful queued result after legacy upgrade, got %+v", result)
 	}
 }
 
