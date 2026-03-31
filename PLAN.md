@@ -463,6 +463,25 @@ Acceptance criteria:
 - `mainline version`, `mq version`, and `mainlined --version` report build metadata
 - release artifacts embed the tagged version instead of always reporting `dev`
 
+## Milestone 18: Versioned Homebrew Release Metadata
+
+Goal:
+
+- make GitHub releases publish package metadata for stable Homebrew installs instead of only `--HEAD` source builds
+
+Deliverables:
+
+- formula generation script that targets a tagged GitHub release
+- generated formula asset attached by the release workflow
+- release verification for generated formula syntax and URLs
+- install docs that describe stable Homebrew release usage
+
+Acceptance criteria:
+
+- a tagged release publishes a `mainline.rb` formula asset tied to that version
+- the formula installs the correct archive for Intel and Apple Silicon macOS
+- install docs no longer imply that Homebrew support is `--HEAD`-only
+
 ## Architecture Plan
 
 ## Repository Layout

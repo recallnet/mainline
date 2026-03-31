@@ -39,6 +39,14 @@ jobs:
       - name: Build release archives
         run: ./scripts/build-release.sh --version "${{ steps.version.outputs.value }}" --output dist
 
+      - name: Generate Homebrew formula
+        run: |
+          ./scripts/generate-homebrew-formula.sh \
+            --version "${{ steps.version.outputs.value }}" \
+            --checksums dist/SHA256SUMS \
+            --output dist/mainline.rb
+          ruby -c dist/mainline.rb
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -55,3 +63,4 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/SHA256SUMS
+            dist/mainline.rb

@@ -30,5 +30,11 @@ jobs:
       - name: Release script regression test
         run: ./scripts/test-build-release.sh
 
+      - name: Homebrew formula generation test
+        run: |
+          ./scripts/build-release.sh --version v0.0.0-ci --output dist
+          ./scripts/generate-homebrew-formula.sh --version v0.0.0-ci --checksums dist/SHA256SUMS --output dist/mainline.rb
+          ruby -c dist/mainline.rb
+
       - name: Release build
         run: make release-snapshot VERSION=ci

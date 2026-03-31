@@ -45,10 +45,12 @@ go install github.com/recallnet/mainline/cmd/mainlined@latest
 
 ## Homebrew
 
-Install from the committed formula without cloning the repo manually:
+Stable tagged releases publish a versioned `mainline.rb` formula asset alongside
+the release archives. Download that formula from the release page and install it:
 
 ```bash
-brew install --HEAD https://raw.githubusercontent.com/recallnet/mainline/main/Formula/mainline.rb
+curl -LO https://github.com/recallnet/mainline/releases/download/v0.1.0/mainline.rb
+brew install ./mainline.rb
 ```
 
 This installs:
@@ -57,7 +59,7 @@ This installs:
 - `mq`
 - `mainlined`
 
-The formula source is in [Formula/mainline.rb](/Users/devrel/Projects/recallnet/mainline/Formula/mainline.rb).
+The repo also keeps a `--HEAD` development formula in [mainline.rb](/Users/devrel/Projects/recallnet/mainline/Formula/mainline.rb) for source-first installs.
 
 ## Nix
 

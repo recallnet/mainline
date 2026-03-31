@@ -150,6 +150,7 @@ The rule is simple:
 - Homebrew and Nix packaging
 - tag-built GitHub release archives with checksums
 - version-reporting binaries for support and release verification
+- versioned Homebrew formula assets generated in GitHub releases
 
 ## Install
 
