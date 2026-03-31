@@ -239,6 +239,51 @@ func TestRunOnceReportsProtectedBranchSyncFromUpstream(t *testing.T) {
 	}
 }
 
+func TestRunOnceReportsProtectedBranchSyncBeforeConflictBlock(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+
+	upstreamClone := filepath.Join(t.TempDir(), "upstream-clone")
+	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
+	runTestCommand(t, upstreamClone, "git", "config", "user.name", "Test User")
+	runTestCommand(t, upstreamClone, "git", "config", "user.email", "test@example.com")
+	replaceFileAndCommit(t, upstreamClone, "README.md", "# upstream\n", "upstream advance")
+	runTestCommand(t, upstreamClone, "git", "push", "origin", "main")
+
+	featureOne := filepath.Join(t.TempDir(), "feature-one")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/one", featureOne)
+	replaceFileAndCommit(t, featureOne, "README.md", "# feature\n", "feature one")
+	submitBranch(t, featureOne)
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	output := runOut.String()
+	if !strings.Contains(output, "Synced protected branch from origin/main before blocked submission") {
+		t.Fatalf("expected sync-aware blocked output, got %q", output)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if len(submissions) != 1 || submissions[0].Status != "blocked" {
+		t.Fatalf("expected blocked submission, got %+v", submissions)
+	}
+}
+
 func TestRunOncePreIntegrateChecksBlockBeforeProtectedBranchMutation(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)
