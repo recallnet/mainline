@@ -59,6 +59,9 @@ func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
 	if pollInterval <= 0 {
 		return fmt.Errorf("poll-interval must be greater than zero")
 	}
+	if err := validateLandPreflight(repoPath); err != nil {
+		return err
+	}
 
 	start := time.Now()
 	queued, err := queueSubmission(submitOptions{
@@ -100,6 +103,40 @@ func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	return waitErr
+}
+
+func validateLandPreflight(repoPath string) error {
+	layout, repoRoot, cfg, _, _, err := loadRepoContext(repoPath)
+	if err != nil {
+		return err
+	}
+
+	mainLayout, err := git.DiscoverRepositoryLayout(cfg.Repo.MainWorktree)
+	if err != nil {
+		return err
+	}
+	if mainLayout.GitDir != layout.GitDir {
+		return fmt.Errorf("main worktree %s does not belong to repository %s", cfg.Repo.MainWorktree, repoRoot)
+	}
+
+	report, err := git.NewEngine(mainLayout.WorktreeRoot).InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
+	if err != nil {
+		return err
+	}
+	if !report.MainWorktreeExists {
+		return fmt.Errorf("main worktree %s is missing", cfg.Repo.MainWorktree)
+	}
+	if !report.ProtectedBranchExists {
+		return fmt.Errorf("protected branch %q does not exist", cfg.Repo.ProtectedBranch)
+	}
+	if !report.ProtectedBranchClean {
+		return fmt.Errorf("protected branch worktree %s is dirty", cfg.Repo.MainWorktree)
+	}
+	if report.HasDivergedUpstream {
+		return fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, report.UpstreamRef)
+	}
+
+	return nil
 }
 
 func waitForLandedPublish(queued queuedSubmission, timeout time.Duration, pollInterval time.Duration) (landResult, error) {
