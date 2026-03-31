@@ -28,7 +28,4 @@ jobs:
         run: go test ./...
 
       - name: Release build
-        run: |
-          go build ./cmd/mainline
-          go build ./cmd/mq
-          go build ./cmd/mainlined
+        run: make release-snapshot VERSION=ci

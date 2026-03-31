@@ -425,6 +425,25 @@ Acceptance criteria:
 - the command works from linked worktrees and edits the shared repo config path
 - a missing config is scaffolded with repo-aware defaults before the editor opens
 
+## Milestone 16: Release Automation
+
+Goal:
+
+- turn packaging into repeatable release artifacts instead of source-only packaging definitions
+
+Deliverables:
+
+- local release build script for multi-platform archives
+- checksum generation for release assets
+- tag-driven GitHub workflow that uploads archives and checksums to a GitHub release
+- install docs that point at both package managers and direct release downloads
+
+Acceptance criteria:
+
+- maintainers can build a full release artifact set locally with one command
+- pushing a version tag produces downloadable archives for `mainline`, `mq`, and `mainlined`
+- release docs match the actual GitHub release artifact layout
+
 ## Architecture Plan
 
 ## Repository Layout

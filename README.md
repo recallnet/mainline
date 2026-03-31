@@ -148,6 +148,7 @@ The rule is simple:
 - policy checks, hook coordination, and worktree layout warnings
 - shell completions for `bash`, `zsh`, and `fish`
 - Homebrew and Nix packaging
+- tag-built GitHub release archives with checksums
 
 ## Install
 

@@ -2,6 +2,31 @@
 
 `mainline` now ships source-controlled packaging outputs for Homebrew and Nix.
 
+For direct downloads, GitHub releases also publish versioned `.tar.gz` archives
+for macOS and Linux plus a `SHA256SUMS` file.
+
+## Direct Download
+
+Download the archive that matches your platform from the GitHub releases page:
+
+```bash
+https://github.com/recallnet/mainline/releases
+```
+
+Archive naming:
+
+- `mainline_<version>_darwin_amd64.tar.gz`
+- `mainline_<version>_darwin_arm64.tar.gz`
+- `mainline_<version>_linux_amd64.tar.gz`
+- `mainline_<version>_linux_arm64.tar.gz`
+
+Each archive contains:
+
+- `mainline`
+- `mq`
+- `mainlined`
+- `README.md`
+
 ## Go Install
 
 ```bash
@@ -43,6 +68,23 @@ nix run github:recallnet/mainline#mainlined -- --help
 ```
 
 The flake source is in [flake.nix](/Users/devrel/Projects/recallnet/mainline/flake.nix) and [package.nix](/Users/devrel/Projects/recallnet/mainline/nix/package.nix).
+
+## Maintainer Release Flow
+
+Build the full release artifact set locally:
+
+```bash
+make release-snapshot VERSION=v0.1.0
+```
+
+This writes archives and `SHA256SUMS` under `dist/`.
+
+Push a version tag to publish a GitHub release:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
 
 ## Completion Install
 
