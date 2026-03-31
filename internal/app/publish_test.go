@@ -96,6 +96,46 @@ func TestRunOncePublishesLatestQueuedTipAndSupersedesOlderRequests(t *testing.T)
 	}
 }
 
+func TestRunOnceLinksSupersededStalePublishRequestToReplacement(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	queuePublish(t, repoRoot)
+	writeFileAndCommit(t, repoRoot, "new.txt", "new\n", "advance main")
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("expected 2 publish requests, got %d", len(requests))
+	}
+	if requests[0].Status != "superseded" {
+		t.Fatalf("expected first request superseded, got %q", requests[0].Status)
+	}
+	if !requests[0].SupersededBy.Valid || requests[0].SupersededBy.Int64 != requests[1].ID {
+		t.Fatalf("expected superseded_by=%d, got %+v", requests[1].ID, requests[0].SupersededBy)
+	}
+	if requests[1].Status != "queued" {
+		t.Fatalf("expected replacement request queued, got %q", requests[1].Status)
+	}
+}
+
 func TestRunOnceWithNoQueueReportsNoPublishWork(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

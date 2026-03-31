@@ -277,7 +277,11 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 		return "", err
 	}
 	if currentProtectedSHA != request.TargetSHA {
-		updated, err := store.UpdatePublishRequestStatus(ctx, request.ID, "superseded", sql.NullInt64{})
+		replacement, created, err := ensureLatestPublishRequestRecord(ctx, store, repoRecord.ID, currentProtectedSHA)
+		if err != nil {
+			return "", err
+		}
+		updated, err := store.UpdatePublishRequestStatus(ctx, request.ID, "superseded", state.NullInt64(replacement.ID))
 		if err != nil {
 			return "", err
 		}
@@ -294,7 +298,10 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 		}); err != nil {
 			return "", err
 		}
-		return ensureLatestPublishRequest(ctx, store, repoRecord.ID, currentProtectedSHA)
+		if created {
+			return fmt.Sprintf("Queued follow-up publish request %d for %s", replacement.ID, currentProtectedSHA), nil
+		}
+		return fmt.Sprintf("Superseded older publish requests; latest target is %s", currentProtectedSHA), nil
 	}
 
 	if err := mainEngine.PushBranch(cfg.Repo.MainWorktree, cfg.Repo.RemoteName, cfg.Repo.ProtectedBranch); err != nil {
@@ -336,20 +343,27 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 	}
 
 	if latestProtectedSHA != request.TargetSHA {
-		return ensureLatestPublishRequest(ctx, store, repoRecord.ID, latestProtectedSHA)
+		replacement, created, err := ensureLatestPublishRequestRecord(ctx, store, repoRecord.ID, latestProtectedSHA)
+		if err != nil {
+			return "", err
+		}
+		if created {
+			return fmt.Sprintf("Queued follow-up publish request %d for %s", replacement.ID, latestProtectedSHA), nil
+		}
+		return fmt.Sprintf("Superseded older publish requests; latest target is %s", latestProtectedSHA), nil
 	}
 
 	return fmt.Sprintf("Published request %d for %s", request.ID, latestProtectedSHA), nil
 }
 
-func ensureLatestPublishRequest(ctx context.Context, store state.Store, repoID int64, targetSHA string) (string, error) {
+func ensureLatestPublishRequestRecord(ctx context.Context, store state.Store, repoID int64, targetSHA string) (state.PublishRequest, bool, error) {
 	requests, err := store.ListPublishRequests(ctx, repoID)
 	if err != nil {
-		return "", err
+		return state.PublishRequest{}, false, err
 	}
 	for _, request := range requests {
 		if request.TargetSHA == targetSHA && (request.Status == "queued" || request.Status == "running" || request.Status == "succeeded") {
-			return fmt.Sprintf("Superseded older publish requests; latest target is %s", targetSHA), nil
+			return request, false, nil
 		}
 	}
 
@@ -359,7 +373,7 @@ func ensureLatestPublishRequest(ctx context.Context, store state.Store, repoID i
 		Status:    "queued",
 	})
 	if err != nil {
-		return "", err
+		return state.PublishRequest{}, false, err
 	}
 	if err := appendStateEvent(ctx, store, state.EventRecord{
 		RepoID:    repoID,
@@ -371,10 +385,10 @@ func ensureLatestPublishRequest(ctx context.Context, store state.Store, repoID i
 			"reason":     "protected_branch_advanced_after_publish",
 		}),
 	}); err != nil {
-		return "", err
+		return state.PublishRequest{}, false, err
 	}
 
-	return fmt.Sprintf("Queued follow-up publish request %d for %s", request.ID, targetSHA), nil
+	return request, true, nil
 }
 
 func failIntegrationSubmission(ctx context.Context, store state.Store, repoID int64, submissionID int64, cause error) (string, error) {
