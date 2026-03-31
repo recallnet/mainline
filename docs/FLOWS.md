@@ -8,6 +8,7 @@ Initialize once:
 
 ```bash
 mq repo init --repo .
+mq config edit --repo .
 mq doctor --repo .
 ```
 
@@ -32,6 +33,7 @@ Keep one canonical protected-branch worktree and many topic worktrees:
 
 ```bash
 mq repo init --repo /path/to/main --main-worktree /path/to/main
+mq config edit --repo /path/to/main
 mq doctor --repo /path/to/main
 mq status --repo /path/to/main
 ```

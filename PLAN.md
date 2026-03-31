@@ -407,6 +407,24 @@ Acceptance criteria:
 - operators can use `mq watch` to keep a live repo status screen open during active work
 - the named operator commands use the same queue/state codepaths as `status` and `events`
 
+## Milestone 15: Repo Config Editing
+
+Goal:
+
+- make repo policy editing a supported operator path instead of requiring manual file hunting
+
+Deliverables:
+
+- `config edit` command that opens the repo config in the operator's editor
+- config scaffolding when the repo has no config yet
+- shell completion and docs for the new command surface
+
+Acceptance criteria:
+
+- operators can run `mq config edit --repo /path/to/main` and land in the correct config file
+- the command works from linked worktrees and edits the shared repo config path
+- a missing config is scaffolded with repo-aware defaults before the editor opens
+
 ## Architecture Plan
 
 ## Repository Layout

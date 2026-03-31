@@ -178,6 +178,7 @@ Repo setup:
 
 ```bash
 mq repo init --repo /path/to/main --main-worktree /path/to/main
+mq config edit --repo /path/to/main
 mq doctor --repo /path/to/main
 mq repo show --repo /path/to/main --json
 ```

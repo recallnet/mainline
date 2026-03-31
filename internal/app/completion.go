@@ -39,12 +39,17 @@ _mainline_completions()
   _init_completion || return
 
   if [[ ${cword} -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "submit status run-once retry cancel publish logs watch events doctor completion repo" -- "$cur") )
+    COMPREPLY=( $(compgen -W "submit status run-once retry cancel publish logs watch events doctor completion config repo" -- "$cur") )
     return
   fi
 
   if [[ ${words[1]} == "repo" && ${cword} -eq 2 ]]; then
     COMPREPLY=( $(compgen -W "init show" -- "$cur") )
+    return
+  fi
+
+  if [[ ${words[1]} == "config" && ${cword} -eq 2 ]]; then
+    COMPREPLY=( $(compgen -W "edit" -- "$cur") )
     return
   fi
 
@@ -77,6 +82,13 @@ _mainline_completions()
       ;;
     doctor)
       COMPREPLY=( $(compgen -W "--repo --json" -- "$cur") )
+      ;;
+    config)
+      case "${words[2]}" in
+        edit)
+          COMPREPLY=( $(compgen -W "--repo --editor --print-path" -- "$cur") )
+          ;;
+      esac
       ;;
     repo)
       case "${words[2]}" in
@@ -113,6 +125,7 @@ _mainline() {
     'events:stream durable queue events'
     'doctor:inspect repo health'
     'completion:emit shell completion script'
+    'config:configuration commands'
     'repo:repository commands'
   )
 
@@ -125,6 +138,12 @@ _mainline() {
     repo)
       if (( CURRENT == 3 )); then
         _describe 'repo command' 'init:initialize repo config' 'show:show repo config'
+        return
+      fi
+      ;;
+    config)
+      if (( CURRENT == 3 )); then
+        _describe 'config command' 'edit:open the repo config in an editor'
         return
       fi
       ;;
@@ -164,6 +183,10 @@ _mainline() {
       _arguments '--repo[repository path]:path:_files -/' '--json[json output]'
       return
       ;;
+    config)
+      _arguments '--repo[repository path]:path:_files -/' '--editor[editor binary]:editor:_command_names' '--print-path[print config path before editing]'
+      return
+      ;;
   esac
 }
 
@@ -172,11 +195,13 @@ _mainline "$@"
 }
 
 func fishCompletionScript() string {
-	return `complete -c mainline -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish logs watch events doctor completion repo"
-complete -c mq -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish logs watch events doctor completion repo"
+	return `complete -c mainline -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish logs watch events doctor completion config repo"
+complete -c mq -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish logs watch events doctor completion config repo"
 
 complete -c mainline -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"
 complete -c mq -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"
+complete -c mainline -f -n "__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from edit" -a "edit"
+complete -c mq -f -n "__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from edit" -a "edit"
 
 complete -c mainline -f -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 complete -c mq -f -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
@@ -219,5 +244,9 @@ complete -c mainline -n "__fish_seen_subcommand_from repo init" -l remote
 complete -c mq -n "__fish_seen_subcommand_from repo init" -l remote
 complete -c mainline -n "__fish_seen_subcommand_from repo init" -l main-worktree
 complete -c mq -n "__fish_seen_subcommand_from repo init" -l main-worktree
+complete -c mainline -n "__fish_seen_subcommand_from config edit" -l editor
+complete -c mq -n "__fish_seen_subcommand_from config edit" -l editor
+complete -c mainline -n "__fish_seen_subcommand_from config edit" -l print-path
+complete -c mq -n "__fish_seen_subcommand_from config edit" -l print-path
 `
 }

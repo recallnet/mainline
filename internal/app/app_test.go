@@ -165,8 +165,8 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "retry cancel publish") {
 		t.Fatalf("expected completion script to include retry and cancel, got %q", output)
 	}
-	if !strings.Contains(output, "publish logs watch events doctor completion") {
-		t.Fatalf("expected completion script to include logs/watch/events, got %q", output)
+	if !strings.Contains(output, "publish logs watch events doctor completion config") {
+		t.Fatalf("expected completion script to include config surface, got %q", output)
 	}
 	if strings.Contains(output, "run-once|publish|doctor") {
 		t.Fatalf("expected split completion cases for real command flags, got %q", output)
@@ -187,6 +187,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from watch\" -l interval") {
 		t.Fatalf("expected fish completion to include watch flags, got %q", output)
+	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from config edit\" -l editor") {
+		t.Fatalf("expected fish completion to include config edit flags, got %q", output)
 	}
 }
 

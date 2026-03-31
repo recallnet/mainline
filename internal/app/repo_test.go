@@ -223,6 +223,89 @@ func TestDoctorAcceptsSymlinkedPolicyPrefix(t *testing.T) {
 	}
 }
 
+func TestConfigEditScaffoldsMissingConfigAndInvokesEditor(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	editorPath := filepath.Join(t.TempDir(), "editor.sh")
+	editorOutput := []byte(`#!/bin/sh
+perl -0pi -e "s/ProtectedBranch = 'main'/ProtectedBranch = 'stable'/" "$1"
+`)
+	if err := os.WriteFile(editorPath, editorOutput, 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runConfigEdit([]string{"--repo", repoRoot, "--editor", editorPath, "--print-path"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runConfigEdit returned error: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, filepath.Join(repoRoot, "mainline.toml")) {
+		t.Fatalf("expected config path in output, got %q", output)
+	}
+	if !strings.Contains(output, "Edited ") {
+		t.Fatalf("expected edited message, got %q", output)
+	}
+
+	cfg, err := policy.LoadFile(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if cfg.Repo.ProtectedBranch != "stable" {
+		t.Fatalf("expected edited protected branch, got %+v", cfg.Repo)
+	}
+}
+
+func TestConfigEditUsesSharedRepoRootFromLinkedWorktree(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	linkedWorktree := filepath.Join(t.TempDir(), "feature-worktree")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/config", linkedWorktree)
+
+	editorPath := filepath.Join(t.TempDir(), "editor-touch.sh")
+	editorOutput := []byte(`#!/bin/sh
+echo "# edited" >> "$1"
+`)
+	if err := os.WriteFile(editorPath, editorOutput, 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runConfigEdit([]string{"--repo", linkedWorktree, "--editor", editorPath}, &stdout, &stderr); err != nil {
+		t.Fatalf("runConfigEdit returned error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(repoRoot, "mainline.toml")); err != nil {
+		t.Fatalf("expected shared config in repo root: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(linkedWorktree, "mainline.toml")); !os.IsNotExist(err) {
+		t.Fatalf("expected no per-worktree config, got err=%v", err)
+	}
+}
+
+func TestConfigEditRequiresEditor(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+
+	originalVisual := os.Getenv("VISUAL")
+	originalEditor := os.Getenv("EDITOR")
+	t.Cleanup(func() {
+		_ = os.Setenv("VISUAL", originalVisual)
+		_ = os.Setenv("EDITOR", originalEditor)
+	})
+	_ = os.Unsetenv("VISUAL")
+	_ = os.Unsetenv("EDITOR")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := runConfigEdit([]string{"--repo", repoRoot}, &stdout, &stderr)
+	if err == nil {
+		t.Fatalf("expected missing editor error")
+	}
+	if !strings.Contains(err.Error(), "no editor configured") {
+		t.Fatalf("expected missing editor message, got %v", err)
+	}
+}
+
 func createTestRepo(t *testing.T) (string, string) {
 	t.Helper()
 

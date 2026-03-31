@@ -48,6 +48,8 @@ func handleCommand(command string, args []string, stdout io.Writer, stderr io.Wr
 		return runEvents(args, stdout, stderr)
 	case "completion":
 		return runCompletion(args, stdout, stderr)
+	case "config edit":
+		return runConfigEdit(args, stdout, stderr)
 	case "repo init":
 		return runRepoInit(args, stdout, stderr)
 	case "repo show":

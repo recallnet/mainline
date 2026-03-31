@@ -21,6 +21,7 @@ var cliCommands = []string{
 	"events",
 	"doctor",
 	"completion",
+	"config edit",
 	"repo init",
 	"repo show",
 }
@@ -87,10 +88,11 @@ Commands:
   events
   doctor
   completion
+  config edit
   repo init
   repo show
 
-Implemented today: repo init/show, doctor, submit, status, run-once, retry, cancel, publish, logs, watch, events, completion.
+Implemented today: repo init/show, doctor, submit, status, run-once, retry, cancel, publish, logs, watch, events, completion, config edit.
 `
 }
 
@@ -108,9 +110,9 @@ func parseCLICommand(args []string) (string, []string) {
 		return "", nil
 	}
 
-	if args[0] == "repo" {
+	if args[0] == "repo" || args[0] == "config" {
 		if len(args) == 1 {
-			return "repo", nil
+			return args[0], nil
 		}
 		return strings.Join(args[:2], " "), args[2:]
 	}
