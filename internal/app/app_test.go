@@ -204,8 +204,8 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "complete -F _mainline_completions mainline") {
 		t.Fatalf("expected completion script output, got %q", output)
 	}
-	if !strings.Contains(output, "confidence run-once retry cancel publish") {
-		t.Fatalf("expected completion script to include confidence, got %q", output)
+	if !strings.Contains(output, "land submit status confidence run-once retry cancel publish") {
+		t.Fatalf("expected completion script to include land and confidence, got %q", output)
 	}
 	if !strings.Contains(output, "retry cancel publish") {
 		t.Fatalf("expected completion script to include retry and cancel, got %q", output)
@@ -235,6 +235,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from confidence\" -l cert-report") {
 		t.Fatalf("expected fish completion to include confidence flags, got %q", output)
+	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from land\" -l timeout") {
+		t.Fatalf("expected fish completion to include land flags, got %q", output)
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from config edit\" -l editor") {
 		t.Fatalf("expected fish completion to include config edit flags, got %q", output)

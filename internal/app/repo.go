@@ -28,6 +28,8 @@ type repoShowResult struct {
 
 func handleCommand(command string, args []string, stdout io.Writer, stderr io.Writer) error {
 	switch command {
+	case "land":
+		return runLand(args, stdout, stderr)
 	case "submit":
 		return runSubmit(args, stdout, stderr)
 	case "status":

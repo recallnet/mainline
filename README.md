@@ -63,9 +63,7 @@ You do your normal work in a feature worktree. You commit there. Then you hand t
 
 ```bash
 mq repo init --repo .
-mq submit --repo /path/to/topic-worktree
-mq run-once --repo /path/to/main
-mq publish --repo /path/to/main
+mq land --repo /path/to/topic-worktree
 mq watch --repo /path/to/main
 ```
 
@@ -108,6 +106,7 @@ That matters if your machine is running Codex, Claude, factory daemons, humans, 
 - repo discovery for standard repos and bare-clone-plus-worktree layouts
 - durable SQLite queue state in shared Git storage
 - serialized integration and publish workers
+- `land` for one-command submit-plus-integrate-plus-publish
 - `submit`, `run-once`, `publish`, `retry`, and `cancel`
 - `status`, `watch`, `logs`, `events`, and `confidence`
 - daemon mode through `mainlined`
@@ -155,6 +154,7 @@ mq repo show --repo /path/to/main --json
 Queue work:
 
 ```bash
+mq land --repo /path/to/topic-worktree --json --timeout 30m
 mq submit --repo /path/to/topic-worktree
 mq run-once --repo /path/to/main
 mq publish --repo /path/to/main

@@ -15,6 +15,22 @@ import (
 	"github.com/recallnet/mainline/internal/state"
 )
 
+type submitOptions struct {
+	repoPath     string
+	branch       string
+	worktreePath string
+	requestedBy  string
+}
+
+type queuedSubmission struct {
+	Layout     git.RepositoryLayout
+	RepoRoot   string
+	Config     policy.File
+	Store      state.Store
+	RepoRecord state.RepositoryRecord
+	Submission state.IntegrationSubmission
+}
+
 func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	if err := applyAppTestFault("submit.start"); err != nil {
 		return err
@@ -37,20 +53,39 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 
-	layout, err := git.DiscoverRepositoryLayout(repoPath)
+	queued, err := queueSubmission(submitOptions{
+		repoPath:     repoPath,
+		branch:       branch,
+		worktreePath: worktreePath,
+		requestedBy:  requestedBy,
+	})
 	if err != nil {
 		return err
+	}
+
+	fmt.Fprintf(stdout, "Queued submission %d\n", queued.Submission.ID)
+	fmt.Fprintf(stdout, "Branch: %s\n", queued.Submission.BranchName)
+	fmt.Fprintf(stdout, "Worktree: %s\n", queued.Submission.SourceWorktree)
+	fmt.Fprintf(stdout, "Source SHA: %s\n", queued.Submission.SourceSHA)
+	return nil
+}
+
+func queueSubmission(opts submitOptions) (queuedSubmission, error) {
+	layout, err := git.DiscoverRepositoryLayout(opts.repoPath)
+	if err != nil {
+		return queuedSubmission{}, err
 	}
 	repoRoot := layout.RepositoryRoot
 
 	cfg, _, err := policy.LoadOrDefault(repoRoot)
 	if err != nil {
-		return err
+		return queuedSubmission{}, err
 	}
 	if cfg.Repo.MainWorktree == "" {
 		cfg.Repo.MainWorktree = layout.WorktreeRoot
 	}
 
+	worktreePath := opts.worktreePath
 	if worktreePath == "" {
 		worktreePath = layout.WorktreeRoot
 	}
@@ -58,61 +93,63 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	worktreeLayout, err := git.DiscoverRepositoryLayout(worktreePath)
 	if err != nil {
-		return err
+		return queuedSubmission{}, err
 	}
 	if filepath.Clean(worktreeLayout.GitDir) != filepath.Clean(layout.GitDir) {
-		return fmt.Errorf("worktree %s does not belong to repository %s", worktreePath, repoRoot)
+		return queuedSubmission{}, fmt.Errorf("worktree %s does not belong to repository %s", worktreePath, repoRoot)
 	}
 
 	engine := git.NewEngine(worktreePath)
 	worktree, err := engine.ResolveWorktree(worktreePath)
 	if err != nil {
-		return err
+		return queuedSubmission{}, err
 	}
 
+	branch := opts.branch
 	if branch == "" {
 		if worktree.IsDetached {
-			return fmt.Errorf("cannot submit from detached HEAD; pass --branch with a checked-out branch worktree")
+			return queuedSubmission{}, fmt.Errorf("cannot submit from detached HEAD; pass --branch with a checked-out branch worktree")
 		}
 		branch = worktree.Branch
 	}
 
 	currentBranch, err := engine.CurrentBranchAtPath(worktreePath)
 	if err != nil {
-		return err
+		return queuedSubmission{}, err
 	}
 	if currentBranch != branch {
-		return fmt.Errorf("branch %q is not checked out in worktree %s", branch, worktreePath)
+		return queuedSubmission{}, fmt.Errorf("branch %q is not checked out in worktree %s", branch, worktreePath)
 	}
 
 	if branch == cfg.Repo.ProtectedBranch {
-		return fmt.Errorf("cannot submit protected branch %q", branch)
+		return queuedSubmission{}, fmt.Errorf("cannot submit protected branch %q", branch)
 	}
 	if !engine.BranchExists(branch) {
-		return fmt.Errorf("branch %q does not exist", branch)
+		return queuedSubmission{}, fmt.Errorf("branch %q does not exist", branch)
 	}
 
 	clean, err := engine.WorktreeIsClean(worktreePath)
 	if err != nil {
-		return err
+		return queuedSubmission{}, err
 	}
 	if !clean {
-		return fmt.Errorf("source worktree %s is dirty; clean it before submission", worktreePath)
+		return queuedSubmission{}, fmt.Errorf("source worktree %s is dirty; clean it before submission", worktreePath)
 	}
 
 	commitCount, err := engine.CommitCount(branch)
 	if err != nil {
-		return err
+		return queuedSubmission{}, err
 	}
 	if commitCount == 0 {
-		return fmt.Errorf("branch %q has no commits", branch)
+		return queuedSubmission{}, fmt.Errorf("branch %q has no commits", branch)
 	}
 
 	headSHA, err := engine.BranchHeadSHA(branch)
 	if err != nil {
-		return fmt.Errorf("resolve branch head for %q: %w", branch, err)
+		return queuedSubmission{}, fmt.Errorf("resolve branch head for %q: %w", branch, err)
 	}
 
+	requestedBy := opts.requestedBy
 	if requestedBy == "" {
 		currentUser, err := user.Current()
 		if err == nil {
@@ -124,14 +161,14 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	store := state.NewStore(state.DefaultPath(layout.GitDir))
 	if !store.Exists() {
-		return fmt.Errorf("repository is not initialized; run `mainline repo init` first")
+		return queuedSubmission{}, fmt.Errorf("repository is not initialized; run `mainline repo init` first")
 	}
 
 	ctx := context.Background()
 	repoRecord, err := store.GetRepositoryByPath(ctx, repoRoot)
 	if err != nil {
 		if !errors.Is(err, state.ErrNotFound) {
-			return err
+			return queuedSubmission{}, err
 		}
 
 		repoRecord, err = store.UpsertRepository(ctx, state.RepositoryRecord{
@@ -142,7 +179,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 			PolicyVersion:   "v1",
 		})
 		if err != nil {
-			return err
+			return queuedSubmission{}, err
 		}
 	}
 
@@ -155,7 +192,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 		Status:         "queued",
 	})
 	if err != nil {
-		return err
+		return queuedSubmission{}, err
 	}
 
 	payload, err := json.Marshal(map[string]string{
@@ -165,7 +202,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 		"requested_by":    requestedBy,
 	})
 	if err != nil {
-		return err
+		return queuedSubmission{}, err
 	}
 	if _, err := store.AppendEvent(ctx, state.EventRecord{
 		RepoID:    repoRecord.ID,
@@ -174,12 +211,15 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 		EventType: "submission.created",
 		Payload:   payload,
 	}); err != nil {
-		return err
+		return queuedSubmission{}, err
 	}
 
-	fmt.Fprintf(stdout, "Queued submission %d\n", submission.ID)
-	fmt.Fprintf(stdout, "Branch: %s\n", submission.BranchName)
-	fmt.Fprintf(stdout, "Worktree: %s\n", submission.SourceWorktree)
-	fmt.Fprintf(stdout, "Source SHA: %s\n", submission.SourceSHA)
-	return nil
+	return queuedSubmission{
+		Layout:     layout,
+		RepoRoot:   repoRoot,
+		Config:     cfg,
+		Store:      store,
+		RepoRecord: repoRecord,
+		Submission: submission,
+	}, nil
 }

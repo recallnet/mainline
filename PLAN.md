@@ -693,6 +693,25 @@ Acceptance criteria:
 - maintainers can point to measured evidence for every major failure class before release
 - no release is called production ready unless it passes the full readiness rubric
 
+## Milestone 30: Factory Landing DX
+
+Goal:
+
+- make the queue-native migration from manual merge-plus-push to `mq` feel like one primitive, not an operator workflow
+
+Deliverables:
+
+- a single-command landing path from a source worktree
+- machine-readable success output for automation
+- timeout-aware waiting semantics that cover both integration and publish
+- command docs aimed at factory and daemon migration
+
+Acceptance criteria:
+
+- a factory daemon can replace merge-plus-push with one `mq` command from the wave worktree
+- the command returns nonzero on blocked, failed, cancelled, or timed-out landing
+- successful command completion means the branch landed and the protected branch reached a published state that includes that work
+
 ## Architecture Plan
 
 ## Repository Layout

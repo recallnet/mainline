@@ -39,7 +39,7 @@ _mainline_completions()
   _init_completion || return
 
   if [[ ${cword} -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo" -- "$cur") )
+    COMPREPLY=( $(compgen -W "land submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo" -- "$cur") )
     return
   fi
 
@@ -59,6 +59,9 @@ _mainline_completions()
   fi
 
   case "${words[1]}" in
+    land)
+      COMPREPLY=( $(compgen -W "--repo --branch --worktree --requested-by --json --timeout --poll-interval" -- "$cur") )
+      ;;
     submit)
       COMPREPLY=( $(compgen -W "--repo --branch --worktree" -- "$cur") )
       ;;
@@ -118,6 +121,7 @@ _mainline() {
   local -a commands
   commands=(
     'submit:queue a source worktree'
+    'land:submit and wait for integrate plus publish'
     'status:show queue and publish status'
     'confidence:show promotion confidence and evidence'
     'run-once:run one integration or publish cycle'
@@ -154,6 +158,10 @@ _mainline() {
       ;;
     completion)
       _values 'shell' bash zsh fish
+      return
+      ;;
+    land)
+      _arguments '--repo[source worktree path]:path:_files -/' '--branch[branch to submit]:branch:' '--worktree[source worktree override]:path:_files -/' '--requested-by[submitter identity]:identity:' '--json[json output]' '--timeout[maximum wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
       return
       ;;
     submit)
@@ -204,8 +212,8 @@ _mainline "$@"
 }
 
 func fishCompletionScript() string {
-	return `complete -c mainline -f -n "__fish_use_subcommand" -a "submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo"
-complete -c mq -f -n "__fish_use_subcommand" -a "submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo"
+	return `complete -c mainline -f -n "__fish_use_subcommand" -a "land submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo"
+complete -c mq -f -n "__fish_use_subcommand" -a "land submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo"
 
 complete -c mainline -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"
 complete -c mq -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"
@@ -247,6 +255,18 @@ complete -c mainline -n "__fish_seen_subcommand_from confidence" -l soak-summary
 complete -c mq -n "__fish_seen_subcommand_from confidence" -l soak-summary
 complete -c mainline -n "__fish_seen_subcommand_from confidence" -l cert-report
 complete -c mq -n "__fish_seen_subcommand_from confidence" -l cert-report
+complete -c mainline -n "__fish_seen_subcommand_from land" -l branch
+complete -c mq -n "__fish_seen_subcommand_from land" -l branch
+complete -c mainline -n "__fish_seen_subcommand_from land" -l worktree
+complete -c mq -n "__fish_seen_subcommand_from land" -l worktree
+complete -c mainline -n "__fish_seen_subcommand_from land" -l requested-by
+complete -c mq -n "__fish_seen_subcommand_from land" -l requested-by
+complete -c mainline -n "__fish_seen_subcommand_from land" -l json
+complete -c mq -n "__fish_seen_subcommand_from land" -l json
+complete -c mainline -n "__fish_seen_subcommand_from land" -l timeout
+complete -c mq -n "__fish_seen_subcommand_from land" -l timeout
+complete -c mainline -n "__fish_seen_subcommand_from land" -l poll-interval
+complete -c mq -n "__fish_seen_subcommand_from land" -l poll-interval
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l branch
 complete -c mq -n "__fish_seen_subcommand_from submit" -l branch
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l worktree

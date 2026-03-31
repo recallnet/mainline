@@ -10,6 +10,7 @@ import (
 )
 
 var cliCommands = []string{
+	"land",
 	"submit",
 	"status",
 	"confidence",
@@ -98,6 +99,7 @@ Usage:
   %s [command]
 
 Commands:
+  land
   submit
   status
   confidence
@@ -115,7 +117,7 @@ Commands:
   repo init
   repo show
 
-Implemented today: repo init/show, doctor, submit, status, confidence, run-once, retry, cancel, publish, logs, watch, events, completion, version, config edit.
+Implemented today: repo init/show, doctor, land, submit, status, confidence, run-once, retry, cancel, publish, logs, watch, events, completion, version, config edit.
 `, programName, programName)
 }
 
