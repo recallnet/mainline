@@ -57,6 +57,10 @@ class Mainline < Formula
   homepage "https://github.com/${repo}"
   version "${version#v}"
 
+  on_linux do
+    odie "mainline Homebrew releases are macOS-only; use the GitHub release archives or Nix on Linux"
+  end
+
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/${repo}/releases/download/${version}/${darwin_arm64_archive}"
