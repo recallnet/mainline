@@ -150,3 +150,41 @@ func TestSubmitRejectsWorktreeFromDifferentRepository(t *testing.T) {
 		t.Fatalf("expected cross-repo worktree rejection, got %v", err)
 	}
 }
+
+func TestSubmitAcceptsSymlinkedWorktreePath(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-worktree")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/symlink", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	filePath := filepath.Join(featurePath, "feature.txt")
+	if err := os.WriteFile(filePath, []byte("feature\n"), 0o644); err != nil {
+		t.Fatalf("write feature file: %v", err)
+	}
+	runTestCommand(t, featurePath, "git", "add", "feature.txt")
+	runTestCommand(t, featurePath, "git", "commit", "-m", "feature commit")
+
+	aliasDir := filepath.Join(t.TempDir(), "aliases")
+	if err := os.MkdirAll(aliasDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	aliasPath := filepath.Join(aliasDir, "feature-symlink")
+	if err := os.Symlink(featurePath, aliasPath); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", repoRoot, "--branch", "feature/symlink", "--worktree", aliasPath}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	if !strings.Contains(submitOut.String(), "Queued submission") {
+		t.Fatalf("expected queued output, got %q", submitOut.String())
+	}
+}

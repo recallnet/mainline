@@ -265,9 +265,9 @@ func (e Engine) ResolveWorktree(path string) (Worktree, error) {
 		return Worktree{}, err
 	}
 
-	cleanPath := filepath.Clean(path)
+	cleanPath := normalizePath(path)
 	for _, wt := range worktrees {
-		if filepath.Clean(wt.Path) == cleanPath {
+		if normalizePath(wt.Path) == cleanPath {
 			return wt, nil
 		}
 	}
@@ -499,7 +499,7 @@ func discoverWorktreePaths(layout RepositoryLayout) ([]string, error) {
 	seen := map[string]struct{}{}
 	paths := make([]string, 0, 4)
 	appendPath := func(path string) {
-		clean := filepath.Clean(path)
+		clean := normalizePath(path)
 		if _, ok := seen[clean]; ok {
 			return
 		}
