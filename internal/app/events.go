@@ -17,9 +17,32 @@ type eventOptions struct {
 	repoPath     string
 	limit        int
 	asJSON       bool
+	lifecycle    bool
 	follow       bool
 	pollInterval time.Duration
 	idleExit     bool
+}
+
+type lifecycleEmitter struct {
+	repoRoot    string
+	shaToBranch map[string]string
+}
+
+type lifecycleEvent struct {
+	Event           string   `json:"event"`
+	Timestamp       string   `json:"timestamp"`
+	RepositoryRoot  string   `json:"repository_root"`
+	Branch          string   `json:"branch,omitempty"`
+	SHA             string   `json:"sha,omitempty"`
+	SourceSHA       string   `json:"source_sha,omitempty"`
+	SubmissionID    int64    `json:"submission_id,omitempty"`
+	PublishID       int64    `json:"publish_request_id,omitempty"`
+	SourceWorktree  string   `json:"source_worktree,omitempty"`
+	Status          string   `json:"status,omitempty"`
+	Error           string   `json:"error,omitempty"`
+	ConflictFiles   []string `json:"conflict_files,omitempty"`
+	ProtectedTipSHA string   `json:"protected_tip_sha,omitempty"`
+	RetryHint       string   `json:"retry_hint,omitempty"`
 }
 
 func runEvents(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -43,6 +66,7 @@ func runEventCommand(commandName string, args []string, stdout io.Writer, stderr
 	fs.StringVar(&opts.repoPath, "repo", opts.repoPath, "repository path")
 	fs.IntVar(&opts.limit, "limit", opts.limit, "number of initial events to show")
 	fs.BoolVar(&opts.asJSON, "json", false, "output json")
+	fs.BoolVar(&opts.lifecycle, "lifecycle", false, "emit normalized branch lifecycle events")
 	fs.BoolVar(&opts.follow, "follow", false, "stream new events")
 	fs.DurationVar(&opts.pollInterval, "poll-interval", opts.pollInterval, "poll interval for --follow")
 	fs.BoolVar(&opts.idleExit, "idle-exit", false, "exit after the first idle follow poll")
@@ -62,6 +86,10 @@ func runEventStream(ctx context.Context, opts eventOptions, stdout io.Writer) er
 	if err != nil {
 		return err
 	}
+	emitter := lifecycleEmitter{
+		repoRoot:    repoRecord.CanonicalPath,
+		shaToBranch: make(map[string]string),
+	}
 
 	initial, err := store.ListEvents(ctx, repoRecord.ID, opts.limit)
 	if err != nil {
@@ -70,7 +98,7 @@ func runEventStream(ctx context.Context, opts eventOptions, stdout io.Writer) er
 	initial = reverseEvents(initial)
 	lastID := int64(0)
 	for _, event := range initial {
-		if err := writeEvent(stdout, event, opts.asJSON); err != nil {
+		if err := writeEvent(stdout, event, opts, &emitter); err != nil {
 			return err
 		}
 		lastID = event.ID
@@ -102,7 +130,7 @@ func runEventStream(ctx context.Context, opts eventOptions, stdout io.Writer) er
 				continue
 			}
 			for _, event := range events {
-				if err := writeEvent(stdout, event, opts.asJSON); err != nil {
+				if err := writeEvent(stdout, event, opts, &emitter); err != nil {
 					return err
 				}
 				lastID = event.ID
@@ -122,8 +150,20 @@ func reverseEvents(events []state.EventRecord) []state.EventRecord {
 	return reversed
 }
 
-func writeEvent(w io.Writer, event state.EventRecord, asJSON bool) error {
-	if asJSON {
+func writeEvent(w io.Writer, event state.EventRecord, opts eventOptions, emitter *lifecycleEmitter) error {
+	if opts.lifecycle {
+		lifecycle, ok, err := emitter.project(event)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+		encoder := json.NewEncoder(w)
+		return encoder.Encode(lifecycle)
+	}
+
+	if opts.asJSON {
 		encoder := json.NewEncoder(w)
 		return encoder.Encode(event)
 	}
@@ -139,4 +179,140 @@ func writeEvent(w io.Writer, event state.EventRecord, asJSON bool) error {
 	}
 	_, err := fmt.Fprintf(w, "%s  %s  %s%s\n", event.CreatedAt.UTC().Format(time.RFC3339), event.EventType, event.ItemType, itemID)
 	return err
+}
+
+func (e *lifecycleEmitter) project(event state.EventRecord) (lifecycleEvent, bool, error) {
+	record := lifecycleEvent{
+		Timestamp:      event.CreatedAt.UTC().Format(time.RFC3339),
+		RepositoryRoot: e.repoRoot,
+	}
+	if event.ItemID.Valid {
+		switch event.ItemType {
+		case "integration_submission":
+			record.SubmissionID = event.ItemID.Int64
+		case "publish_request":
+			record.PublishID = event.ItemID.Int64
+		}
+	}
+
+	var payload map[string]any
+	if len(event.Payload) > 0 {
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return lifecycleEvent{}, false, err
+		}
+	}
+
+	getString := func(key string) string {
+		value, ok := payload[key]
+		if !ok {
+			return ""
+		}
+		text, _ := value.(string)
+		return text
+	}
+
+	getStringSlice := func(key string) []string {
+		value, ok := payload[key]
+		if !ok {
+			return nil
+		}
+		items, ok := value.([]any)
+		if !ok {
+			return nil
+		}
+		out := make([]string, 0, len(items))
+		for _, item := range items {
+			text, ok := item.(string)
+			if ok && text != "" {
+				out = append(out, text)
+			}
+		}
+		return out
+	}
+
+	switch event.EventType {
+	case "submission.created":
+		record.Event = "submitted"
+		record.Status = "queued"
+		record.Branch = getString("branch")
+		record.SourceSHA = getString("source_sha")
+		record.SourceWorktree = getString("source_worktree")
+		return record, true, nil
+	case "integration.started":
+		record.Event = "integration_started"
+		record.Status = "running"
+		record.Branch = getString("branch")
+		record.SourceSHA = getString("submitted_source")
+		record.SourceWorktree = getString("source_worktree")
+		return record, true, nil
+	case "integration.blocked":
+		record.Event = "blocked"
+		record.Status = "blocked"
+		record.Error = getString("error")
+		record.Branch = getString("branch")
+		record.SourceWorktree = getString("source_worktree")
+		record.ConflictFiles = getStringSlice("conflict_files")
+		record.ProtectedTipSHA = getString("protected_tip_sha")
+		record.RetryHint = getString("retry_hint")
+		record.SHA = record.ProtectedTipSHA
+		return record, true, nil
+	case "integration.failed":
+		record.Event = "failed"
+		record.Status = "failed"
+		record.Error = getString("error")
+		record.Branch = getString("branch")
+		return record, true, nil
+	case "integration.succeeded":
+		record.Event = "integrated"
+		record.Status = "succeeded"
+		record.Branch = getString("branch")
+		record.SHA = getString("protected_sha")
+		if record.SHA != "" && record.Branch != "" {
+			e.shaToBranch[record.SHA] = record.Branch
+		}
+		return record, true, nil
+	case "submission.retried":
+		record.Event = "retried"
+		record.Status = "queued"
+		record.Branch = getString("branch")
+		return record, true, nil
+	case "submission.cancelled":
+		record.Event = "cancelled"
+		record.Status = "cancelled"
+		record.Branch = getString("branch")
+		return record, true, nil
+	case "publish.requested":
+		record.Event = "publish_requested"
+		record.Status = "queued"
+		record.SHA = getString("target_sha")
+		record.Branch = e.shaToBranch[record.SHA]
+		return record, true, nil
+	case "publish.completed":
+		record.Event = "published"
+		record.Status = "succeeded"
+		record.SHA = getString("target_sha")
+		record.Branch = e.shaToBranch[record.SHA]
+		return record, true, nil
+	case "publish.failed":
+		record.Event = "publish_failed"
+		record.Status = "failed"
+		record.SHA = getString("target_sha")
+		record.Branch = e.shaToBranch[record.SHA]
+		record.Error = getString("error")
+		return record, true, nil
+	case "publish.retried":
+		record.Event = "publish_retried"
+		record.Status = "queued"
+		record.SHA = getString("target_sha")
+		record.Branch = e.shaToBranch[record.SHA]
+		return record, true, nil
+	case "publish.cancelled":
+		record.Event = "publish_cancelled"
+		record.Status = "cancelled"
+		record.SHA = getString("target_sha")
+		record.Branch = e.shaToBranch[record.SHA]
+		return record, true, nil
+	default:
+		return lifecycleEvent{}, false, nil
+	}
 }

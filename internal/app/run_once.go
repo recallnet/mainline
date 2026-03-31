@@ -230,6 +230,7 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 			return blockIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult,
 				fmt.Errorf("rebase conflict in %s: resolve in the source worktree and resubmit", submission.SourceWorktree),
 				map[string]any{
+					"branch":             submission.BranchName,
 					"blocked_reason":     "rebase_conflict",
 					"conflict_files":     conflictFiles,
 					"protected_tip_sha":  protectedTipSHA,

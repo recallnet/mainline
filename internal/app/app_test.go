@@ -309,6 +309,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "__fish_seen_subcommand_from logs events\" -l json") {
 		t.Fatalf("expected fish completion to include logs/events --json, got %q", output)
 	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from logs events\" -l lifecycle") {
+		t.Fatalf("expected fish completion to include logs/events --lifecycle, got %q", output)
+	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from watch\" -l interval") {
 		t.Fatalf("expected fish completion to include watch flags, got %q", output)
 	}
@@ -630,6 +633,66 @@ func TestEventsJSONListsRecentEventsChronologically(t *testing.T) {
 	}
 }
 
+func TestEventsLifecycleJSONProjectsBranchTransitions(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-lifecycle")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/lifecycle", featurePath)
+	writeFileAndCommit(t, featurePath, "lifecycle.txt", "lifecycle\n", "feature lifecycle")
+	submitBranch(t, featurePath)
+	runOnce(t, repoRoot)
+	queuePublish(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	protectedSHA := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	remoteSHA := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteSHA != protectedSHA {
+		t.Fatalf("expected remote head %q, got %q", protectedSHA, remoteSHA)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "20"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) == 0 {
+		t.Fatalf("expected lifecycle events, got none")
+	}
+
+	foundSubmitted := false
+	foundIntegrated := false
+	foundPublished := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var event lifecycleEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("Unmarshal lifecycle event: %v", err)
+		}
+		switch event.Event {
+		case "submitted":
+			if event.Branch == "feature/lifecycle" {
+				foundSubmitted = true
+			}
+		case "integrated":
+			if event.Branch == "feature/lifecycle" && event.SHA == protectedSHA {
+				foundIntegrated = true
+			}
+		case "published":
+			if event.Branch == "feature/lifecycle" && event.SHA == protectedSHA {
+				foundPublished = true
+			}
+		}
+	}
+	if !foundSubmitted || !foundIntegrated || !foundPublished {
+		t.Fatalf("expected submitted/integrated/published lifecycle events, got %s", stdout.String())
+	}
+}
+
 func TestEventsFollowStreamsNewEvent(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
@@ -665,6 +728,49 @@ func TestEventsFollowStreamsNewEvent(t *testing.T) {
 	cancel()
 	<-done
 	t.Fatalf("timed out waiting for publish.requested in streamed events, got %q", output.String())
+}
+
+func TestEventsFollowLifecycleStreamsIntegratedBranchEvent(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	var output lockedBuffer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runEventStream(ctx, eventOptions{
+			repoPath:     repoRoot,
+			limit:        1,
+			asJSON:       true,
+			lifecycle:    true,
+			follow:       true,
+			pollInterval: 20 * time.Millisecond,
+		}, &output)
+	}()
+
+	featurePath := filepath.Join(t.TempDir(), "feature-follow-lifecycle")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/follow-lifecycle", featurePath)
+	writeFileAndCommit(t, featurePath, "follow.txt", "follow\n", "feature follow")
+	submitBranch(t, featurePath)
+	runOnce(t, repoRoot)
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		text := output.String()
+		if strings.Contains(text, "\"event\":\"integrated\"") && strings.Contains(text, "\"branch\":\"feature/follow-lifecycle\"") {
+			cancel()
+			if err := <-done; err != nil {
+				t.Fatalf("runEventStream returned error: %v", err)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	t.Fatalf("timed out waiting for integrated lifecycle event, got %q", output.String())
 }
 
 func TestLogsMatchesEventOutput(t *testing.T) {

@@ -87,13 +87,13 @@ _mainline_completions()
       COMPREPLY=( $(compgen -W "--repo --submission --publish" -- "$cur") )
       ;;
     logs)
-      COMPREPLY=( $(compgen -W "--repo --json --follow --limit --poll-interval --idle-exit" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --json --lifecycle --follow --limit --poll-interval --idle-exit" -- "$cur") )
       ;;
     watch)
       COMPREPLY=( $(compgen -W "--repo --json --events --interval --max-cycles" -- "$cur") )
       ;;
     events)
-      COMPREPLY=( $(compgen -W "--repo --json --follow --limit --poll-interval --idle-exit" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --json --lifecycle --follow --limit --poll-interval --idle-exit" -- "$cur") )
       ;;
     run-once|publish)
       COMPREPLY=( $(compgen -W "--repo" -- "$cur") )
@@ -193,7 +193,7 @@ _mainline() {
       return
       ;;
     logs)
-      _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--follow[stream events continuously]' '--limit[number of initial events]:count:' '--poll-interval[poll interval]:duration:' '--idle-exit[exit after an idle follow poll]'
+      _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--lifecycle[emit normalized branch lifecycle events]' '--follow[stream events continuously]' '--limit[number of initial events]:count:' '--poll-interval[poll interval]:duration:' '--idle-exit[exit after an idle follow poll]'
       return
       ;;
     watch)
@@ -201,7 +201,7 @@ _mainline() {
       return
       ;;
     events)
-      _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--follow[stream events continuously]' '--limit[number of initial events]:count:' '--poll-interval[poll interval]:duration:' '--idle-exit[exit after an idle follow poll]'
+      _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--lifecycle[emit normalized branch lifecycle events]' '--follow[stream events continuously]' '--limit[number of initial events]:count:' '--poll-interval[poll interval]:duration:' '--idle-exit[exit after an idle follow poll]'
       return
       ;;
     run-once|publish)
@@ -241,6 +241,8 @@ complete -c mainline -n "__fish_seen_subcommand_from status doctor repo show" -l
 complete -c mq -n "__fish_seen_subcommand_from status doctor repo show" -l json
 complete -c mainline -n "__fish_seen_subcommand_from logs events" -l json
 complete -c mq -n "__fish_seen_subcommand_from logs events" -l json
+complete -c mainline -n "__fish_seen_subcommand_from logs events" -l lifecycle
+complete -c mq -n "__fish_seen_subcommand_from logs events" -l lifecycle
 complete -c mainline -n "__fish_seen_subcommand_from logs events" -l follow
 complete -c mq -n "__fish_seen_subcommand_from logs events" -l follow
 complete -c mainline -n "__fish_seen_subcommand_from logs events" -l limit
