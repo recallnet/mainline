@@ -316,6 +316,79 @@ Nice-to-have:
 - event stream output
 - GitHub Action for release automation
 
+## Milestone 10: Self-Hosting and `mq` Dogfooding
+
+Goal:
+
+- use `mainline` on `mainline` through an explicit worktree-first workflow
+
+Deliverables:
+
+- committed repo-local worktree skill
+- documented self-hosting flow for feature worktrees, submission, integration, and publish
+- README and flow docs that point agents and humans at the same `mq` path
+- cleanup of any stale "submission only" caveats now that end-to-end landing exists
+
+Acceptance criteria:
+
+- this repo contains the worktree skill it expects agents to follow
+- the documented `mq` workflow is end-to-end and internally consistent
+- humans and agents have one canonical dogfooding path for landing work
+
+## Milestone 11: Operator Controls
+
+Goal:
+
+- give operators explicit recovery tools for queue items
+
+Deliverables:
+
+- `mainline retry`
+- `mainline cancel`
+- durable event logging for operator-triggered state changes
+- status/doctor output updated for canceled and retried items
+
+Acceptance criteria:
+
+- blocked or failed work can be retried without editing SQLite directly
+- queued work can be canceled safely
+- operator actions are visible in durable history
+
+## Milestone 12: Real Distribution Packaging
+
+Goal:
+
+- move from source-first install instructions to real package outputs
+
+Deliverables:
+
+- Homebrew formula or tap output
+- Nix package or flake output
+- release build metadata for published binaries
+- install docs that match published artifacts
+
+Acceptance criteria:
+
+- a new user can install `mainline`, `mq`, and `mainlined` through Homebrew or Nix without cloning the repo
+- release docs point at real published artifacts
+
+## Milestone 13: Live Operator UX
+
+Goal:
+
+- make queue supervision easier during active multi-agent use
+
+Deliverables:
+
+- event stream output for live queue observation
+- improved status views for active integrations and publishes
+- optional TUI status screen if the event stream proves insufficient
+
+Acceptance criteria:
+
+- operators can watch queue activity without polling raw SQLite-backed commands manually
+- active integrations, publishes, retries, and cancels are visible in a live operator-facing surface
+
 ## Architecture Plan
 
 ## Repository Layout

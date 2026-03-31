@@ -148,6 +148,10 @@ As an operator supervising many agent worktrees, I want agents to submit complet
 
 As a small team sharing conventions, we want a reproducible local branch queue that reduces accidental bad pushes and keeps `main` clean before CI even runs.
 
+### Self-Hosting Maintainer
+
+As a maintainer of `mainline` itself, I want the repo to ship a canonical worktree-first `mq` workflow so agents and humans dogfood the same path the product asks other repos to trust.
+
 ## Core Invariants
 
 The following are hard invariants:
@@ -162,6 +166,19 @@ The following are hard invariants:
 - Any integration failure that requires manual conflict resolution must leave the protected branch untouched and mark the submitted branch blocked.
 
 ## Functional Scope
+
+### Self-Hosting Workflow
+
+`mainline` should be able to manage this repository using its own CLI flow.
+
+Expected self-hosting behavior:
+
+- feature work happens in dedicated topic worktrees
+- all commits are made from those topic worktrees
+- landing happens through `mq submit`, `mq run-once`, and `mq publish` instead of manual merge into `main`
+- the repository may ship repo-local agent skills that codify that workflow, but those skills must match the actual command surface and current product behavior
+
+The self-hosting path is not separate from the product. It is a trust test for whether the operator model is clear enough to use on a real worktree-heavy repo.
 
 ### Branch Submission
 

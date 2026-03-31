@@ -44,12 +44,16 @@ Implemented milestones:
 - Milestone 5: publish queue MVP
 - Milestone 6: daemon mode
 - Milestone 7: policies and hooks
+- Milestone 8: in-flight publish preemption
+- Milestone 9: UX and OSS readiness
+- Milestone 10: self-hosting and `mq` dogfooding
 
 The current CLI can initialize a repo, inspect health, queue clean topic
 branches, run one serialized integration cycle locally, queue manual publish
 requests, push the latest protected-branch tip through the coalesced publish
 queue, run a polling background loop through `mainlined`, and enforce
-repo-specific pre-checks and hook/worktree policies.
+repo-specific pre-checks and hook/worktree policies while documenting the
+repo’s own committed `mq` dogfooding workflow.
 
 ## Why This Exists
 
@@ -336,6 +340,8 @@ mainlined --repo . --interval 2s --json
 ```
 
 The full worktree-first examples are in [docs/FLOWS.md](/Users/devrel/Projects/recallnet/mainline/docs/FLOWS.md).
+
+This repo also ships a repo-local worktree skill for agents at [.agents/skills/worktree/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/worktree/SKILL.md). It is the canonical self-hosting path for landing work through `mq`.
 
 ## Contributing
 

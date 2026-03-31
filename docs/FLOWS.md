@@ -50,3 +50,16 @@ mq status --repo /path/to/main --json
 ```
 
 This is the intended dogfooding direction for the repo-local worktree skill: agents do all edits and commits in topic worktrees, then land through `mq` instead of manually merging into `main`.
+
+## Repo-Local Skill
+
+This repo ships the canonical agent instructions in [.agents/skills/worktree/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/worktree/SKILL.md).
+
+That skill is now expected to use the real end-to-end flow:
+
+```bash
+mq submit --repo /path/to/topic-worktree
+mq status --repo /path/to/main --json
+mq run-once --repo /path/to/main
+mq publish --repo /path/to/main
+```
