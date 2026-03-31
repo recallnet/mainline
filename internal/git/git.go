@@ -18,6 +18,9 @@ import (
 
 const noUpstream = "(no upstream)"
 
+var ErrRebaseConflict = errors.New("git rebase reported conflicts")
+var ErrFastForwardRejected = errors.New("fast-forward update was rejected")
+
 // Engine holds repository-local Git execution context.
 type Engine struct {
 	RepositoryRoot string
@@ -90,6 +93,7 @@ func DiscoverRepositoryLayout(startPath string) (RepositoryLayout, error) {
 	if err != nil {
 		return RepositoryLayout{}, err
 	}
+	absPath = normalizePath(absPath)
 
 	info, err := os.Stat(absPath)
 	if err == nil && !info.IsDir() {
@@ -293,6 +297,40 @@ func (e Engine) CommitCount(branch string) (int, error) {
 	return count, nil
 }
 
+// FetchRemote updates remote tracking refs for the configured remote.
+func (e Engine) FetchRemote(worktreePath string, remote string) error {
+	if remote == "" {
+		return nil
+	}
+
+	_, err := e.runGit(worktreePath, "fetch", remote)
+	return err
+}
+
+// RebaseCurrentBranch rebases the checked-out branch in a worktree onto upstreamRef.
+func (e Engine) RebaseCurrentBranch(worktreePath string, upstreamRef string) error {
+	output, err := e.runGit(worktreePath, "rebase", upstreamRef)
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(output, "CONFLICT") || strings.Contains(output, "Resolve all conflicts manually") {
+		return fmt.Errorf("%w: %s", ErrRebaseConflict, strings.TrimSpace(output))
+	}
+	return err
+}
+
+// FastForwardCurrentBranch fast-forwards the checked-out branch in a worktree to targetRef.
+func (e Engine) FastForwardCurrentBranch(worktreePath string, targetRef string) error {
+	output, err := e.runGit(worktreePath, "merge", "--ff-only", targetRef)
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(output, "Not possible to fast-forward") || strings.Contains(output, "fatal: Not possible to fast-forward") {
+		return fmt.Errorf("%w: %s", ErrFastForwardRejected, strings.TrimSpace(output))
+	}
+	return err
+}
+
 // BranchStatus returns the branch status including upstream relationship.
 func (e Engine) BranchStatus(branch string, protectedBranch string) (BranchStatus, error) {
 	repo, err := e.open()
@@ -377,7 +415,7 @@ func (e Engine) InspectHealth(protectedBranch string, mainWorktreePath string) (
 	report := HealthReport{
 		RepositoryRoot:       repoRoot,
 		ProtectedBranch:      protectedBranch,
-		MainWorktreePath:     filepath.Clean(mainWorktreePath),
+		MainWorktreePath:     normalizePath(mainWorktreePath),
 		IsGitRepository:      true,
 		StaleLocks:           []string{},
 		UnfinishedQueueItems: []string{},
@@ -438,6 +476,16 @@ func (e Engine) open() (*gogit.Repository, error) {
 	}
 
 	return openRepository(layout.WorktreeRoot)
+}
+
+func (e Engine) runGit(worktreePath string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = filepath.Clean(worktreePath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(output), fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
+	}
+	return string(output), nil
 }
 
 func openRepository(path string) (*gogit.Repository, error) {
@@ -510,9 +558,9 @@ func resolveRepositoryLayoutFromWorktree(worktreePath string) (RepositoryLayout,
 			return RepositoryLayout{}, err
 		}
 		return RepositoryLayout{
-			RepositoryRoot: filepath.Clean(worktreePath),
-			WorktreeRoot:   filepath.Clean(worktreePath),
-			GitDir:         filepath.Join(filepath.Clean(worktreePath), ".git"),
+			RepositoryRoot: normalizePath(worktreePath),
+			WorktreeRoot:   normalizePath(worktreePath),
+			GitDir:         normalizePath(filepath.Join(filepath.Clean(worktreePath), ".git")),
 		}, nil
 	}
 
@@ -532,9 +580,9 @@ func resolveRepositoryLayoutFromWorktree(worktreePath string) (RepositoryLayout,
 	}
 
 	return RepositoryLayout{
-		RepositoryRoot: filepath.Clean(repositoryRoot),
-		WorktreeRoot:   filepath.Clean(worktreePath),
-		GitDir:         filepath.Clean(commonDir),
+		RepositoryRoot: normalizePath(repositoryRoot),
+		WorktreeRoot:   normalizePath(worktreePath),
+		GitDir:         normalizePath(commonDir),
 	}, nil
 }
 
@@ -592,4 +640,12 @@ func commitFromRef(repo *gogit.Repository, refName plumbing.ReferenceName) (*obj
 	}
 
 	return repo.CommitObject(ref.Hash())
+}
+
+func normalizePath(path string) string {
+	clean := filepath.Clean(path)
+	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
+		return filepath.Clean(resolved)
+	}
+	return clean
 }

@@ -24,6 +24,7 @@ Today the repo implements the foundation for that model:
 - durable SQLite state
 - per-repo integration and publish locks
 - branch submission into durable queue state
+- ordered single-repo integration with `run-once`
 - support for standard repos and bare-clone-plus-worktree layouts
 
 ## Current Status
@@ -34,15 +35,16 @@ Implemented milestones:
 - Milestone 1: repository discovery and health
 - Milestone 2: durable state and locking
 - Milestone 3: branch submission
+- Milestone 4: integration queue MVP
 
 Not implemented yet:
 
-- integration worker
 - publish worker
 - daemon loop
 
-The current CLI can initialize a repo, inspect health, and queue clean topic
-branches for later integration. It does not land or publish branches yet.
+The current CLI can initialize a repo, inspect health, queue clean topic
+branches, and run one serialized integration cycle locally. It does not push or
+publish branches yet.
 
 ## Why This Exists
 
@@ -93,6 +95,7 @@ mainline repo show --repo .
 mainline doctor --repo .
 mainline submit --repo /path/to/feature-worktree
 mainline submit --repo /path/to/repo --branch fix-login --worktree /path/to/feature-worktree
+mainline run-once --repo /path/to/repo
 ```
 
 The same commands work through `mq`:
@@ -102,6 +105,7 @@ mq repo init --repo .
 mq repo show --repo .
 mq doctor --repo .
 mq submit --repo /path/to/feature-worktree
+mq run-once --repo /path/to/repo
 ```
 
 ## Build
@@ -158,6 +162,17 @@ Current submission behavior:
 - rejects detached HEAD without an explicit branch worktree
 - stores submission metadata and emits a `submission.created` event
 
+Current integration behavior:
+
+- processes the oldest queued submission first
+- acquires a per-repo integration lock
+- validates a clean protected-branch worktree before integrating
+- rebases the submitted branch in its source worktree
+- fast-forwards the protected branch on success
+- marks rebase conflicts as `blocked` without touching the protected branch
+- marks stale or invalid submissions as `failed` with actionable error text
+- emits publish requests automatically when `[publish].mode = "auto"`
+
 Current lock domains:
 
 - integration
@@ -195,9 +210,8 @@ Implementation principles:
 
 Next milestones:
 
-1. integration queue MVP
-2. publish queue MVP
-3. daemon mode
+1. publish queue MVP
+2. daemon mode
 
 The project plan and spec live in:
 

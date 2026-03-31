@@ -205,6 +205,84 @@ func (s Store) CreateIntegrationSubmission(ctx context.Context, submission Integ
 	return scanIntegrationSubmission(row)
 }
 
+// GetIntegrationSubmission returns a submission by id.
+func (s Store) GetIntegrationSubmission(ctx context.Context, submissionID int64) (IntegrationSubmission, error) {
+	db, err := s.open()
+	if err != nil {
+		return IntegrationSubmission{}, err
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(ctx, `
+		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error, created_at, updated_at
+		FROM integration_submissions
+		WHERE id = ?
+	`, submissionID)
+
+	submission, err := scanIntegrationSubmission(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return IntegrationSubmission{}, ErrNotFound
+		}
+		return IntegrationSubmission{}, err
+	}
+
+	return submission, nil
+}
+
+// NextQueuedIntegrationSubmission returns the oldest queued submission for a repo.
+func (s Store) NextQueuedIntegrationSubmission(ctx context.Context, repoID int64) (IntegrationSubmission, error) {
+	db, err := s.open()
+	if err != nil {
+		return IntegrationSubmission{}, err
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(ctx, `
+		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error, created_at, updated_at
+		FROM integration_submissions
+		WHERE repo_id = ? AND status = 'queued'
+		ORDER BY created_at ASC, id ASC
+		LIMIT 1
+	`, repoID)
+
+	submission, err := scanIntegrationSubmission(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return IntegrationSubmission{}, ErrNotFound
+		}
+		return IntegrationSubmission{}, err
+	}
+
+	return submission, nil
+}
+
+// UpdateIntegrationSubmissionStatus updates submission state and error text.
+func (s Store) UpdateIntegrationSubmissionStatus(ctx context.Context, submissionID int64, status string, lastError string) (IntegrationSubmission, error) {
+	db, err := s.open()
+	if err != nil {
+		return IntegrationSubmission{}, err
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(ctx, `
+		UPDATE integration_submissions
+		SET status = ?, last_error = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+		RETURNING id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error, created_at, updated_at
+	`, status, lastError, submissionID)
+
+	submission, err := scanIntegrationSubmission(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return IntegrationSubmission{}, ErrNotFound
+		}
+		return IntegrationSubmission{}, err
+	}
+
+	return submission, nil
+}
+
 // CreatePublishRequest inserts a publish request row.
 func (s Store) CreatePublishRequest(ctx context.Context, request PublishRequest) (PublishRequest, error) {
 	db, err := s.open()
@@ -229,6 +307,37 @@ func (s Store) CreatePublishRequest(ctx context.Context, request PublishRequest)
 	)
 
 	return scanPublishRequest(row)
+}
+
+// ListPublishRequests returns publish requests for a repo ordered by creation time.
+func (s Store) ListPublishRequests(ctx context.Context, repoID int64) ([]PublishRequest, error) {
+	db, err := s.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, repo_id, target_sha, status, superseded_by, created_at, updated_at
+		FROM publish_requests
+		WHERE repo_id = ?
+		ORDER BY created_at ASC, id ASC
+	`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var requests []PublishRequest
+	for rows.Next() {
+		request, err := scanPublishRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, request)
+	}
+
+	return requests, rows.Err()
 }
 
 // AppendEvent inserts an event record.

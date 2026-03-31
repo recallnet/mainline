@@ -79,6 +79,8 @@ Commands:
   repo show
 
 Use "mainline [command]" for upcoming milestone implementations.
+Implemented today: repo init/show, doctor, submit, run-once.
+Still placeholders: status, publish.
 `
 }
 
