@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-31T21:16:53Z",
+  "generated_at": "2026-03-31T21:21:01Z",
   "mq_bin": "./bin/mq",
   "matrix": "docs/certification/matrix.json",
   "result": "passed",
@@ -21,30 +21,30 @@
       "result": "passed",
       "cycles": [
         {
-          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/mainline-dogfood/feature-1",
+          "submit_worktree": "/tmp/mainline-cert-aky7yzbv/mainline-dogfood/feature-1",
           "integrate_result": "Integrated submission 1 from cert/mainline-dogfood-1 onto main",
-          "publish_result": "Queued publish request 1\nTarget SHA: 443286098b71834190c1babcfb07e64e3ea299d4\nState path: /private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main/.git/mainline/state.db",
-          "publish_run_result": "Published request 1 for 443286098b71834190c1babcfb07e64e3ea299d4"
+          "publish_result": "Queued publish request 1\nTarget SHA: 71fed4b294addc978cd457a8ba2ac9a06dea9d92\nState path: /private/tmp/mainline-cert-aky7yzbv/mainline-dogfood/main/.git/mainline/state.db",
+          "publish_run_result": "Published request 1 for 71fed4b294addc978cd457a8ba2ac9a06dea9d92"
         },
         {
-          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/mainline-dogfood/feature-2",
+          "submit_worktree": "/tmp/mainline-cert-aky7yzbv/mainline-dogfood/feature-2",
           "integrate_result": "Integrated submission 2 from cert/mainline-dogfood-2 onto main",
-          "publish_result": "Queued publish request 2\nTarget SHA: d8b4ef3dcb8cd204c0bb52b78807109f514500f3\nState path: /private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main/.git/mainline/state.db",
-          "publish_run_result": "Published request 2 for d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+          "publish_result": "Queued publish request 2\nTarget SHA: 3f976a6046f7300cacd2b680cbedeec961c38690\nState path: /private/tmp/mainline-cert-aky7yzbv/mainline-dogfood/main/.git/mainline/state.db",
+          "publish_run_result": "Published request 2 for 3f976a6046f7300cacd2b680cbedeec961c38690"
         }
       ],
-      "local_head": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
-      "remote_head": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
+      "local_head": "3f976a6046f7300cacd2b680cbedeec961c38690",
+      "remote_head": "3f976a6046f7300cacd2b680cbedeec961c38690",
       "status": {
-        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main",
-        "state_path": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main/.git/mainline/state.db",
-        "current_worktree": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main",
+        "repository_root": "/private/tmp/mainline-cert-aky7yzbv/mainline-dogfood/main",
+        "state_path": "/private/tmp/mainline-cert-aky7yzbv/mainline-dogfood/main/.git/mainline/state.db",
+        "current_worktree": "/private/tmp/mainline-cert-aky7yzbv/mainline-dogfood/main",
         "current_branch": "main",
         "protected_branch": "main",
-        "protected_branch_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
+        "protected_branch_sha": "3f976a6046f7300cacd2b680cbedeec961c38690",
         "protected_upstream": {
           "name": "main",
-          "head_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
+          "head_sha": "3f976a6046f7300cacd2b680cbedeec961c38690",
           "upstream": "origin/main",
           "ahead_count": 0,
           "behind_count": 0,
@@ -67,25 +67,25 @@
           "ID": 2,
           "RepoID": 1,
           "BranchName": "cert/mainline-dogfood-2",
-          "SourceWorktree": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/feature-2",
-          "SourceSHA": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
+          "SourceWorktree": "/private/tmp/mainline-cert-aky7yzbv/mainline-dogfood/feature-2",
+          "SourceSHA": "3f976a6046f7300cacd2b680cbedeec961c38690",
           "RequestedBy": "devrel",
           "Status": "succeeded",
           "LastError": "",
-          "CreatedAt": "2026-03-31T21:16:44Z",
-          "UpdatedAt": "2026-03-31T21:16:44Z"
+          "CreatedAt": "2026-03-31T21:20:51Z",
+          "UpdatedAt": "2026-03-31T21:20:51Z"
         },
         "latest_publish": {
           "ID": 2,
           "RepoID": 1,
-          "TargetSHA": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3",
+          "TargetSHA": "3f976a6046f7300cacd2b680cbedeec961c38690",
           "Status": "succeeded",
           "SupersededBy": {
             "Int64": 0,
             "Valid": false
           },
-          "CreatedAt": "2026-03-31T21:16:44Z",
-          "UpdatedAt": "2026-03-31T21:16:44Z"
+          "CreatedAt": "2026-03-31T21:20:51Z",
+          "UpdatedAt": "2026-03-31T21:20:51Z"
         },
         "recent_events": [
           {
@@ -98,9 +98,9 @@
             },
             "EventType": "publish.completed",
             "Payload": {
-              "target_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+              "target_sha": "3f976a6046f7300cacd2b680cbedeec961c38690"
             },
-            "CreatedAt": "2026-03-31T21:16:44Z"
+            "CreatedAt": "2026-03-31T21:20:51Z"
           },
           {
             "ID": 12,
@@ -112,9 +112,9 @@
             },
             "EventType": "publish.started",
             "Payload": {
-              "target_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+              "target_sha": "3f976a6046f7300cacd2b680cbedeec961c38690"
             },
-            "CreatedAt": "2026-03-31T21:16:44Z"
+            "CreatedAt": "2026-03-31T21:20:51Z"
           },
           {
             "ID": 11,
@@ -127,10 +127,10 @@
             "EventType": "publish.requested",
             "Payload": {
               "reason": "manual",
-              "repo_root": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main",
-              "target_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+              "repo_root": "/private/tmp/mainline-cert-aky7yzbv/mainline-dogfood/main",
+              "target_sha": "3f976a6046f7300cacd2b680cbedeec961c38690"
             },
-            "CreatedAt": "2026-03-31T21:16:44Z"
+            "CreatedAt": "2026-03-31T21:20:51Z"
           },
           {
             "ID": 10,
@@ -143,9 +143,9 @@
             "EventType": "integration.succeeded",
             "Payload": {
               "branch": "cert/mainline-dogfood-2",
-              "protected_sha": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+              "protected_sha": "3f976a6046f7300cacd2b680cbedeec961c38690"
             },
-            "CreatedAt": "2026-03-31T21:16:44Z"
+            "CreatedAt": "2026-03-31T21:20:51Z"
           },
           {
             "ID": 9,
@@ -158,17 +158,17 @@
             "EventType": "integration.started",
             "Payload": {
               "branch": "cert/mainline-dogfood-2",
-              "source_worktree": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/feature-2",
-              "submitted_source": "d8b4ef3dcb8cd204c0bb52b78807109f514500f3"
+              "source_worktree": "/private/tmp/mainline-cert-aky7yzbv/mainline-dogfood/feature-2",
+              "submitted_source": "3f976a6046f7300cacd2b680cbedeec961c38690"
             },
-            "CreatedAt": "2026-03-31T21:16:44Z"
+            "CreatedAt": "2026-03-31T21:20:51Z"
           }
         ]
       },
       "doctor": {
-        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main",
+        "repository_root": "/private/tmp/mainline-cert-aky7yzbv/mainline-dogfood/main",
         "protected_branch": "main",
-        "main_worktree_path": "/private/tmp/mainline-cert-_sxkufoy/mainline-dogfood/main",
+        "main_worktree_path": "/private/tmp/mainline-cert-aky7yzbv/mainline-dogfood/main",
         "is_git_repository": true,
         "protected_branch_exists": true,
         "main_worktree_exists": true,
@@ -199,30 +199,30 @@
       "result": "passed",
       "cycles": [
         {
-          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/feature-1",
+          "submit_worktree": "/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/feature-1",
           "integrate_result": "Integrated submission 1 from cert/codecontext-hook-heavy-1 onto main",
-          "publish_result": "Queued publish request 1\nTarget SHA: ead0e5dcaaf9d51b4e08daf814855865b2fb46cc\nState path: /private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main/.git/mainline/state.db",
-          "publish_run_result": "Published request 1 for ead0e5dcaaf9d51b4e08daf814855865b2fb46cc"
+          "publish_result": "Queued publish request 1\nTarget SHA: 834baa9c97e61e4cbefc3c47c074ee9071fbf93d\nState path: /private/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/main/.git/mainline/state.db",
+          "publish_run_result": "Published request 1 for 834baa9c97e61e4cbefc3c47c074ee9071fbf93d"
         },
         {
-          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/feature-2",
+          "submit_worktree": "/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/feature-2",
           "integrate_result": "Integrated submission 2 from cert/codecontext-hook-heavy-2 onto main",
-          "publish_result": "Queued publish request 2\nTarget SHA: 1d83a82fdc4ef551264696d46cc05816e3df1379\nState path: /private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main/.git/mainline/state.db",
-          "publish_run_result": "Published request 2 for 1d83a82fdc4ef551264696d46cc05816e3df1379"
+          "publish_result": "Queued publish request 2\nTarget SHA: ab91963274aad8801052084e47caae3c14545a52\nState path: /private/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/main/.git/mainline/state.db",
+          "publish_run_result": "Published request 2 for ab91963274aad8801052084e47caae3c14545a52"
         }
       ],
-      "local_head": "1d83a82fdc4ef551264696d46cc05816e3df1379",
-      "remote_head": "1d83a82fdc4ef551264696d46cc05816e3df1379",
+      "local_head": "ab91963274aad8801052084e47caae3c14545a52",
+      "remote_head": "ab91963274aad8801052084e47caae3c14545a52",
       "status": {
-        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main",
-        "state_path": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main/.git/mainline/state.db",
-        "current_worktree": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main",
+        "repository_root": "/private/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/main",
+        "state_path": "/private/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/main/.git/mainline/state.db",
+        "current_worktree": "/private/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/main",
         "current_branch": "main",
         "protected_branch": "main",
-        "protected_branch_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379",
+        "protected_branch_sha": "ab91963274aad8801052084e47caae3c14545a52",
         "protected_upstream": {
           "name": "main",
-          "head_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379",
+          "head_sha": "ab91963274aad8801052084e47caae3c14545a52",
           "upstream": "origin/main",
           "ahead_count": 0,
           "behind_count": 0,
@@ -245,25 +245,25 @@
           "ID": 2,
           "RepoID": 1,
           "BranchName": "cert/codecontext-hook-heavy-2",
-          "SourceWorktree": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/feature-2",
-          "SourceSHA": "1d83a82fdc4ef551264696d46cc05816e3df1379",
+          "SourceWorktree": "/private/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/feature-2",
+          "SourceSHA": "ab91963274aad8801052084e47caae3c14545a52",
           "RequestedBy": "devrel",
           "Status": "succeeded",
           "LastError": "",
-          "CreatedAt": "2026-03-31T21:16:46Z",
-          "UpdatedAt": "2026-03-31T21:16:46Z"
+          "CreatedAt": "2026-03-31T21:20:53Z",
+          "UpdatedAt": "2026-03-31T21:20:53Z"
         },
         "latest_publish": {
           "ID": 2,
           "RepoID": 1,
-          "TargetSHA": "1d83a82fdc4ef551264696d46cc05816e3df1379",
+          "TargetSHA": "ab91963274aad8801052084e47caae3c14545a52",
           "Status": "succeeded",
           "SupersededBy": {
             "Int64": 0,
             "Valid": false
           },
-          "CreatedAt": "2026-03-31T21:16:46Z",
-          "UpdatedAt": "2026-03-31T21:16:46Z"
+          "CreatedAt": "2026-03-31T21:20:53Z",
+          "UpdatedAt": "2026-03-31T21:20:53Z"
         },
         "recent_events": [
           {
@@ -276,9 +276,9 @@
             },
             "EventType": "publish.completed",
             "Payload": {
-              "target_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379"
+              "target_sha": "ab91963274aad8801052084e47caae3c14545a52"
             },
-            "CreatedAt": "2026-03-31T21:16:46Z"
+            "CreatedAt": "2026-03-31T21:20:53Z"
           },
           {
             "ID": 12,
@@ -290,9 +290,9 @@
             },
             "EventType": "publish.started",
             "Payload": {
-              "target_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379"
+              "target_sha": "ab91963274aad8801052084e47caae3c14545a52"
             },
-            "CreatedAt": "2026-03-31T21:16:46Z"
+            "CreatedAt": "2026-03-31T21:20:53Z"
           },
           {
             "ID": 11,
@@ -305,10 +305,10 @@
             "EventType": "publish.requested",
             "Payload": {
               "reason": "manual",
-              "repo_root": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main",
-              "target_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379"
+              "repo_root": "/private/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/main",
+              "target_sha": "ab91963274aad8801052084e47caae3c14545a52"
             },
-            "CreatedAt": "2026-03-31T21:16:46Z"
+            "CreatedAt": "2026-03-31T21:20:53Z"
           },
           {
             "ID": 10,
@@ -321,9 +321,9 @@
             "EventType": "integration.succeeded",
             "Payload": {
               "branch": "cert/codecontext-hook-heavy-2",
-              "protected_sha": "1d83a82fdc4ef551264696d46cc05816e3df1379"
+              "protected_sha": "ab91963274aad8801052084e47caae3c14545a52"
             },
-            "CreatedAt": "2026-03-31T21:16:46Z"
+            "CreatedAt": "2026-03-31T21:20:53Z"
           },
           {
             "ID": 9,
@@ -336,17 +336,17 @@
             "EventType": "integration.started",
             "Payload": {
               "branch": "cert/codecontext-hook-heavy-2",
-              "source_worktree": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/feature-2",
-              "submitted_source": "1d83a82fdc4ef551264696d46cc05816e3df1379"
+              "source_worktree": "/private/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/feature-2",
+              "submitted_source": "ab91963274aad8801052084e47caae3c14545a52"
             },
-            "CreatedAt": "2026-03-31T21:16:46Z"
+            "CreatedAt": "2026-03-31T21:20:53Z"
           }
         ]
       },
       "doctor": {
-        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main",
+        "repository_root": "/private/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/main",
         "protected_branch": "main",
-        "main_worktree_path": "/private/tmp/mainline-cert-_sxkufoy/codecontext-hook-heavy/main",
+        "main_worktree_path": "/private/tmp/mainline-cert-aky7yzbv/codecontext-hook-heavy/main",
         "is_git_repository": true,
         "protected_branch_exists": true,
         "main_worktree_exists": true,
@@ -378,30 +378,30 @@
       "result": "passed",
       "cycles": [
         {
-          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/feature-1",
+          "submit_worktree": "/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/feature-1",
           "integrate_result": "Integrated submission 1 from cert/tradecore-bare-hook-heavy-1 onto main",
-          "publish_result": "Queued publish request 1\nTarget SHA: 666f399c4ad7e6e6a4db4f6c0fd04d0ff9afb8ed\nState path: /private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git/mainline/state.db",
-          "publish_run_result": "Published request 1 for 666f399c4ad7e6e6a4db4f6c0fd04d0ff9afb8ed"
+          "publish_result": "Queued publish request 1\nTarget SHA: ab353d0c1157f8881782dfa923113e6adce02e6e\nState path: /private/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/repo.git/mainline/state.db",
+          "publish_run_result": "Published request 1 for ab353d0c1157f8881782dfa923113e6adce02e6e"
         },
         {
-          "submit_worktree": "/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/feature-2",
+          "submit_worktree": "/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/feature-2",
           "integrate_result": "Integrated submission 2 from cert/tradecore-bare-hook-heavy-2 onto main",
-          "publish_result": "Queued publish request 2\nTarget SHA: 74701cbbca420b496581b979722f9ad1c75e03d5\nState path: /private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git/mainline/state.db",
-          "publish_run_result": "Published request 2 for 74701cbbca420b496581b979722f9ad1c75e03d5"
+          "publish_result": "Queued publish request 2\nTarget SHA: 1485e43ec3c2152e1fe322295fb6dcd39687aacb\nState path: /private/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/repo.git/mainline/state.db",
+          "publish_run_result": "Published request 2 for 1485e43ec3c2152e1fe322295fb6dcd39687aacb"
         }
       ],
-      "local_head": "74701cbbca420b496581b979722f9ad1c75e03d5",
-      "remote_head": "74701cbbca420b496581b979722f9ad1c75e03d5",
+      "local_head": "1485e43ec3c2152e1fe322295fb6dcd39687aacb",
+      "remote_head": "1485e43ec3c2152e1fe322295fb6dcd39687aacb",
       "status": {
-        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git",
-        "state_path": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git/mainline/state.db",
-        "current_worktree": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/main",
+        "repository_root": "/private/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/repo.git",
+        "state_path": "/private/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/repo.git/mainline/state.db",
+        "current_worktree": "/private/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/main",
         "current_branch": "main",
         "protected_branch": "main",
-        "protected_branch_sha": "74701cbbca420b496581b979722f9ad1c75e03d5",
+        "protected_branch_sha": "1485e43ec3c2152e1fe322295fb6dcd39687aacb",
         "protected_upstream": {
           "name": "main",
-          "head_sha": "74701cbbca420b496581b979722f9ad1c75e03d5",
+          "head_sha": "1485e43ec3c2152e1fe322295fb6dcd39687aacb",
           "upstream": "(no upstream)",
           "ahead_count": 0,
           "behind_count": 0,
@@ -424,25 +424,25 @@
           "ID": 2,
           "RepoID": 1,
           "BranchName": "cert/tradecore-bare-hook-heavy-2",
-          "SourceWorktree": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/feature-2",
-          "SourceSHA": "74701cbbca420b496581b979722f9ad1c75e03d5",
+          "SourceWorktree": "/private/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/feature-2",
+          "SourceSHA": "1485e43ec3c2152e1fe322295fb6dcd39687aacb",
           "RequestedBy": "devrel",
           "Status": "succeeded",
           "LastError": "",
-          "CreatedAt": "2026-03-31T21:16:52Z",
-          "UpdatedAt": "2026-03-31T21:16:52Z"
+          "CreatedAt": "2026-03-31T21:21:00Z",
+          "UpdatedAt": "2026-03-31T21:21:00Z"
         },
         "latest_publish": {
           "ID": 2,
           "RepoID": 1,
-          "TargetSHA": "74701cbbca420b496581b979722f9ad1c75e03d5",
+          "TargetSHA": "1485e43ec3c2152e1fe322295fb6dcd39687aacb",
           "Status": "succeeded",
           "SupersededBy": {
             "Int64": 0,
             "Valid": false
           },
-          "CreatedAt": "2026-03-31T21:16:53Z",
-          "UpdatedAt": "2026-03-31T21:16:53Z"
+          "CreatedAt": "2026-03-31T21:21:00Z",
+          "UpdatedAt": "2026-03-31T21:21:01Z"
         },
         "recent_events": [
           {
@@ -455,9 +455,9 @@
             },
             "EventType": "publish.completed",
             "Payload": {
-              "target_sha": "74701cbbca420b496581b979722f9ad1c75e03d5"
+              "target_sha": "1485e43ec3c2152e1fe322295fb6dcd39687aacb"
             },
-            "CreatedAt": "2026-03-31T21:16:53Z"
+            "CreatedAt": "2026-03-31T21:21:01Z"
           },
           {
             "ID": 12,
@@ -469,9 +469,9 @@
             },
             "EventType": "publish.started",
             "Payload": {
-              "target_sha": "74701cbbca420b496581b979722f9ad1c75e03d5"
+              "target_sha": "1485e43ec3c2152e1fe322295fb6dcd39687aacb"
             },
-            "CreatedAt": "2026-03-31T21:16:53Z"
+            "CreatedAt": "2026-03-31T21:21:01Z"
           },
           {
             "ID": 11,
@@ -484,10 +484,10 @@
             "EventType": "publish.requested",
             "Payload": {
               "reason": "manual",
-              "repo_root": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git",
-              "target_sha": "74701cbbca420b496581b979722f9ad1c75e03d5"
+              "repo_root": "/private/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/repo.git",
+              "target_sha": "1485e43ec3c2152e1fe322295fb6dcd39687aacb"
             },
-            "CreatedAt": "2026-03-31T21:16:53Z"
+            "CreatedAt": "2026-03-31T21:21:00Z"
           },
           {
             "ID": 10,
@@ -500,9 +500,9 @@
             "EventType": "integration.succeeded",
             "Payload": {
               "branch": "cert/tradecore-bare-hook-heavy-2",
-              "protected_sha": "74701cbbca420b496581b979722f9ad1c75e03d5"
+              "protected_sha": "1485e43ec3c2152e1fe322295fb6dcd39687aacb"
             },
-            "CreatedAt": "2026-03-31T21:16:52Z"
+            "CreatedAt": "2026-03-31T21:21:00Z"
           },
           {
             "ID": 9,
@@ -515,17 +515,17 @@
             "EventType": "integration.started",
             "Payload": {
               "branch": "cert/tradecore-bare-hook-heavy-2",
-              "source_worktree": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/feature-2",
-              "submitted_source": "74701cbbca420b496581b979722f9ad1c75e03d5"
+              "source_worktree": "/private/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/feature-2",
+              "submitted_source": "1485e43ec3c2152e1fe322295fb6dcd39687aacb"
             },
-            "CreatedAt": "2026-03-31T21:16:52Z"
+            "CreatedAt": "2026-03-31T21:21:00Z"
           }
         ]
       },
       "doctor": {
-        "repository_root": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/repo.git",
+        "repository_root": "/private/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/repo.git",
         "protected_branch": "main",
-        "main_worktree_path": "/private/tmp/mainline-cert-_sxkufoy/tradecore-bare-hook-heavy/main",
+        "main_worktree_path": "/private/tmp/mainline-cert-aky7yzbv/tradecore-bare-hook-heavy/main",
         "is_git_repository": true,
         "protected_branch_exists": true,
         "main_worktree_exists": true,

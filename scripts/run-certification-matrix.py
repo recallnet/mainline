@@ -202,6 +202,7 @@ def main():
     parser.add_argument("--matrix", default="docs/certification/matrix.json")
     parser.add_argument("--output", default="docs/certification/latest-report.json")
     parser.add_argument("--keep-workdirs", action="store_true")
+    parser.add_argument("--keep-workdirs-dir", default=os.environ.get("CERT_KEEP_WORKDIRS_DIR", ""))
     parser.add_argument("--mq-bin", default=os.environ.get("MQ_BIN", "mq"))
     args = parser.parse_args()
 
@@ -256,10 +257,14 @@ def main():
         print(json.dumps(report, indent=2))
 
         if args.keep_workdirs:
-            keep_root = output_path.parent / "workdirs"
-            if keep_root.exists():
-                shutil.rmtree(keep_root)
+            if args.keep_workdirs_dir:
+                keep_root = Path(args.keep_workdirs_dir).resolve()
+                if keep_root.exists():
+                    shutil.rmtree(keep_root)
+            else:
+                keep_root = Path(tempfile.mkdtemp(prefix="mainline-cert-workdirs-")).resolve()
             shutil.copytree(temp_root, keep_root)
+            print(f"preserved certification workdirs at {keep_root}", file=sys.stderr)
 
     return 0
 

@@ -287,8 +287,9 @@ make certify-matrix
 ```
 
 That exercises `mq` against disposable mirrors of the configured real repos,
-records the required repo-specific policy defaults, and writes a machine-readable
-report under `docs/certification/`.
+using the local `./bin/mq` by default, records the required repo-specific
+policy defaults, and writes a machine-readable report under
+`docs/certification/`.
 
 ## Install
 

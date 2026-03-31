@@ -28,8 +28,8 @@ soak:
 soak-randomized:
 	./scripts/run-soak.sh --randomized --runs $${SOAK_RUNS:-25} --seed-base $${SOAK_SEED_BASE:-20260331} --output $${SOAK_OUT:-artifacts/soak-randomized}
 
-certify-matrix:
-	python3 ./scripts/run-certification-matrix.py --matrix $${CERT_MATRIX:-docs/certification/matrix.json} --output $${CERT_OUT:-docs/certification/latest-report.json}
+certify-matrix: build
+	python3 ./scripts/run-certification-matrix.py --mq-bin $${MQ_BIN:-./bin/mq} --matrix $${CERT_MATRIX:-docs/certification/matrix.json} --output $${CERT_OUT:-docs/certification/latest-report.json}
 
 build:
 	mkdir -p bin
