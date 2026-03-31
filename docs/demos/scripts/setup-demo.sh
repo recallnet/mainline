@@ -5,13 +5,9 @@ ROOT="/tmp/mainline-readme-demo"
 REPO="$ROOT/demo"
 FEATURE="$ROOT/feature-login"
 ORIGIN="$ROOT/demo-origin.git"
-MAINLINE_ROOT="/Users/devrel/Projects/recallnet/mainline"
-BIN_DIR="$MAINLINE_ROOT/bin"
 
 rm -rf "$ROOT"
 mkdir -p "$ROOT"
-
-make -C "$MAINLINE_ROOT" build >/dev/null
 
 cd "$ROOT"
 
@@ -24,7 +20,7 @@ echo hello > README.md
 git add README.md
 git commit -m "initial commit" >/dev/null
 
-"$BIN_DIR/mq" repo init --repo . >/dev/null
+mq repo init --repo . >/dev/null
 git add mainline.toml
 git commit -m "configure mainline" >/dev/null
 
