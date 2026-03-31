@@ -395,6 +395,35 @@ echo "# args-ok" >> "$2"
 	}
 }
 
+func TestConfigEditJSONKeepsEditorStdoutOffMachineOutput(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	editorPath := filepath.Join(t.TempDir(), "editor-json.sh")
+	editorOutput := []byte(`#!/bin/sh
+echo "editor-noise"
+echo "# json-ok" >> "$1"
+`)
+	if err := os.WriteFile(editorPath, editorOutput, 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runConfigEdit([]string{"--repo", repoRoot, "--editor", editorPath, "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runConfigEdit returned error: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v\nstdout=%q", err, stdout.String())
+	}
+	if result["ok"] != true {
+		t.Fatalf("expected ok=true, got %#v", result)
+	}
+	if !strings.Contains(stderr.String(), "editor-noise") {
+		t.Fatalf("expected editor stdout to be redirected to stderr, got stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 func createTestRepo(t *testing.T) (string, string) {
 	t.Helper()
 

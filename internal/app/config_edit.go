@@ -55,7 +55,11 @@ func runConfigEdit(args []string, stdout io.Writer, stderr io.Writer) error {
 	cmd := exec.Command(editorCommand[0], append(editorCommand[1:], configPath)...)
 	cmd.Dir = repoRoot
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = stdout
+	if asJSON {
+		cmd.Stdout = stderr
+	} else {
+		cmd.Stdout = stdout
+	}
 	cmd.Stderr = stderr
 
 	if err := cmd.Run(); err != nil {
