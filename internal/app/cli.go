@@ -15,6 +15,7 @@ var cliCommands = []string{
 	"run-once",
 	"publish",
 	"doctor",
+	"completion",
 	"repo init",
 	"repo show",
 }
@@ -75,12 +76,11 @@ Commands:
   run-once
   publish
   doctor
+  completion
   repo init
   repo show
 
-Use "mainline [command]" for upcoming milestone implementations.
-Implemented today: repo init/show, doctor, submit, run-once, publish.
-Still placeholders: status.
+Implemented today: repo init/show, doctor, submit, status, run-once, publish, completion.
 `
 }
 

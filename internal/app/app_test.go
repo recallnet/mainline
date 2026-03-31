@@ -153,17 +153,73 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	if err := runCLI([]string{"status", "--json"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"completion", "bash"}, &stdout, &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "status is not implemented yet") {
-		t.Fatalf("expected status placeholder output, got %q", output)
+	if !strings.Contains(output, "complete -F _mainline_completions mainline") {
+		t.Fatalf("expected completion script output, got %q", output)
+	}
+}
+
+func TestStatusJSONReportsQueuedWork(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-status")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/status", featurePath)
+	writeFileAndCommit(t, featurePath, "status.txt", "status\n", "feature status")
+	submitBranch(t, featurePath)
+	queuePublish(t, repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json", "--events", "2"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
 	}
 
-	if !strings.Contains(output, "trailing argument") {
-		t.Fatalf("expected trailing args note, got %q", output)
+	var status statusResult
+	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if status.Counts.QueuedSubmissions != 1 {
+		t.Fatalf("expected 1 queued submission, got %+v", status.Counts)
+	}
+	if status.Counts.QueuedPublishes != 1 {
+		t.Fatalf("expected 1 queued publish, got %+v", status.Counts)
+	}
+	if status.LatestSubmission == nil || status.LatestSubmission.BranchName != "feature/status" {
+		t.Fatalf("expected latest submission for feature/status, got %+v", status.LatestSubmission)
+	}
+	if status.LatestPublish == nil || status.LatestPublish.Status != "queued" {
+		t.Fatalf("expected latest queued publish, got %+v", status.LatestPublish)
+	}
+	if len(status.RecentEvents) == 0 {
+		t.Fatalf("expected recent events, got none")
+	}
+}
+
+func TestStatusHumanOutputIncludesRecentSummary(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	queuePublish(t, repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "Queue: submissions queued=0") {
+		t.Fatalf("expected queue summary, got %q", output)
+	}
+	if !strings.Contains(output, "Latest publish: #") {
+		t.Fatalf("expected latest publish summary, got %q", output)
+	}
+	if !strings.Contains(output, "Recent events:") {
+		t.Fatalf("expected recent events section, got %q", output)
 	}
 }
 

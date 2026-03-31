@@ -28,6 +28,8 @@ Today the repo implements the foundation for that model:
 - coalesced latest-tip publish queue with `publish` and `run-once`
 - polling daemon mode with `mainlined`
 - repo-defined policy checks, hook coordination, and worktree layout warnings
+- real `status` output for queue, publish, and recent event visibility
+- shell completion generation for `bash`, `zsh`, and `fish`
 - support for standard repos and bare-clone-plus-worktree layouts
 
 ## Current Status
@@ -103,10 +105,13 @@ Current repo commands:
 mainline repo init --repo .
 mainline repo show --repo .
 mainline doctor --repo .
+mainline status --repo .
+mainline status --repo . --json
 mainline submit --repo /path/to/feature-worktree
 mainline submit --repo /path/to/repo --branch fix-login --worktree /path/to/feature-worktree
 mainline run-once --repo /path/to/repo
 mainline publish --repo /path/to/repo
+mainline completion zsh
 ```
 
 The same commands work through `mq`:
@@ -115,14 +120,17 @@ The same commands work through `mq`:
 mq repo init --repo .
 mq repo show --repo .
 mq doctor --repo .
+mq status --repo .
 mq submit --repo /path/to/feature-worktree
 mq run-once --repo /path/to/repo
 mq publish --repo /path/to/repo
 ```
 
-## Build
+## Install
 
 Requires Go 1.25 or newer.
+
+From source:
 
 ```bash
 git clone git@github.com:recallnet/mainline.git
@@ -135,6 +143,28 @@ Binaries are written to `./bin`:
 - `./bin/mainline`
 - `./bin/mq`
 - `./bin/mainlined`
+
+With `go install`:
+
+```bash
+go install github.com/recallnet/mainline/cmd/mainline@latest
+go install github.com/recallnet/mainline/cmd/mq@latest
+go install github.com/recallnet/mainline/cmd/mainlined@latest
+```
+
+Homebrew and Nix examples live in [docs/install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md). They are intentionally source-first for now because no tap or flake output is published yet.
+
+## Shell Completion
+
+Generate completion scripts from the current binary:
+
+```bash
+mainline completion bash
+mainline completion zsh
+mainline completion fish
+```
+
+The same completion command works through `mq`. Install snippets are in [docs/install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md).
 
 ## Development
 
@@ -203,6 +233,13 @@ Current daemon behavior:
 - exits cleanly on `SIGINT` or `SIGTERM`
 - preserves queue truth across restarts because durable state remains in SQLite
 
+Current status behavior:
+
+- summarizes queued, running, blocked, failed, and succeeded work
+- shows the latest submission and publish request
+- emits machine-readable JSON with `status --json`
+- includes recent durable events for quick operator context
+
 Current policy behavior:
 
 - repo config now includes hook policy, dirty-worktree policy, worktree layout policy, and shell checks
@@ -249,6 +286,8 @@ The project plan and spec live in:
 
 - `PLAN.md`
 - `SPEC.md`
+- [docs/ARCHITECTURE.md](/Users/devrel/Projects/recallnet/mainline/docs/ARCHITECTURE.md)
+- [docs/FLOWS.md](/Users/devrel/Projects/recallnet/mainline/docs/FLOWS.md)
 
 Example policy config:
 
@@ -276,6 +315,31 @@ PreIntegrate = ["go test ./..."]
 PrePublish = ["go test ./..."]
 CommandTimeout = "30s"
 ```
+
+## Dogfooding Flows
+
+Example solo loop:
+
+```bash
+mq repo init --repo .
+mq status --repo .
+mq submit --repo /path/to/topic-worktree
+mq run-once --repo .
+mq publish --repo .
+```
+
+Example agent-heavy loop:
+
+```bash
+mq status --repo . --json
+mainlined --repo . --interval 2s --json
+```
+
+The full worktree-first examples are in [docs/FLOWS.md](/Users/devrel/Projects/recallnet/mainline/docs/FLOWS.md).
+
+## Contributing
+
+Development workflow, verification expectations, and doc conventions are in [CONTRIBUTING.md](/Users/devrel/Projects/recallnet/mainline/CONTRIBUTING.md).
 
 ## License
 

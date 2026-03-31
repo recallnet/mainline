@@ -584,6 +584,42 @@ func scanEventRecord(row scanner) (EventRecord, error) {
 	return event, err
 }
 
+// ListEvents returns recent events for a repo ordered by most recent first.
+func (s Store) ListEvents(ctx context.Context, repoID int64, limit int) ([]EventRecord, error) {
+	db, err := s.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	if limit <= 0 {
+		limit = 20
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, repo_id, item_type, item_id, event_type, payload, created_at
+		FROM events
+		WHERE repo_id = ?
+		ORDER BY created_at DESC, id DESC
+		LIMIT ?
+	`, repoID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []EventRecord
+	for rows.Next() {
+		event, err := scanEventRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+
+	return events, rows.Err()
+}
+
 // ListIntegrationSubmissions returns submissions for a repo ordered by creation time.
 func (s Store) ListIntegrationSubmissions(ctx context.Context, repoID int64) ([]IntegrationSubmission, error) {
 	db, err := s.open()
