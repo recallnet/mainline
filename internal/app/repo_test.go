@@ -130,6 +130,20 @@ func TestRepoInitFromBareCloneWorktreeUsesSharedStorage(t *testing.T) {
 	}
 }
 
+func TestDoctorDoesNotCreateStateDBBeforeInit(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(repoRoot, ".git", "mainline", "state.db")); !os.IsNotExist(err) {
+		t.Fatalf("expected no state db before init, got err=%v", err)
+	}
+}
+
 func createTestRepo(t *testing.T) (string, string) {
 	t.Helper()
 

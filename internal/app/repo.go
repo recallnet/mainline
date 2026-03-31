@@ -170,8 +170,10 @@ func runRepoShow(args []string, stdout io.Writer, stderr io.Writer) error {
 	store := state.NewStore(state.DefaultPath(layout.GitDir))
 	ctx := context.Background()
 	var record state.RepositoryRecord
-	if found, err := store.GetRepositoryByPath(ctx, repoRoot); err == nil {
-		record = found
+	if store.Exists() {
+		if found, err := store.GetRepositoryByPath(ctx, repoRoot); err == nil {
+			record = found
+		}
 	}
 
 	engine := git.NewEngine(layout.WorktreeRoot)
@@ -265,15 +267,14 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	store := state.NewStore(state.DefaultPath(layout.GitDir))
 	ctx := context.Background()
-	if err := store.EnsureSchema(ctx); err != nil {
-		return err
-	}
-	if record, err := store.GetRepositoryByPath(ctx, repoRoot); err == nil {
-		count, err := store.CountUnfinishedItems(ctx, record.ID)
-		if err != nil {
-			return err
+	if store.Exists() {
+		if record, err := store.GetRepositoryByPath(ctx, repoRoot); err == nil {
+			count, err := store.CountUnfinishedItems(ctx, record.ID)
+			if err != nil {
+				return err
+			}
+			report.UnfinishedQueueItems = make([]string, count)
 		}
-		report.UnfinishedQueueItems = make([]string, count)
 	}
 
 	lockManager := state.NewLockManager(repoRoot, layout.GitDir)

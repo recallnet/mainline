@@ -81,6 +81,20 @@ func DefaultPath(gitDir string) string {
 	return filepath.Join(gitDir, defaultDirName, defaultDBName)
 }
 
+// Exists reports whether the state database file already exists.
+func (s Store) Exists() bool {
+	if s.Path == "" {
+		return false
+	}
+
+	info, err := os.Stat(s.Path)
+	if err != nil {
+		return false
+	}
+
+	return !info.IsDir()
+}
+
 // EnsureSchema creates the durable store schema if needed.
 func (s Store) EnsureSchema(ctx context.Context) error {
 	db, err := s.open()
