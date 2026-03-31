@@ -5,10 +5,14 @@ ROOT="/tmp/mainline-readme-demo"
 REPO="$ROOT/demo"
 FEATURE="$ROOT/feature-login"
 ORIGIN="$ROOT/demo-origin.git"
-BIN_DIR="/Users/devrel/Projects/recallnet/mainline/bin"
+MAINLINE_ROOT="/Users/devrel/Projects/recallnet/mainline"
+BIN_DIR="$MAINLINE_ROOT/bin"
 
 rm -rf "$ROOT"
 mkdir -p "$ROOT"
+
+make -C "$MAINLINE_ROOT" build >/dev/null
+
 cd "$ROOT"
 
 git init --initial-branch=main demo >/dev/null

@@ -15,10 +15,14 @@ Type "cd $(cat /tmp/mainline-demo-repo.txt)"
 Enter
 Sleep 500ms
 
-Type "./bin/mq submit --repo ../feature-login >/dev/null && ./bin/mq run-once --repo . >/dev/null && ./bin/mq publish --repo . >/dev/null"
+Type "MQ=/Users/devrel/Projects/recallnet/mainline/bin/mq"
+Enter
+Sleep 500ms
+
+Type "$MQ submit --repo ../feature-login >/dev/null && $MQ run-once --repo . >/dev/null && $MQ publish --repo . >/dev/null"
 Enter
 Sleep 2s
 
-Type "./bin/mq logs --repo . --limit 10"
+Type "$MQ logs --repo . --limit 10"
 Enter
 Sleep 3s
