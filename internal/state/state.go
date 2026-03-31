@@ -705,6 +705,68 @@ func (s Store) ListIntegrationSubmissions(ctx context.Context, repoID int64) ([]
 	return submissions, rows.Err()
 }
 
+// ListIntegrationSubmissionsByStatus returns submissions for a repo filtered by status.
+func (s Store) ListIntegrationSubmissionsByStatus(ctx context.Context, repoID int64, status string) ([]IntegrationSubmission, error) {
+	db, err := s.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error, created_at, updated_at
+		FROM integration_submissions
+		WHERE repo_id = ? AND status = ?
+		ORDER BY created_at ASC, id ASC
+	`, repoID, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var submissions []IntegrationSubmission
+	for rows.Next() {
+		submission, err := scanIntegrationSubmission(rows)
+		if err != nil {
+			return nil, err
+		}
+		submissions = append(submissions, submission)
+	}
+
+	return submissions, rows.Err()
+}
+
+// ListPublishRequestsByStatus returns publish requests for a repo filtered by status.
+func (s Store) ListPublishRequestsByStatus(ctx context.Context, repoID int64, status string) ([]PublishRequest, error) {
+	db, err := s.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, repo_id, target_sha, status, superseded_by, created_at, updated_at
+		FROM publish_requests
+		WHERE repo_id = ? AND status = ?
+		ORDER BY created_at ASC, id ASC
+	`, repoID, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var requests []PublishRequest
+	for rows.Next() {
+		request, err := scanPublishRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, request)
+	}
+
+	return requests, rows.Err()
+}
+
 var ErrNotFound = errors.New("state record not found")
 
 const schemaSQL = `

@@ -357,6 +357,9 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 		fmt.Fprintln(stdout, "Upstream: none")
 	}
 	fmt.Fprintf(stdout, "Stale locks: %d\n", len(report.StaleLocks))
+	for _, stale := range report.StaleLocks {
+		fmt.Fprintf(stdout, "Stale lock: %s\n", stale)
+	}
 	fmt.Fprintf(stdout, "Unfinished queue items: %d\n", len(report.UnfinishedQueueItems))
 	fmt.Fprintf(stdout, "Warnings: %d\n", len(report.Warnings))
 	for _, warning := range report.Warnings {
