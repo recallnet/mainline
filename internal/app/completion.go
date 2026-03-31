@@ -39,7 +39,7 @@ _mainline_completions()
   _init_completion || return
 
   if [[ ${cword} -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "submit status run-once retry cancel publish logs watch events doctor completion version config repo" -- "$cur") )
+    COMPREPLY=( $(compgen -W "submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo" -- "$cur") )
     return
   fi
 
@@ -64,6 +64,9 @@ _mainline_completions()
       ;;
     status)
       COMPREPLY=( $(compgen -W "--repo --json --events" -- "$cur") )
+      ;;
+    confidence)
+      COMPREPLY=( $(compgen -W "--repo --json --events --soak-summary --cert-report" -- "$cur") )
       ;;
     retry|cancel)
       COMPREPLY=( $(compgen -W "--repo --submission --publish" -- "$cur") )
@@ -116,6 +119,7 @@ _mainline() {
   commands=(
     'submit:queue a source worktree'
     'status:show queue and publish status'
+    'confidence:show promotion confidence and evidence'
     'run-once:run one integration or publish cycle'
     'retry:requeue a blocked, failed, or cancelled item'
     'cancel:cancel a queued or failed item'
@@ -160,6 +164,10 @@ _mainline() {
       _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--events[number of recent events]:count:'
       return
       ;;
+    confidence)
+      _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--events[number of recent events]:count:' '--soak-summary[path to soak summary json]:path:_files' '--cert-report[path to certification report json]:path:_files'
+      return
+      ;;
     retry|cancel)
       _arguments '--repo[repository path]:path:_files -/' '--submission[integration submission id]:id:' '--publish[publish request id]:id:'
       return
@@ -196,8 +204,8 @@ _mainline "$@"
 }
 
 func fishCompletionScript() string {
-	return `complete -c mainline -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish logs watch events doctor completion version config repo"
-complete -c mq -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish logs watch events doctor completion version config repo"
+	return `complete -c mainline -f -n "__fish_use_subcommand" -a "submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo"
+complete -c mq -f -n "__fish_use_subcommand" -a "submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo"
 
 complete -c mainline -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"
 complete -c mq -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"
@@ -231,6 +239,14 @@ complete -c mainline -n "__fish_seen_subcommand_from watch" -l max-cycles
 complete -c mq -n "__fish_seen_subcommand_from watch" -l max-cycles
 complete -c mainline -n "__fish_seen_subcommand_from status" -l events
 complete -c mq -n "__fish_seen_subcommand_from status" -l events
+complete -c mainline -n "__fish_seen_subcommand_from confidence" -l json
+complete -c mq -n "__fish_seen_subcommand_from confidence" -l json
+complete -c mainline -n "__fish_seen_subcommand_from confidence" -l events
+complete -c mq -n "__fish_seen_subcommand_from confidence" -l events
+complete -c mainline -n "__fish_seen_subcommand_from confidence" -l soak-summary
+complete -c mq -n "__fish_seen_subcommand_from confidence" -l soak-summary
+complete -c mainline -n "__fish_seen_subcommand_from confidence" -l cert-report
+complete -c mq -n "__fish_seen_subcommand_from confidence" -l cert-report
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l branch
 complete -c mq -n "__fish_seen_subcommand_from submit" -l branch
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l worktree

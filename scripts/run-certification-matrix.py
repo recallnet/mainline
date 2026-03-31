@@ -207,6 +207,7 @@ def main():
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
+    mainline_commit = git(repo_root, "rev-parse", "HEAD")
     matrix_path = (repo_root / args.matrix).resolve()
     output_path = (repo_root / args.output).resolve()
     matrix = json.loads(matrix_path.read_text())
@@ -246,6 +247,7 @@ def main():
 
         report = {
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "mainline_commit": mainline_commit,
             "mq_bin": args.mq_bin,
             "matrix": str(matrix_path.relative_to(repo_root)),
             "result": "passed" if all(item["result"] == "passed" for item in results) else "failed",

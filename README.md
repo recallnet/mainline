@@ -226,7 +226,7 @@ This is already a working system:
 - repository discovery for normal repos and bare-clone-plus-worktree layouts
 - durable SQLite state stored with shared Git storage
 - serialized submission, integration, and publish coordination
-- the full operator surface: `submit`, `run-once`, `publish`, `status`, `watch`, `logs`, `events`, `retry`, and `cancel`
+- the full operator surface: `submit`, `run-once`, `publish`, `status`, `confidence`, `watch`, `logs`, `events`, `retry`, and `cancel`
 - daemon mode through `mainlined`
 - hook-aware direct-to-`main` safety gates
 - crash/restart recovery for orphaned running submissions and publishes
@@ -290,6 +290,17 @@ That exercises `mq` against disposable mirrors of the configured real repos,
 using the local `./bin/mq` by default, records the required repo-specific
 policy defaults, and writes a machine-readable report under
 `docs/certification/`.
+
+To answer "does this checkout currently meet the promotion bar?":
+
+```bash
+mq confidence --repo /path/to/main
+```
+
+That combines live queue health, queue-derived rates and latencies, the latest
+soak summary, and the latest certification report into one explicit gate
+report. Evidence only counts if it was produced for the current `mainline`
+commit.
 
 ## Install
 

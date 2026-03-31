@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -201,6 +202,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "complete -F _mainline_completions mainline") {
 		t.Fatalf("expected completion script output, got %q", output)
 	}
+	if !strings.Contains(output, "confidence run-once retry cancel publish") {
+		t.Fatalf("expected completion script to include confidence, got %q", output)
+	}
 	if !strings.Contains(output, "retry cancel publish") {
 		t.Fatalf("expected completion script to include retry and cancel, got %q", output)
 	}
@@ -227,8 +231,117 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "__fish_seen_subcommand_from watch\" -l interval") {
 		t.Fatalf("expected fish completion to include watch flags, got %q", output)
 	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from confidence\" -l cert-report") {
+		t.Fatalf("expected fish completion to include confidence flags, got %q", output)
+	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from config edit\" -l editor") {
 		t.Fatalf("expected fish completion to include config edit flags, got %q", output)
+	}
+}
+
+func TestConfidenceJSONReportsPromotionReadyForCurrentEvidence(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+
+	head := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	soakPath := filepath.Join(t.TempDir(), "summary.json")
+	certPath := filepath.Join(t.TempDir(), "latest-report.json")
+	writeJSONFile(t, soakPath, map[string]any{
+		"mainline_commit": head,
+		"generated_at":    "2026-03-31T21:30:00Z",
+		"runs":            5,
+		"passed_runs":     5,
+		"failed_runs":     0,
+		"flake_rate":      0.0,
+	})
+	writeJSONFile(t, certPath, map[string]any{
+		"mainline_commit": head,
+		"generated_at":    "2026-03-31T21:30:00Z",
+		"result":          "passed",
+		"repos": []map[string]any{
+			{"id": "dogfood", "result": "passed"},
+			{"id": "bare", "result": "passed"},
+		},
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"confidence", "--repo", repoRoot, "--json", "--soak-summary", soakPath, "--cert-report", certPath}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var report confidenceResult
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !report.PromotionReady {
+		t.Fatalf("expected promotion ready report, got %+v", report)
+	}
+	if report.CurrentCommit != head {
+		t.Fatalf("expected current commit %q, got %q", head, report.CurrentCommit)
+	}
+	if len(report.Gates) == 0 {
+		t.Fatalf("expected gates, got none")
+	}
+}
+
+func TestConfidenceFailsOnMismatchedEvidenceCommit(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+
+	soakPath := filepath.Join(t.TempDir(), "summary.json")
+	certPath := filepath.Join(t.TempDir(), "latest-report.json")
+	writeJSONFile(t, soakPath, map[string]any{
+		"mainline_commit": "deadbeef",
+		"generated_at":    "2026-03-31T21:30:00Z",
+		"runs":            5,
+		"passed_runs":     5,
+		"failed_runs":     0,
+		"flake_rate":      0.0,
+	})
+	writeJSONFile(t, certPath, map[string]any{
+		"mainline_commit": "deadbeef",
+		"generated_at":    "2026-03-31T21:30:00Z",
+		"result":          "passed",
+		"repos": []map[string]any{
+			{"id": "dogfood", "result": "passed"},
+		},
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"confidence", "--repo", repoRoot, "--json", "--soak-summary", soakPath, "--cert-report", certPath}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var report confidenceResult
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if report.PromotionReady {
+		t.Fatalf("expected promotion gate failure, got %+v", report)
+	}
+	foundMismatch := false
+	for _, gate := range report.Gates {
+		if (gate.Name == "soak_current" || gate.Name == "certification_current") && !gate.Passed {
+			foundMismatch = true
+		}
+	}
+	if !foundMismatch {
+		t.Fatalf("expected evidence commit mismatch gates, got %+v", report.Gates)
+	}
+}
+
+func writeJSONFile(t *testing.T, path string, v any) {
+	t.Helper()
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
 	}
 }
 

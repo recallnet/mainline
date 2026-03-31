@@ -52,6 +52,7 @@ Run the daemon in the protected worktree and let agents only submit:
 mainlined --repo /path/to/main --interval 2s --json
 mq submit --repo /path/to/agent-worktree
 mq status --repo /path/to/main --json
+mq confidence --repo /path/to/main
 mq watch --repo /path/to/main
 mq logs --repo /path/to/main --follow
 mq events --repo /path/to/main --follow

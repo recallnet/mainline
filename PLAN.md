@@ -649,6 +649,10 @@ Acceptance criteria:
 - regressions in latency, blocked rate, or flaky publish behavior are visible as metrics deltas
 - maintainers can tell whether a build meets the current promotion bar from one report
 
+Implementation note:
+
+- soak and certification evidence should be stamped with the `mainline` commit they were produced from so the confidence report can reject stale evidence from a different build
+
 ## Milestone 28: Upgrade And Migration Safety
 
 Goal:

@@ -32,6 +32,8 @@ func handleCommand(command string, args []string, stdout io.Writer, stderr io.Wr
 		return runSubmit(args, stdout, stderr)
 	case "status":
 		return runStatus(args, stdout, stderr)
+	case "confidence":
+		return runConfidence(args, stdout, stderr)
 	case "run-once":
 		return runRunOnce(args, stdout, stderr)
 	case "retry":

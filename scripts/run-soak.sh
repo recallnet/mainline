@@ -43,6 +43,7 @@ if ! [[ "${seed_base}" =~ ^-?[0-9]+$ ]]; then
 fi
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+mainline_commit="$(git -C "${repo_root}" rev-parse HEAD)"
 if [[ "${output_dir}" = /* ]]; then
   output_root="${output_dir}"
 else
@@ -94,7 +95,7 @@ PY
   summary_rows+=("${run_id}:${status}:${wall_ms}:${run_seed}:${report_path}:${log_path}")
 done
 
-python3 - "${soak_root}" "${runs}" "${pass_count}" "${fail_count}" "${randomized}" "${seed_base}" "${summary_rows[@]}" <<'PY'
+python3 - "${soak_root}" "${runs}" "${pass_count}" "${fail_count}" "${randomized}" "${seed_base}" "${mainline_commit}" "${summary_rows[@]}" <<'PY'
 import datetime
 import json
 import pathlib
@@ -106,7 +107,8 @@ pass_count = int(sys.argv[3])
 fail_count = int(sys.argv[4])
 randomized = sys.argv[5] == "1"
 seed_base = int(sys.argv[6])
-rows = sys.argv[7:]
+mainline_commit = sys.argv[7]
+rows = sys.argv[8:]
 
 run_summaries = []
 duration_values = []
@@ -136,6 +138,7 @@ for row in rows:
     })
 
 summary = {
+    "mainline_commit": mainline_commit,
     "runs": runs,
     "randomized": randomized,
     "seed_base": seed_base,
