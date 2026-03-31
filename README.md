@@ -154,11 +154,19 @@ mq repo show --repo /path/to/main --json
 Queue work:
 
 ```bash
+mq submit --repo /path/to/topic-worktree --check --json
+mq submit --repo /path/to/topic-worktree --json
 mq land --repo /path/to/topic-worktree --json --timeout 30m
 mq submit --repo /path/to/topic-worktree
 mq run-once --repo /path/to/main
 mq publish --repo /path/to/main
 ```
+
+For factory or daemon callers, the intended handoff is:
+
+- `mq submit --check --json` to fast-fail deterministic problems before queue mutation
+- `mq submit --json` to record the branch and get a stable `submission_id`
+- `mainlined` or `mq land` to carry the branch the rest of the way to integrated and published state
 
 Observe and control:
 

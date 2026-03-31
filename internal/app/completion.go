@@ -63,7 +63,7 @@ _mainline_completions()
       COMPREPLY=( $(compgen -W "--repo --branch --worktree --requested-by --json --timeout --poll-interval" -- "$cur") )
       ;;
     submit)
-      COMPREPLY=( $(compgen -W "--repo --branch --worktree" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --branch --worktree --requested-by --json --check" -- "$cur") )
       ;;
     status)
       COMPREPLY=( $(compgen -W "--repo --json --events" -- "$cur") )
@@ -165,7 +165,7 @@ _mainline() {
       return
       ;;
     submit)
-      _arguments '--repo[repository path]:path:_files -/' '--branch[branch name]:branch:' '--worktree[source worktree]:path:_files -/'
+      _arguments '--repo[repository path]:path:_files -/' '--branch[branch name]:branch:' '--worktree[source worktree]:path:_files -/' '--requested-by[submitter identity]:identity:' '--json[json output]' '--check[validate submission without queueing]'
       return
       ;;
     status)
@@ -271,6 +271,12 @@ complete -c mainline -n "__fish_seen_subcommand_from submit" -l branch
 complete -c mq -n "__fish_seen_subcommand_from submit" -l branch
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l worktree
 complete -c mq -n "__fish_seen_subcommand_from submit" -l worktree
+complete -c mainline -n "__fish_seen_subcommand_from submit" -l requested-by
+complete -c mq -n "__fish_seen_subcommand_from submit" -l requested-by
+complete -c mainline -n "__fish_seen_subcommand_from submit" -l json
+complete -c mq -n "__fish_seen_subcommand_from submit" -l json
+complete -c mainline -n "__fish_seen_subcommand_from submit" -l check
+complete -c mq -n "__fish_seen_subcommand_from submit" -l check
 complete -c mainline -n "__fish_seen_subcommand_from retry cancel" -l submission
 complete -c mq -n "__fish_seen_subcommand_from retry cancel" -l submission
 complete -c mainline -n "__fish_seen_subcommand_from retry cancel" -l publish

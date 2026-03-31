@@ -207,6 +207,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "land submit status confidence run-once retry cancel publish") {
 		t.Fatalf("expected completion script to include land and confidence, got %q", output)
 	}
+	if !strings.Contains(output, "--repo --branch --worktree --requested-by --json --check") {
+		t.Fatalf("expected submit completion flags, got %q", output)
+	}
 	if !strings.Contains(output, "retry cancel publish") {
 		t.Fatalf("expected completion script to include retry and cancel, got %q", output)
 	}
@@ -238,6 +241,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from land\" -l timeout") {
 		t.Fatalf("expected fish completion to include land flags, got %q", output)
+	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from submit\" -l check") {
+		t.Fatalf("expected fish completion to include submit check flag, got %q", output)
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from config edit\" -l editor") {
 		t.Fatalf("expected fish completion to include config edit flags, got %q", output)

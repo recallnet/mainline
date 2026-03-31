@@ -712,6 +712,25 @@ Acceptance criteria:
 - the command returns nonzero on blocked, failed, cancelled, or timed-out landing
 - successful command completion means the branch landed and the protected branch reached a published state that includes that work
 
+## Milestone 31: Submission Preflight And Machine Output
+
+Goal:
+
+- make branch handoff into the queue cheap for automation to validate and parse
+
+Deliverables:
+
+- `submit --check` for deterministic no-mutation preflight
+- `submit --json` for machine-readable success and failure output
+- stable error codes for deterministic submission failures
+- docs and completions that show the factory migration path
+
+Acceptance criteria:
+
+- automation can detect submitter-side failures without parsing human prose
+- `submit --check` performs no queue mutation
+- `submit --json` returns submission metadata on success and stable error codes on deterministic failure
+
 ## Architecture Plan
 
 ## Repository Layout
