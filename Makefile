@@ -5,7 +5,7 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS ?= -X github.com/recallnet/mainline/internal/app.Version=$(VERSION) -X github.com/recallnet/mainline/internal/app.Commit=$(COMMIT) -X github.com/recallnet/mainline/internal/app.Date=$(DATE)
 
-.PHONY: fmt lint test test-invariants test-stress build release-snapshot install-hooks test-hooks
+.PHONY: fmt lint test test-invariants test-stress soak build release-snapshot install-hooks test-hooks
 
 fmt:
 	$(GO) fmt ./...
@@ -21,6 +21,9 @@ test-invariants:
 
 test-stress:
 	$(GO) test ./internal/app -run TestStress -count=1
+
+soak:
+	./scripts/run-soak.sh --runs $${SOAK_RUNS:-25} --output $${SOAK_OUT:-artifacts/soak}
 
 build:
 	mkdir -p bin

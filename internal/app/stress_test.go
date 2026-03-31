@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -115,6 +116,11 @@ func TestStressParallelAgentQueueAndPublishCoalescing(t *testing.T) {
 	payload, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		t.Fatalf("Marshal report: %v", err)
+	}
+	if reportPath := os.Getenv("MAINLINE_STRESS_REPORT_PATH"); reportPath != "" {
+		if err := os.WriteFile(reportPath, payload, 0o644); err != nil {
+			t.Fatalf("WriteFile stress report: %v", err)
+		}
 	}
 	t.Logf("stress report:\n%s", payload)
 }

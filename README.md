@@ -259,6 +259,16 @@ One representative run produced:
 
 That is the behavior the tool exists to guarantee.
 
+For repeated evidence instead of a single green run, use the soak runner:
+
+```bash
+make soak
+```
+
+That reruns the stress workload many times, stores per-run logs and JSON
+reports under `artifacts/soak/`, and writes an aggregate `summary.json` with
+pass count, fail count, flake rate, duration, and queue-depth metrics.
+
 ## Install
 
 Requires Go 1.25 or newer.

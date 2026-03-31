@@ -33,6 +33,9 @@ jobs:
       - name: Stress suite
         run: make test-stress
 
+      - name: Short soak summary
+        run: ./scripts/run-soak.sh --runs 3 --output artifacts/soak-ci
+
       - name: Release script regression test
         run: ./scripts/test-build-release.sh
 
