@@ -367,6 +367,7 @@ func (e Engine) StartPushBranch(worktreePath string, remote string, branch strin
 	args = append(args, remote, branch+":"+branch)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = filepath.Clean(worktreePath)
+	cmd.SysProcAttr = pushSysProcAttr()
 
 	var output bytes.Buffer
 	cmd.Stdout = &output
@@ -413,7 +414,7 @@ func (h *PushHandle) Interrupt() error {
 	if h == nil || h.cmd == nil || h.cmd.Process == nil {
 		return nil
 	}
-	return h.cmd.Process.Kill()
+	return InterruptProcess(h.cmd.Process.Pid)
 }
 
 // Wait waits for the subprocess and returns captured output.
@@ -423,6 +424,14 @@ func (h *PushHandle) Wait() (string, error) {
 	}
 	result := <-h.done
 	return result.output, result.err
+}
+
+// InterruptProcess terminates an in-flight git push subprocess and its children when supported.
+func InterruptProcess(pid int) error {
+	if pid == 0 {
+		return nil
+	}
+	return interruptProcess(pid)
 }
 
 // BranchStatus returns the branch status including upstream relationship.

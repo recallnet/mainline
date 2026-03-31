@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -437,11 +436,7 @@ func maybeRequestPublishPreemption(ctx context.Context, store state.Store, repoR
 		return "Publish worker busy.", nil
 	}
 
-	process, err := os.FindProcess(metadata.PID)
-	if err != nil {
-		return "", err
-	}
-	if err := process.Kill(); err != nil {
+	if err := git.InterruptProcess(metadata.PID); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("Requested publish preemption for newer target %s", latest.TargetSHA), nil

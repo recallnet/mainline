@@ -5,7 +5,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -260,8 +262,9 @@ func TestRunOnceCanPreemptInFlightPublishForNewerTarget(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
 
+	hookPIDPath := filepath.Join(t.TempDir(), "pre-push.pid")
 	hookPath := filepath.Join(repoRoot, ".git", "hooks", "pre-push")
-	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nsleep 2\nexit 0\n"), 0o755); err != nil {
+	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\necho $$ > "+hookPIDPath+"\nsleep 5\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -291,7 +294,7 @@ func TestRunOnceCanPreemptInFlightPublishForNewerTarget(t *testing.T) {
 		resultCh <- result
 	}()
 
-	time.Sleep(200 * time.Millisecond)
+	hookPID := waitForHookPID(t, hookPIDPath)
 
 	writeFileAndCommit(t, repoRoot, "two.txt", "two\n", "main change two")
 	latestHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
@@ -315,6 +318,7 @@ func TestRunOnceCanPreemptInFlightPublishForNewerTarget(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatalf("timed out waiting for interrupted publish cycle")
 	}
+	waitForProcessExit(t, hookPID)
 
 	if _, err := runOneCycle(repoRoot); err != nil {
 		t.Fatalf("final runOneCycle returned error: %v", err)
@@ -344,6 +348,42 @@ func TestRunOnceCanPreemptInFlightPublishForNewerTarget(t *testing.T) {
 	if requests[0].Status != "superseded" {
 		t.Fatalf("expected first request superseded, got %q", requests[0].Status)
 	}
+}
+
+func waitForHookPID(t *testing.T, path string) int {
+	t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		payload, err := os.ReadFile(path)
+		if err == nil {
+			pid, convErr := strconv.Atoi(strings.TrimSpace(string(payload)))
+			if convErr != nil {
+				t.Fatalf("Atoi: %v", convErr)
+			}
+			return pid
+		}
+		if !os.IsNotExist(err) {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for pre-push hook pid file %s", path)
+	return 0
+}
+
+func waitForProcessExit(t *testing.T, pid int) {
+	t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		err := syscall.Kill(pid, 0)
+		if err != nil {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for process %d to exit", pid)
 }
 
 func updatePublishMode(t *testing.T, repoRoot string, mode string) {
