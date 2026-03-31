@@ -122,3 +122,31 @@ func TestSubmitRejectsDetachedHeadWithoutBranch(t *testing.T) {
 		t.Fatalf("expected detached HEAD rejection, got %v", err)
 	}
 }
+
+func TestSubmitRejectsWorktreeFromDifferentRepository(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	otherRepoRoot, _ := createTestRepo(t)
+	foreignWorktree := filepath.Join(t.TempDir(), "foreign-feature")
+	runTestCommand(t, otherRepoRoot, "git", "worktree", "add", "-b", "feature/foreign", foreignWorktree)
+
+	filePath := filepath.Join(foreignWorktree, "feature.txt")
+	if err := os.WriteFile(filePath, []byte("foreign feature\n"), 0o644); err != nil {
+		t.Fatalf("write foreign feature file: %v", err)
+	}
+	runTestCommand(t, foreignWorktree, "git", "add", "feature.txt")
+	runTestCommand(t, foreignWorktree, "git", "commit", "-m", "foreign feature commit")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err := runSubmit([]string{"--repo", repoRoot, "--worktree", foreignWorktree, "--branch", "feature/foreign"}, &submitOut, &submitErr)
+	if err == nil || !strings.Contains(err.Error(), "does not belong to repository") {
+		t.Fatalf("expected cross-repo worktree rejection, got %v", err)
+	}
+}

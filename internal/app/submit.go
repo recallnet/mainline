@@ -52,6 +52,14 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 	worktreePath = filepath.Clean(worktreePath)
 
+	worktreeLayout, err := git.DiscoverRepositoryLayout(worktreePath)
+	if err != nil {
+		return err
+	}
+	if filepath.Clean(worktreeLayout.GitDir) != filepath.Clean(layout.GitDir) {
+		return fmt.Errorf("worktree %s does not belong to repository %s", worktreePath, repoRoot)
+	}
+
 	engine := git.NewEngine(worktreePath)
 	worktree, err := engine.ResolveWorktree(worktreePath)
 	if err != nil {
