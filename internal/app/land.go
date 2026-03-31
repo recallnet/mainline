@@ -18,6 +18,7 @@ type landResult struct {
 	Branch           string `json:"branch"`
 	SourceWorktree   string `json:"source_worktree"`
 	SourceSHA        string `json:"source_sha"`
+	Priority         string `json:"priority,omitempty"`
 	RepositoryRoot   string `json:"repository_root"`
 	MainWorktree     string `json:"main_worktree"`
 	ProtectedBranch  string `json:"protected_branch"`
@@ -38,6 +39,7 @@ func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
 	var branch string
 	var worktreePath string
 	var requestedBy string
+	var priority string
 	var asJSON bool
 	var timeout time.Duration
 	var pollInterval time.Duration
@@ -46,6 +48,7 @@ func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.StringVar(&branch, "branch", "", "branch to submit")
 	fs.StringVar(&worktreePath, "worktree", "", "source worktree path override")
 	fs.StringVar(&requestedBy, "requested-by", "", "submitter identity")
+	fs.StringVar(&priority, "priority", submissionPriorityNormal, "submission priority: high, normal, or low")
 	fs.BoolVar(&asJSON, "json", false, "output json")
 	fs.DurationVar(&timeout, "timeout", 30*time.Minute, "maximum time to wait for integrate+publish")
 	fs.DurationVar(&pollInterval, "poll-interval", 500*time.Millisecond, "wait interval between worker checks")
@@ -59,6 +62,9 @@ func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
 	if pollInterval <= 0 {
 		return fmt.Errorf("poll-interval must be greater than zero")
 	}
+	if !isValidSubmissionPriority(priority) {
+		return fmt.Errorf("priority must be one of %q, %q, or %q", submissionPriorityHigh, submissionPriorityNormal, submissionPriorityLow)
+	}
 	if err := validateLandPreflight(repoPath); err != nil {
 		return err
 	}
@@ -69,6 +75,7 @@ func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
 		branch:       branch,
 		worktreePath: worktreePath,
 		requestedBy:  requestedBy,
+		priority:     priority,
 	})
 	if err != nil {
 		return err
@@ -88,6 +95,7 @@ func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
 		fmt.Fprintf(stdout, "Branch: %s\n", result.Branch)
 		fmt.Fprintf(stdout, "Worktree: %s\n", result.SourceWorktree)
 		fmt.Fprintf(stdout, "Source SHA: %s\n", result.SourceSHA)
+		fmt.Fprintf(stdout, "Priority: %s\n", result.Priority)
 		fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
 		if result.ProtectedSHA != "" {
 			fmt.Fprintf(stdout, "Protected SHA: %s\n", result.ProtectedSHA)
@@ -148,6 +156,7 @@ func waitForLandedPublish(queued queuedSubmission, timeout time.Duration, pollIn
 		Branch:           queued.Submission.BranchName,
 		SourceWorktree:   queued.Submission.SourceWorktree,
 		SourceSHA:        queued.Submission.SourceSHA,
+		Priority:         queued.Submission.Priority,
 		RepositoryRoot:   queued.RepoRoot,
 		MainWorktree:     queued.Config.Repo.MainWorktree,
 		ProtectedBranch:  queued.Config.Repo.ProtectedBranch,

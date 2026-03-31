@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -16,7 +17,7 @@ import (
 const (
 	defaultDirName       = "mainline"
 	defaultDBName        = "state.db"
-	currentSchemaVersion = 1
+	currentSchemaVersion = 2
 )
 
 var ErrUnsupportedSchemaVersion = errors.New("unsupported state schema version")
@@ -46,6 +47,7 @@ type IntegrationSubmission struct {
 	SourceWorktree string
 	SourceSHA      string
 	RequestedBy    string
+	Priority       string
 	Status         string
 	LastError      string
 	CreatedAt      time.Time
@@ -180,6 +182,9 @@ func (s Store) CreateIntegrationSubmission(ctx context.Context, submission Integ
 	if err := applyTestFault("CreateIntegrationSubmission"); err != nil {
 		return IntegrationSubmission{}, err
 	}
+	if submission.Priority == "" {
+		submission.Priority = "normal"
+	}
 	db, err := s.open()
 	if err != nil {
 		return IntegrationSubmission{}, err
@@ -193,16 +198,18 @@ func (s Store) CreateIntegrationSubmission(ctx context.Context, submission Integ
 			source_worktree_path,
 			source_sha,
 			requested_by,
+			priority,
 			status,
 			last_error
-		) VALUES (?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 	`,
 		submission.RepoID,
 		submission.BranchName,
 		submission.SourceWorktree,
 		submission.SourceSHA,
 		submission.RequestedBy,
+		submission.Priority,
 		submission.Status,
 		submission.LastError,
 	)
@@ -219,7 +226,7 @@ func (s Store) GetIntegrationSubmission(ctx context.Context, submissionID int64)
 	defer db.Close()
 
 	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error, created_at, updated_at
+		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 		FROM integration_submissions
 		WHERE id = ?
 	`, submissionID)
@@ -244,10 +251,18 @@ func (s Store) NextQueuedIntegrationSubmission(ctx context.Context, repoID int64
 	defer db.Close()
 
 	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error, created_at, updated_at
+		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 		FROM integration_submissions
 		WHERE repo_id = ? AND status = 'queued'
-		ORDER BY created_at ASC, id ASC
+		ORDER BY
+			CASE priority
+				WHEN 'high' THEN 0
+				WHEN 'normal' THEN 1
+				WHEN 'low' THEN 2
+				ELSE 1
+			END ASC,
+			created_at ASC,
+			id ASC
 		LIMIT 1
 	`, repoID)
 
@@ -277,7 +292,7 @@ func (s Store) UpdateIntegrationSubmissionStatus(ctx context.Context, submission
 		UPDATE integration_submissions
 		SET status = ?, last_error = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
-		RETURNING id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error, created_at, updated_at
+		RETURNING id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 	`, status, lastError, submissionID)
 
 	submission, err := scanIntegrationSubmission(row)
@@ -572,7 +587,26 @@ func ensureSchemaVersion(ctx context.Context, db *sql.DB) error {
 	if _, err := tx.ExecContext(ctx, schemaSQL); err != nil {
 		return fmt.Errorf("ensure state schema: %w", err)
 	}
-	if version < currentSchemaVersion {
+	migrated := false
+	if version < 2 {
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE integration_submissions
+			ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'
+		`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return fmt.Errorf("add integration submission priority column: %w", err)
+		}
+		version = 2
+		migrated = true
+	}
+	if migrated && version < currentSchemaVersion {
+		version = currentSchemaVersion
+	}
+	if migrated {
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d;`, version)); err != nil {
+			return fmt.Errorf("set sqlite schema version: %w", err)
+		}
+	}
+	if !migrated && version == 0 {
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d;`, currentSchemaVersion)); err != nil {
 			return fmt.Errorf("set sqlite schema version: %w", err)
 		}
@@ -617,6 +651,7 @@ func scanIntegrationSubmission(row scanner) (IntegrationSubmission, error) {
 		&submission.SourceWorktree,
 		&submission.SourceSHA,
 		&submission.RequestedBy,
+		&submission.Priority,
 		&submission.Status,
 		&submission.LastError,
 		&submission.CreatedAt,
@@ -777,7 +812,7 @@ func (s Store) ListIntegrationSubmissions(ctx context.Context, repoID int64) ([]
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error, created_at, updated_at
+		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 		FROM integration_submissions
 		WHERE repo_id = ?
 		ORDER BY created_at ASC, id ASC
@@ -808,7 +843,7 @@ func (s Store) ListIntegrationSubmissionsByStatus(ctx context.Context, repoID in
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error, created_at, updated_at
+		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 		FROM integration_submissions
 		WHERE repo_id = ? AND status = ?
 		ORDER BY created_at ASC, id ASC
@@ -882,6 +917,7 @@ CREATE TABLE IF NOT EXISTS integration_submissions (
 	source_worktree_path TEXT NOT NULL,
 	source_sha TEXT NOT NULL,
 	requested_by TEXT NOT NULL,
+	priority TEXT NOT NULL DEFAULT 'normal',
 	status TEXT NOT NULL,
 	last_error TEXT NOT NULL DEFAULT '',
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

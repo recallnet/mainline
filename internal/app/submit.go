@@ -17,6 +17,12 @@ import (
 	"github.com/recallnet/mainline/internal/state"
 )
 
+const (
+	submissionPriorityHigh   = "high"
+	submissionPriorityNormal = "normal"
+	submissionPriorityLow    = "low"
+)
+
 type submitValidationError struct {
 	Code    string
 	Message string
@@ -31,6 +37,7 @@ type submitOptions struct {
 	branch       string
 	worktreePath string
 	requestedBy  string
+	priority     string
 	checkOnly    bool
 }
 
@@ -43,6 +50,7 @@ type preparedSubmission struct {
 	WorktreePath string
 	SourceSHA    string
 	RequestedBy  string
+	Priority     string
 }
 
 type queuedSubmission struct {
@@ -65,6 +73,7 @@ type submitResult struct {
 	SourceSHA        string `json:"source_sha,omitempty"`
 	RepositoryRoot   string `json:"repository_root,omitempty"`
 	RequestedBy      string `json:"requested_by,omitempty"`
+	Priority         string `json:"priority,omitempty"`
 	SubmissionStatus string `json:"submission_status,omitempty"`
 	Outcome          string `json:"outcome,omitempty"`
 	DurationMS       int64  `json:"duration_ms,omitempty"`
@@ -85,6 +94,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	var branch string
 	var worktreePath string
 	var requestedBy string
+	var priority string
 	var asJSON bool
 	var checkOnly bool
 	var checkOnlyAlias bool
@@ -96,6 +106,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.StringVar(&branch, "branch", "", "branch to submit")
 	fs.StringVar(&worktreePath, "worktree", "", "source worktree path")
 	fs.StringVar(&requestedBy, "requested-by", "", "submitter identity")
+	fs.StringVar(&priority, "priority", submissionPriorityNormal, "submission priority: high, normal, or low")
 	fs.BoolVar(&asJSON, "json", false, "output json")
 	fs.BoolVar(&checkOnly, "check", false, "validate submission without queueing it")
 	fs.BoolVar(&checkOnlyAlias, "check-only", false, "validate submission without queueing it")
@@ -116,12 +127,12 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	if pollInterval <= 0 {
 		return fmt.Errorf("poll-interval must be greater than zero")
 	}
-
 	opts := submitOptions{
 		repoPath:     repoPath,
 		branch:       branch,
 		worktreePath: worktreePath,
 		requestedBy:  requestedBy,
+		priority:     priority,
 		checkOnly:    checkOnly,
 	}
 	prepared, err := prepareSubmission(opts)
@@ -148,6 +159,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 			SourceSHA:      prepared.SourceSHA,
 			RepositoryRoot: prepared.RepoRoot,
 			RequestedBy:    prepared.RequestedBy,
+			Priority:       prepared.Priority,
 		}
 		if asJSON {
 			return writeSubmitJSON(stdout, result, nil)
@@ -171,6 +183,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 				SourceSHA:      prepared.SourceSHA,
 				RepositoryRoot: prepared.RepoRoot,
 				RequestedBy:    prepared.RequestedBy,
+				Priority:       prepared.Priority,
 				ErrorCode:      submitErrorCode(err),
 				Error:          err.Error(),
 			}, err)
@@ -189,6 +202,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 		SourceSHA:        queued.Submission.SourceSHA,
 		RepositoryRoot:   queued.RepoRoot,
 		RequestedBy:      queued.Submission.RequestedBy,
+		Priority:         queued.Submission.Priority,
 		SubmissionStatus: queued.Submission.Status,
 	}
 	if waitForResult {
@@ -252,6 +266,15 @@ func queueSubmission(opts submitOptions) (queuedSubmission, error) {
 }
 
 func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
+	if opts.priority == "" {
+		opts.priority = submissionPriorityNormal
+	}
+	if !isValidSubmissionPriority(opts.priority) {
+		return preparedSubmission{}, &submitValidationError{
+			Code:    "invalid_priority",
+			Message: fmt.Sprintf("priority must be one of %q, %q, or %q", submissionPriorityHigh, submissionPriorityNormal, submissionPriorityLow),
+		}
+	}
 	layout, err := git.DiscoverRepositoryLayout(opts.repoPath)
 	if err != nil {
 		return preparedSubmission{}, &submitValidationError{
@@ -428,7 +451,17 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		WorktreePath: worktree.Path,
 		SourceSHA:    headSHA,
 		RequestedBy:  requestedBy,
+		Priority:     opts.priority,
 	}, nil
+}
+
+func isValidSubmissionPriority(priority string) bool {
+	switch priority {
+	case submissionPriorityHigh, submissionPriorityNormal, submissionPriorityLow:
+		return true
+	default:
+		return false
+	}
 }
 
 func findActiveDuplicateSubmission(ctx context.Context, store state.Store, repoID int64, branch string, sourceSHA string) (state.IntegrationSubmission, bool, error) {
@@ -474,6 +507,7 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 		SourceWorktree: prepared.WorktreePath,
 		SourceSHA:      prepared.SourceSHA,
 		RequestedBy:    prepared.RequestedBy,
+		Priority:       prepared.Priority,
 		Status:         "queued",
 	})
 	if err != nil {
@@ -485,6 +519,7 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 		"source_worktree": prepared.WorktreePath,
 		"source_sha":      prepared.SourceSHA,
 		"requested_by":    prepared.RequestedBy,
+		"priority":        prepared.Priority,
 	})
 	if err != nil {
 		return queuedSubmission{}, err

@@ -72,6 +72,35 @@ func TestRunOnceIntegratesQueuedBranchesInOrder(t *testing.T) {
 	}
 }
 
+func TestRunOnceIntegratesHigherPriorityBranchesFirst(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	lowPath := filepath.Join(t.TempDir(), "feature-low")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/low", lowPath)
+	writeFileAndCommit(t, lowPath, "low.txt", "low\n", "feature low")
+	submitBranchWithArgs(t, lowPath, "--priority", submissionPriorityLow)
+
+	highPath := filepath.Join(t.TempDir(), "feature-high")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/high", highPath)
+	writeFileAndCommit(t, highPath, "high.txt", "high\n", "feature high")
+	submitBranchWithArgs(t, highPath, "--priority", submissionPriorityHigh)
+
+	normalPath := filepath.Join(t.TempDir(), "feature-normal")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/normal", normalPath)
+	writeFileAndCommit(t, normalPath, "normal.txt", "normal\n", "feature normal")
+	submitBranchWithArgs(t, normalPath, "--priority", submissionPriorityNormal)
+
+	runOnce(t, repoRoot)
+	runOnce(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	logOutput := runTestCommand(t, repoRoot, "git", "log", "--format=%s", "-3")
+	if logOutput != "feature low\nfeature normal\nfeature high\n" {
+		t.Fatalf("expected high->normal->low integration order, got %q", logOutput)
+	}
+}
+
 func TestRunOnceBlocksConflictAndLeavesProtectedBranchUntouched(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)
@@ -451,9 +480,16 @@ func initRepoForWorker(t *testing.T, repoRoot string) {
 func submitBranch(t *testing.T, repoPath string) {
 	t.Helper()
 
+	submitBranchWithArgs(t, repoPath)
+}
+
+func submitBranchWithArgs(t *testing.T, repoPath string, extraArgs ...string) {
+	t.Helper()
+
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", repoPath}, &submitOut, &submitErr); err != nil {
+	args := append([]string{"--repo", repoPath}, extraArgs...)
+	if err := runSubmit(args, &submitOut, &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 }

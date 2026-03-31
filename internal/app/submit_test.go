@@ -222,6 +222,75 @@ func TestSubmitJSONReturnsSubmissionMetadata(t *testing.T) {
 	if result.Branch != "feature/json" || result.RequestedBy != "factory" {
 		t.Fatalf("expected branch/requested_by metadata, got %+v", result)
 	}
+	if result.Priority != submissionPriorityNormal {
+		t.Fatalf("expected default normal priority, got %+v", result)
+	}
+}
+
+func TestSubmitStoresRequestedPriority(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-priority")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/priority", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.Priority != submissionPriorityHigh {
+		t.Fatalf("expected high priority in json output, got %+v", result)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(featurePath)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if len(submissions) != 1 || submissions[0].Priority != submissionPriorityHigh {
+		t.Fatalf("expected persisted high priority, got %+v", submissions)
+	}
+}
+
+func TestSubmitRejectsUnknownPriority(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-bad-priority")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/bad-priority", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err := runSubmit([]string{"--repo", featurePath, "--priority", "urgent"}, &submitOut, &submitErr)
+	if err == nil || !strings.Contains(err.Error(), "priority must be one of") {
+		t.Fatalf("expected invalid priority rejection, got %v", err)
+	}
 }
 
 func TestSubmitCheckValidatesWithoutQueueing(t *testing.T) {

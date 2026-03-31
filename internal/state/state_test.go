@@ -42,6 +42,7 @@ func TestStorePersistsAcrossRestarts(t *testing.T) {
 		SourceWorktree: repoRoot,
 		SourceSHA:      "abc123",
 		RequestedBy:    "tester",
+		Priority:       "normal",
 		Status:         "queued",
 	}); err != nil {
 		t.Fatalf("CreateIntegrationSubmission: %v", err)
@@ -62,6 +63,97 @@ func TestStorePersistsAcrossRestarts(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("expected 1 unfinished item, got %d", count)
+	}
+}
+
+func TestEnsureSchemaMigratesLegacyVersionOnePriorityColumn(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitDir := filepath.Join(repoRoot, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	store := NewStore(DefaultPath(gitDir))
+	ctx := context.Background()
+	if err := os.MkdirAll(filepath.Dir(store.Path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(state dir): %v", err)
+	}
+
+	db, err := sql.Open("sqlite", store.Path)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		CREATE TABLE repositories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			canonical_path TEXT NOT NULL UNIQUE,
+			protected_branch TEXT NOT NULL,
+			remote_name TEXT NOT NULL,
+			main_worktree_path TEXT NOT NULL,
+			policy_version TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE integration_submissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			repo_id INTEGER NOT NULL,
+			branch_name TEXT NOT NULL,
+			source_worktree_path TEXT NOT NULL,
+			source_sha TEXT NOT NULL,
+			requested_by TEXT NOT NULL,
+			status TEXT NOT NULL,
+			last_error TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE publish_requests (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			repo_id INTEGER NOT NULL,
+			target_sha TEXT NOT NULL,
+			status TEXT NOT NULL,
+			superseded_by INTEGER,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			repo_id INTEGER NOT NULL,
+			item_type TEXT NOT NULL,
+			item_id INTEGER,
+			event_type TEXT NOT NULL,
+			payload BLOB NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`); err != nil {
+		t.Fatalf("create legacy v1 schema: %v", err)
+	}
+	if _, err := db.Exec(`PRAGMA user_version = 1;`); err != nil {
+		t.Fatalf("set user_version: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO repositories (canonical_path, protected_branch, remote_name, main_worktree_path, policy_version)
+		VALUES (?, 'main', 'origin', ?, 'v1')
+	`, repoRoot, repoRoot); err != nil {
+		t.Fatalf("insert repository: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO integration_submissions (repo_id, branch_name, source_worktree_path, source_sha, requested_by, status, last_error)
+		VALUES (1, 'feature/test', ?, 'abc123', 'tester', 'queued', '')
+	`, repoRoot); err != nil {
+		t.Fatalf("insert integration submission: %v", err)
+	}
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("EnsureSchema: %v", err)
+	}
+
+	submission, err := store.GetIntegrationSubmission(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetIntegrationSubmission: %v", err)
+	}
+	if submission.Priority != "normal" {
+		t.Fatalf("expected migrated priority normal, got %q", submission.Priority)
 	}
 }
 

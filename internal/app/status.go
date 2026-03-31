@@ -187,11 +187,12 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 		result.Counts.SucceededPublishes,
 	)
 	if result.LatestSubmission != nil {
-		fmt.Fprintf(stdout, "Latest submission: #%d %s from %s (%s)\n",
+		fmt.Fprintf(stdout, "Latest submission: #%d %s from %s (%s, priority=%s)\n",
 			result.LatestSubmission.ID,
 			result.LatestSubmission.BranchName,
 			result.LatestSubmission.SourceWorktree,
 			result.LatestSubmission.Status,
+			result.LatestSubmission.Priority,
 		)
 		if result.LatestSubmission.LastError != "" {
 			fmt.Fprintf(stdout, "  last error: %s\n", result.LatestSubmission.LastError)
