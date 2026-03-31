@@ -8,7 +8,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
@@ -106,13 +108,16 @@ func runOneCycle(repoPath string) (string, error) {
 	publishLease, err := lockManager.Acquire(state.PublishLock, "run-once")
 	if err != nil {
 		if errors.Is(err, state.ErrLockHeld) {
+			if cfg.Publish.InterruptInflight {
+				return maybeRequestPublishPreemption(ctx, store, repoRecord, cfg, lockManager)
+			}
 			return "Publish worker busy.", nil
 		}
 		return "", err
 	}
 	defer publishLease.Release()
 
-	result, err := processPublishRequest(ctx, store, repoRecord, cfg)
+	result, err := processPublishRequest(ctx, store, repoRecord, cfg, publishLease)
 	if err != nil {
 		return "", err
 	}
@@ -256,7 +261,7 @@ func syncProtectedBranch(engine git.Engine, cfg policy.File) error {
 	return engine.FastForwardCurrentBranch(cfg.Repo.MainWorktree, status.Upstream)
 }
 
-func processPublishRequest(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File) (string, error) {
+func processPublishRequest(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File, publishLease *state.Lease) (string, error) {
 	mainEngine := git.NewEngine(cfg.Repo.MainWorktree)
 
 	request, err := store.LatestQueuedPublishRequest(ctx, repoRecord.ID)
@@ -336,23 +341,46 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 		return fmt.Sprintf("Failed publish request %d: pre-publish checks failed: %s", request.ID, err.Error()), nil
 	}
 
-	if err := mainEngine.PushBranch(cfg.Repo.MainWorktree, cfg.Repo.RemoteName, cfg.Repo.ProtectedBranch, shouldBypassGitHooks(cfg)); err != nil {
-		if _, updateErr := store.UpdatePublishRequestStatus(ctx, request.ID, "failed", sql.NullInt64{}); updateErr != nil {
-			return "", updateErr
+	handle, err := mainEngine.StartPushBranch(cfg.Repo.MainWorktree, cfg.Repo.RemoteName, cfg.Repo.ProtectedBranch, shouldBypassGitHooks(cfg))
+	if err != nil {
+		return markPublishFailed(ctx, store, repoRecord.ID, request.ID, request.TargetSHA, err)
+	}
+	if publishLease != nil {
+		_ = publishLease.UpdateMetadata(state.LeaseMetadata{
+			Domain:    state.PublishLock,
+			RepoRoot:  repoRecord.CanonicalPath,
+			Owner:     "publish-worker",
+			RequestID: request.ID,
+			PID:       handle.PID(),
+			CreatedAt: time.Now().UTC(),
+		})
+	}
+
+	if _, err := handle.Wait(); err != nil {
+		if errors.Is(err, git.ErrPushInterrupted) {
+			replacement, ensureErr := latestReplacementPublishRequest(ctx, store, repoRecord.ID, request)
+			if ensureErr != nil {
+				return "", ensureErr
+			}
+			updated, updateErr := store.UpdatePublishRequestStatus(ctx, request.ID, "superseded", state.NullInt64(replacement.ID))
+			if updateErr != nil {
+				return "", updateErr
+			}
+			if eventErr := appendStateEvent(ctx, store, state.EventRecord{
+				RepoID:    repoRecord.ID,
+				ItemType:  "publish_request",
+				ItemID:    state.NullInt64(updated.ID),
+				EventType: "publish.superseded",
+				Payload: mustJSON(map[string]string{
+					"target_sha": request.TargetSHA,
+					"reason":     "interrupted_for_newer_target",
+				}),
+			}); eventErr != nil {
+				return "", eventErr
+			}
+			return fmt.Sprintf("Preempted publish request %d for newer target %s", request.ID, replacement.TargetSHA), nil
 		}
-		if eventErr := appendStateEvent(ctx, store, state.EventRecord{
-			RepoID:    repoRecord.ID,
-			ItemType:  "publish_request",
-			ItemID:    state.NullInt64(request.ID),
-			EventType: "publish.failed",
-			Payload: mustJSON(map[string]string{
-				"target_sha": request.TargetSHA,
-				"error":      err.Error(),
-			}),
-		}); eventErr != nil {
-			return "", eventErr
-		}
-		return fmt.Sprintf("Failed publish request %d: %s", request.ID, err.Error()), nil
+		return markPublishFailed(ctx, store, repoRecord.ID, request.ID, request.TargetSHA, err)
 	}
 
 	latestProtectedSHA, err := mainEngine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
@@ -386,6 +414,79 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 	}
 
 	return fmt.Sprintf("Published request %d for %s", request.ID, latestProtectedSHA), nil
+}
+
+func maybeRequestPublishPreemption(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File, lockManager state.LockManager) (string, error) {
+	metadata, err := lockManager.Metadata(state.PublishLock)
+	if err != nil {
+		return "Publish worker busy.", nil
+	}
+	if metadata.PID == 0 || metadata.RequestID == 0 {
+		return "Publish worker busy.", nil
+	}
+
+	running, err := store.GetPublishRequest(ctx, metadata.RequestID)
+	if err != nil {
+		return "Publish worker busy.", nil
+	}
+	latest, err := store.LatestQueuedPublishRequest(ctx, repoRecord.ID)
+	if err != nil {
+		return "Publish worker busy.", nil
+	}
+	if latest.ID == running.ID || latest.TargetSHA == running.TargetSHA {
+		return "Publish worker busy.", nil
+	}
+
+	process, err := os.FindProcess(metadata.PID)
+	if err != nil {
+		return "", err
+	}
+	if err := process.Kill(); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Requested publish preemption for newer target %s", latest.TargetSHA), nil
+}
+
+func markPublishFailed(ctx context.Context, store state.Store, repoID int64, requestID int64, targetSHA string, cause error) (string, error) {
+	if _, updateErr := store.UpdatePublishRequestStatus(ctx, requestID, "failed", sql.NullInt64{}); updateErr != nil {
+		return "", updateErr
+	}
+	if eventErr := appendStateEvent(ctx, store, state.EventRecord{
+		RepoID:    repoID,
+		ItemType:  "publish_request",
+		ItemID:    state.NullInt64(requestID),
+		EventType: "publish.failed",
+		Payload: mustJSON(map[string]string{
+			"target_sha": targetSHA,
+			"error":      cause.Error(),
+		}),
+	}); eventErr != nil {
+		return "", eventErr
+	}
+	return fmt.Sprintf("Failed publish request %d: %s", requestID, cause.Error()), nil
+}
+
+func latestReplacementPublishRequest(ctx context.Context, store state.Store, repoID int64, running state.PublishRequest) (state.PublishRequest, error) {
+	requests, err := store.ListPublishRequests(ctx, repoID)
+	if err != nil {
+		return state.PublishRequest{}, err
+	}
+	var replacement state.PublishRequest
+	for _, request := range requests {
+		if request.Status != "queued" {
+			continue
+		}
+		if request.ID == running.ID || request.TargetSHA == running.TargetSHA {
+			continue
+		}
+		if replacement.ID == 0 || request.ID > replacement.ID {
+			replacement = request
+		}
+	}
+	if replacement.ID == 0 {
+		return state.PublishRequest{}, fmt.Errorf("publish request %d was interrupted but no replacement request exists", running.ID)
+	}
+	return replacement, nil
 }
 
 func ensureLatestPublishRequestRecord(ctx context.Context, store state.Store, repoID int64, targetSHA string) (state.PublishRequest, bool, error) {

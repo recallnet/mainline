@@ -21,6 +21,8 @@ type LeaseMetadata struct {
 	Domain    string    `json:"domain"`
 	RepoRoot  string    `json:"repo_root"`
 	Owner     string    `json:"owner"`
+	RequestID int64     `json:"request_id,omitempty"`
+	PID       int       `json:"pid,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -76,6 +78,11 @@ func (m LockManager) Acquire(domain string, owner string) (*Lease, error) {
 	return &Lease{path: lockPath, file: file}, nil
 }
 
+// Metadata returns the current lease metadata for a domain if present.
+func (m LockManager) Metadata(domain string) (LeaseMetadata, error) {
+	return readLeaseMetadata(filepath.Join(m.baseDir, domain+".lock.json"))
+}
+
 // InspectStale returns stale leases older than the given threshold.
 func (m LockManager) InspectStale(olderThan time.Duration) ([]LeaseMetadata, error) {
 	entries, err := os.ReadDir(m.baseDir)
@@ -114,6 +121,14 @@ func (l *Lease) Release() error {
 
 	defer os.Remove(l.path + ".json")
 	return l.file.Unlock()
+}
+
+// UpdateMetadata overwrites the persisted metadata for an active lease.
+func (l *Lease) UpdateMetadata(metadata LeaseMetadata) error {
+	if l == nil {
+		return nil
+	}
+	return writeLeaseMetadata(l.path+".json", metadata)
 }
 
 var ErrLockHeld = errors.New("lock is already held")

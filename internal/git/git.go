@@ -21,10 +21,22 @@ const noUpstream = "(no upstream)"
 var ErrRebaseConflict = errors.New("git rebase reported conflicts")
 var ErrFastForwardRejected = errors.New("fast-forward update was rejected")
 var ErrPushRejected = errors.New("git push was rejected")
+var ErrPushInterrupted = errors.New("git push was interrupted")
 
 // Engine holds repository-local Git execution context.
 type Engine struct {
 	RepositoryRoot string
+}
+
+// PushHandle tracks an in-flight git push subprocess.
+type PushHandle struct {
+	cmd  *exec.Cmd
+	done chan pushResult
+}
+
+type pushResult struct {
+	output string
+	err    error
 }
 
 // RepositoryLayout describes the shared storage and canonical worktree identity.
@@ -335,22 +347,82 @@ func (e Engine) FastForwardCurrentBranch(worktreePath string, targetRef string) 
 
 // PushBranch pushes a local branch ref to the configured remote branch.
 func (e Engine) PushBranch(worktreePath string, remote string, branch string, noVerify bool) error {
+	handle, err := e.StartPushBranch(worktreePath, remote, branch, noVerify)
+	if err != nil {
+		return err
+	}
+	_, err = handle.Wait()
+	return err
+}
+
+// StartPushBranch starts a local git push and returns a handle for monitoring.
+func (e Engine) StartPushBranch(worktreePath string, remote string, branch string, noVerify bool) (*PushHandle, error) {
 	if remote == "" {
-		return fmt.Errorf("remote name is empty")
+		return nil, fmt.Errorf("remote name is empty")
 	}
 	args := []string{"push"}
 	if noVerify {
 		args = append(args, "--no-verify")
 	}
 	args = append(args, remote, branch+":"+branch)
-	output, err := e.runGit(worktreePath, args...)
-	if err == nil {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = filepath.Clean(worktreePath)
+
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+	}
+
+	handle := &PushHandle{
+		cmd:  cmd,
+		done: make(chan pushResult, 1),
+	}
+	go func() {
+		err := cmd.Wait()
+		text := output.String()
+		if err != nil {
+			if cmd.ProcessState != nil && !cmd.ProcessState.Success() && strings.Contains(err.Error(), "signal: killed") {
+				handle.done <- pushResult{output: text, err: fmt.Errorf("%w: %s", ErrPushInterrupted, strings.TrimSpace(text))}
+				return
+			}
+			if strings.Contains(text, "[rejected]") || strings.Contains(text, "failed to push some refs") {
+				handle.done <- pushResult{output: text, err: fmt.Errorf("%w: %s", ErrPushRejected, strings.TrimSpace(text))}
+				return
+			}
+			handle.done <- pushResult{output: text, err: fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(text))}
+			return
+		}
+		handle.done <- pushResult{output: text, err: nil}
+	}()
+
+	return handle, nil
+}
+
+// PID reports the subprocess pid for an active push.
+func (h *PushHandle) PID() int {
+	if h == nil || h.cmd == nil || h.cmd.Process == nil {
+		return 0
+	}
+	return h.cmd.Process.Pid
+}
+
+// Interrupt terminates the in-flight push subprocess.
+func (h *PushHandle) Interrupt() error {
+	if h == nil || h.cmd == nil || h.cmd.Process == nil {
 		return nil
 	}
-	if strings.Contains(output, "[rejected]") || strings.Contains(output, "failed to push some refs") {
-		return fmt.Errorf("%w: %s", ErrPushRejected, strings.TrimSpace(output))
+	return h.cmd.Process.Kill()
+}
+
+// Wait waits for the subprocess and returns captured output.
+func (h *PushHandle) Wait() (string, error) {
+	if h == nil {
+		return "", nil
 	}
-	return err
+	result := <-h.done
+	return result.output, result.err
 }
 
 // BranchStatus returns the branch status including upstream relationship.

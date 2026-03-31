@@ -191,6 +191,7 @@ Current publish behavior:
 - processes publish work through the per-repo publish lock
 - supersedes older queued publish requests before pushing
 - pushes only the latest queued protected-branch tip
+- can interrupt a stale local in-flight push when `[publish].interrupt_inflight = true`
 - marks publish requests `succeeded`, `failed`, or `superseded`
 - lets `run-once` drain publish work when no integration submission is waiting
 
@@ -268,6 +269,7 @@ DirtyWorktreePolicy = "reject"
 [publish]
 Mode = "auto"
 Coalesced = true
+InterruptInflight = false
 
 [checks]
 PreIntegrate = ["go test ./..."]

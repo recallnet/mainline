@@ -27,8 +27,9 @@ type IntegrationConfig struct {
 
 // PublishConfig holds publish policy defaults.
 type PublishConfig struct {
-	Mode      string
-	Coalesced bool
+	Mode              string
+	Coalesced         bool
+	InterruptInflight bool
 }
 
 // ChecksConfig holds configured shell checks and timeout policy.
@@ -55,8 +56,9 @@ func DefaultConfig() Config {
 			DirtyWorktreePolicy: "reject",
 		},
 		Publish: PublishConfig{
-			Mode:      "manual",
-			Coalesced: true,
+			Mode:              "manual",
+			Coalesced:         true,
+			InterruptInflight: false,
 		},
 		Checks: ChecksConfig{
 			PreIntegrate:   []string{},

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
@@ -252,6 +253,96 @@ func TestPublishRespectsHookPolicyBypassingPrePushHook(t *testing.T) {
 	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
 	if remoteHead != localHead {
 		t.Fatalf("expected hook-bypassed publish to update remote to %q, got %q", localHead, remoteHead)
+	}
+}
+
+func TestRunOnceCanPreemptInFlightPublishForNewerTarget(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	hookPath := filepath.Join(repoRoot, ".git", "hooks", "pre-push")
+	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nsleep 2\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Publish.InterruptInflight = true
+	cfg.Repo.HookPolicy = "inherit"
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "enable publish preemption")
+
+	writeFileAndCommit(t, repoRoot, "one.txt", "one\n", "main change one")
+	queuePublish(t, repoRoot)
+
+	resultCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		result, err := runOneCycle(repoRoot)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		resultCh <- result
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+
+	writeFileAndCommit(t, repoRoot, "two.txt", "two\n", "main change two")
+	latestHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+
+	preemptResult, err := runOneCycle(repoRoot)
+	if err != nil {
+		t.Fatalf("second runOneCycle returned error: %v", err)
+	}
+	if !strings.Contains(preemptResult, "Requested publish preemption") {
+		t.Fatalf("expected preemption request result, got %q", preemptResult)
+	}
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("first runOneCycle returned error: %v", err)
+	case result := <-resultCh:
+		if !strings.Contains(result, "Preempted publish request") {
+			t.Fatalf("expected interrupted publish result, got %q", result)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for interrupted publish cycle")
+	}
+
+	if _, err := runOneCycle(repoRoot); err != nil {
+		t.Fatalf("final runOneCycle returned error: %v", err)
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != latestHead {
+		t.Fatalf("expected remote head %q, got %q", latestHead, remoteHead)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) < 2 {
+		t.Fatalf("expected at least 2 publish requests, got %d", len(requests))
+	}
+	if requests[0].Status != "superseded" {
+		t.Fatalf("expected first request superseded, got %q", requests[0].Status)
 	}
 }
 
