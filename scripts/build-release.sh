@@ -3,8 +3,6 @@ set -euo pipefail
 
 version="dev"
 output_dir="dist"
-commit="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -31,6 +29,8 @@ platforms=(
 )
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+commit="$(git -C "${repo_root}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 if [[ "${output_dir}" = /* ]]; then
   release_root="${output_dir}"
 else
@@ -52,12 +52,15 @@ build_archive() {
 
   mkdir -p "${stage_dir}"
 
-  GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
-    go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mainline" ./cmd/mainline
-  GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
-    go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mq" ./cmd/mq
-  GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
-    go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mainlined" ./cmd/mainlined
+  (
+    cd "${repo_root}"
+    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
+      go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mainline" ./cmd/mainline
+    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
+      go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mq" ./cmd/mq
+    GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
+      go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mainlined" ./cmd/mainlined
+  )
 
   cp "${repo_root}/README.md" "${stage_dir}/README.md"
   if [[ -f "${repo_root}/LICENSE" ]]; then

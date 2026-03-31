@@ -3,9 +3,14 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 output_dir="$(mktemp -d)"
-trap 'rm -rf "${output_dir}"' EXIT
+extract_dir="$(mktemp -d)"
+scratch_dir="$(mktemp -d)"
+trap 'rm -rf "${output_dir}" "${extract_dir}" "${scratch_dir}"' EXIT
 
-"${repo_root}/scripts/build-release.sh" --version v0.0.0-test --output "${output_dir}"
+(
+  cd "${scratch_dir}"
+  "${repo_root}/scripts/build-release.sh" --version v0.0.0-test --output "${output_dir}"
+)
 
 for archive in \
   "${output_dir}/mainline_v0.0.0-test_darwin_amd64.tar.gz" \
@@ -19,8 +24,6 @@ done
 test -f "${output_dir}/SHA256SUMS"
 tar -tzf "${output_dir}/mainline_v0.0.0-test_linux_amd64.tar.gz" | grep -q 'mainline_v0.0.0-test_linux_amd64/mainline$'
 
-extract_dir="$(mktemp -d)"
-trap 'rm -rf "${output_dir}" "${extract_dir}"' EXIT
 host_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 host_arch="$(uname -m)"
 case "${host_arch}" in
@@ -35,3 +38,5 @@ esac
 host_archive_base="mainline_v0.0.0-test_${host_os}_${host_arch}"
 tar -xzf "${output_dir}/${host_archive_base}.tar.gz" -C "${extract_dir}"
 "${extract_dir}/${host_archive_base}/mainline" version | grep -q '^mainline v0.0.0-test '
+expected_commit="$(git -C "${repo_root}" rev-parse --short HEAD)"
+"${extract_dir}/${host_archive_base}/mainline" version | grep -q "commit=${expected_commit}"
