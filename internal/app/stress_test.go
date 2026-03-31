@@ -284,6 +284,8 @@ func (c *stressFaultController) daemonInterval() time.Duration {
 	if !c.randomized {
 		return 10 * time.Millisecond
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return time.Duration(5+c.rng.Intn(11)) * time.Millisecond
 }
 
@@ -327,7 +329,9 @@ func (c *stressFaultController) maybeDelay(cap time.Duration) {
 	if !c.randomized || cap <= 0 {
 		return
 	}
+	c.mu.Lock()
 	delay := time.Duration(c.rng.Int63n(int64(cap) + 1))
+	c.mu.Unlock()
 	time.Sleep(delay)
 }
 
