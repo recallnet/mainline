@@ -30,6 +30,9 @@ jobs:
       - name: Invariant suite
         run: make test-invariants
 
+      - name: Stress suite
+        run: make test-stress
+
       - name: Release script regression test
         run: ./scripts/test-build-release.sh
 

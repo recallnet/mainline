@@ -264,5 +264,15 @@ mirror the rigor of CI locally:
 - `pre-commit` runs staged-format checks, `go vet`, `go test`, invariants, workflow lint when needed, and release regression checks when release paths change
 - `pre-push` blocks dirty pushes, blocks stale `origin/main`, requires pushes to `origin/main` to come from local branch `main`, and reruns the full suite before remote mutation
 
+For queue confidence under parallel local load, run:
+
+```bash
+make test-stress
+```
+
+That stress target spins up many feature worktrees, submits them in parallel
+while the daemon drains the queue, forces a real conflict pair, and asserts the
+final integration/publish metrics.
+
 The deeper workflow examples live in
 [FLOWS.md](/Users/devrel/Projects/recallnet/mainline/docs/FLOWS.md).

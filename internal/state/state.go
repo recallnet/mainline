@@ -103,6 +103,9 @@ func (s Store) EnsureSchema(ctx context.Context) error {
 	}
 	defer db.Close()
 
+	if _, err := db.Exec(`PRAGMA journal_mode = WAL;`); err != nil {
+		return fmt.Errorf("configure sqlite journal mode: %w", err)
+	}
 	if _, err := db.ExecContext(ctx, schemaSQL); err != nil {
 		return fmt.Errorf("ensure state schema: %w", err)
 	}
@@ -504,10 +507,10 @@ func (s Store) open() (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite state: %w", err)
 	}
-
-	if _, err := db.Exec(`PRAGMA journal_mode = WAL;`); err != nil {
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA busy_timeout = 5000;`); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("configure sqlite journal mode: %w", err)
+		return nil, fmt.Errorf("configure sqlite busy timeout: %w", err)
 	}
 
 	return db, nil

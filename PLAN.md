@@ -537,6 +537,24 @@ Acceptance criteria:
 - `pre-push` blocks dirty pushes, stale `origin/main`, and pushes to `origin/main` from a non-`main` local branch
 - contributors can enable the tracked hooks with one documented command
 
+## Milestone 22: Multi-Agent Stress And Soak
+
+Goal:
+
+- prove the queue holds up under real local parallelism instead of only small deterministic flows
+
+Deliverables:
+
+- a named stress test target that creates many feature worktrees, submits in parallel, and drains through the daemon
+- machine-readable stress metrics for submission outcomes, publish coalescing, queue depth, and drain duration
+- conflict traffic in the stress run so blocked-item handling is exercised under load
+
+Acceptance criteria:
+
+- parallel submissions from many worktrees land deterministically without dirtying the protected worktree
+- exactly one publish completes for the final protected tip while older publish requests are superseded
+- the stress run emits metrics that operators can use to track queue behavior over time
+
 ## Architecture Plan
 
 ## Repository Layout
