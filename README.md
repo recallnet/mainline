@@ -26,6 +26,7 @@ Today the repo implements the foundation for that model:
 - branch submission into durable queue state
 - ordered single-repo integration with `run-once`
 - coalesced latest-tip publish queue with `publish` and `run-once`
+- polling daemon mode with `mainlined`
 - support for standard repos and bare-clone-plus-worktree layouts
 
 ## Current Status
@@ -38,15 +39,12 @@ Implemented milestones:
 - Milestone 3: branch submission
 - Milestone 4: integration queue MVP
 - Milestone 5: publish queue MVP
-
-Not implemented yet:
-
-- daemon loop
+- Milestone 6: daemon mode
 
 The current CLI can initialize a repo, inspect health, queue clean topic
 branches, run one serialized integration cycle locally, queue manual publish
-requests, and push the latest protected-branch tip through the coalesced
-publish queue.
+requests, push the latest protected-branch tip through the coalesced publish
+queue, or run a polling background loop through `mainlined`.
 
 ## Why This Exists
 
@@ -79,7 +77,7 @@ Supported binaries:
 
 - `mainline`: full CLI name
 - `mq`: short handle for the main queue CLI
-- `mainlined`: daemon entrypoint placeholder
+- `mainlined`: daemon entrypoint
 
 Examples:
 
@@ -87,6 +85,13 @@ Examples:
 mainline --help
 mq --help
 mainlined --help
+```
+
+Example daemon usage:
+
+```bash
+mainlined --repo /path/to/repo
+mainlined --repo /path/to/repo --interval 2s --json
 ```
 
 Current repo commands:
@@ -186,6 +191,14 @@ Current publish behavior:
 - marks publish requests `succeeded`, `failed`, or `superseded`
 - lets `run-once` drain publish work when no integration submission is waiting
 
+Current daemon behavior:
+
+- polls the repo on a configurable interval
+- reuses the real `run-once` worker path instead of a separate codepath
+- can emit structured JSON logs
+- exits cleanly on `SIGINT` or `SIGTERM`
+- preserves queue truth across restarts because durable state remains in SQLite
+
 Current lock domains:
 
 - integration
@@ -218,12 +231,6 @@ Implementation principles:
 - use native `git` only where the library surface is not sufficient for the
   required workflow, with the integration rebase path expected to be one of
   those cases
-
-## Near-Term Roadmap
-
-Next milestones:
-
-1. daemon mode
 
 The project plan and spec live in:
 

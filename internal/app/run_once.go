@@ -26,34 +26,43 @@ func runRunOnce(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 
-	layout, repoRoot, cfg, repoRecord, store, err := loadRepoContext(repoPath)
+	result, err := runOneCycle(repoPath)
 	if err != nil {
 		return err
+	}
+	fmt.Fprintln(stdout, result)
+	return nil
+}
+
+func runOneCycle(repoPath string) (string, error) {
+	layout, repoRoot, cfg, repoRecord, store, err := loadRepoContext(repoPath)
+	if err != nil {
+		return "", err
 	}
 
 	mainLayout, err := git.DiscoverRepositoryLayout(cfg.Repo.MainWorktree)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if filepath.Clean(mainLayout.GitDir) != filepath.Clean(layout.GitDir) {
-		return fmt.Errorf("main worktree %s does not belong to repository %s", cfg.Repo.MainWorktree, repoRoot)
+		return "", fmt.Errorf("main worktree %s does not belong to repository %s", cfg.Repo.MainWorktree, repoRoot)
 	}
 
 	report, err := git.NewEngine(mainLayout.WorktreeRoot).InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !report.MainWorktreeExists {
-		return fmt.Errorf("main worktree %s is missing", cfg.Repo.MainWorktree)
+		return "", fmt.Errorf("main worktree %s is missing", cfg.Repo.MainWorktree)
 	}
 	if !report.ProtectedBranchExists {
-		return fmt.Errorf("protected branch %q does not exist", cfg.Repo.ProtectedBranch)
+		return "", fmt.Errorf("protected branch %q does not exist", cfg.Repo.ProtectedBranch)
 	}
 	if !report.ProtectedBranchClean {
-		return fmt.Errorf("protected branch worktree %s is dirty", cfg.Repo.MainWorktree)
+		return "", fmt.Errorf("protected branch worktree %s is dirty", cfg.Repo.MainWorktree)
 	}
 	if report.HasDivergedUpstream {
-		return fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, report.UpstreamRef)
+		return "", fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, report.UpstreamRef)
 	}
 
 	lockManager := state.NewLockManager(repoRoot, layout.GitDir)
@@ -61,53 +70,47 @@ func runRunOnce(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	lease, err := lockManager.Acquire(state.IntegrationLock, "run-once")
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	submission, err := store.NextQueuedIntegrationSubmission(ctx, repoRecord.ID)
 	if err != nil {
 		lease.Release()
 		if !errors.Is(err, state.ErrNotFound) {
-			return err
+			return "", err
 		}
 	} else {
 		defer lease.Release()
 
 		if _, err := store.UpdateIntegrationSubmissionStatus(ctx, submission.ID, "running", ""); err != nil {
-			return err
+			return "", err
 		}
 		if err := appendSubmissionEvent(ctx, store, repoRecord.ID, submission.ID, "integration.started", map[string]string{
 			"branch":           submission.BranchName,
 			"source_worktree":  submission.SourceWorktree,
 			"submitted_source": submission.SourceSHA,
 		}); err != nil {
-			return err
+			return "", err
 		}
 
 		result, err := processIntegrationSubmission(ctx, store, repoRecord, cfg, layout.GitDir, submission)
 		if err != nil {
-			return err
+			return "", err
 		}
-
-		fmt.Fprintln(stdout, result)
-		return nil
+		return result, nil
 	}
 
 	publishLease, err := lockManager.Acquire(state.PublishLock, "run-once")
 	if err != nil {
-		if errors.Is(err, state.ErrLockHeld) {
-			return err
-		}
-		return err
+		return "", err
 	}
 	defer publishLease.Release()
 
 	result, err := processPublishRequest(ctx, store, repoRecord, cfg)
 	if err != nil {
-		return err
+		return "", err
 	}
-	fmt.Fprintln(stdout, result)
-	return nil
+	return result, nil
 }
 
 func processIntegrationSubmission(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File, sharedGitDir string, submission state.IntegrationSubmission) (string, error) {
