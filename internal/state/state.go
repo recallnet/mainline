@@ -620,6 +620,42 @@ func (s Store) ListEvents(ctx context.Context, repoID int64, limit int) ([]Event
 	return events, rows.Err()
 }
 
+// ListEventsAfter returns events newer than the provided event id ordered by creation time.
+func (s Store) ListEventsAfter(ctx context.Context, repoID int64, afterID int64, limit int) ([]EventRecord, error) {
+	db, err := s.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	if limit <= 0 {
+		limit = 100
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, repo_id, item_type, item_id, event_type, payload, created_at
+		FROM events
+		WHERE repo_id = ? AND id > ?
+		ORDER BY created_at ASC, id ASC
+		LIMIT ?
+	`, repoID, afterID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []EventRecord
+	for rows.Next() {
+		event, err := scanEventRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+
+	return events, rows.Err()
+}
+
 // ListIntegrationSubmissions returns submissions for a repo ordered by creation time.
 func (s Store) ListIntegrationSubmissions(ctx context.Context, repoID int64) ([]IntegrationSubmission, error) {
 	db, err := s.open()

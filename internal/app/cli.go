@@ -16,6 +16,7 @@ var cliCommands = []string{
 	"retry",
 	"cancel",
 	"publish",
+	"events",
 	"doctor",
 	"completion",
 	"repo init",
@@ -79,12 +80,13 @@ Commands:
   retry
   cancel
   publish
+  events
   doctor
   completion
   repo init
   repo show
 
-Implemented today: repo init/show, doctor, submit, status, run-once, retry, cancel, publish, completion.
+Implemented today: repo init/show, doctor, submit, status, run-once, retry, cancel, publish, events, completion.
 `
 }
 

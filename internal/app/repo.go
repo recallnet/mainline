@@ -40,6 +40,8 @@ func handleCommand(command string, args []string, stdout io.Writer, stderr io.Wr
 		return runCancel(args, stdout, stderr)
 	case "publish":
 		return runPublish(args, stdout, stderr)
+	case "events":
+		return runEvents(args, stdout, stderr)
 	case "completion":
 		return runCompletion(args, stdout, stderr)
 	case "repo init":

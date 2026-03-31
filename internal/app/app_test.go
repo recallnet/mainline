@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -164,6 +165,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "retry cancel publish") {
 		t.Fatalf("expected completion script to include retry and cancel, got %q", output)
 	}
+	if !strings.Contains(output, "events doctor completion") {
+		t.Fatalf("expected completion script to include events, got %q", output)
+	}
 	if strings.Contains(output, "run-once|publish|doctor") {
 		t.Fatalf("expected split completion cases for real command flags, got %q", output)
 	}
@@ -232,6 +236,81 @@ func TestStatusHumanOutputIncludesRecentSummary(t *testing.T) {
 	}
 }
 
+func TestEventsJSONListsRecentEventsChronologically(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	queuePublish(t, repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--limit", "3"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) == 0 {
+		t.Fatalf("expected event output, got none")
+	}
+	var lastID int64
+	foundPublishRequested := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var event state.EventRecord
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if event.ID <= lastID {
+			t.Fatalf("expected chronological event order, got ids %d then %d", lastID, event.ID)
+		}
+		lastID = event.ID
+		if event.EventType == "publish.requested" {
+			foundPublishRequested = true
+		}
+	}
+	if !foundPublishRequested {
+		t.Fatalf("expected publish.requested event in stream")
+	}
+}
+
+func TestEventsFollowStreamsNewEvent(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	var output lockedBuffer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runEventStream(ctx, eventOptions{
+			repoPath:     repoRoot,
+			limit:        1,
+			follow:       true,
+			pollInterval: 20 * time.Millisecond,
+		}, &output)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	queuePublish(t, repoRoot)
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(output.String(), "publish.requested") {
+			cancel()
+			if err := <-done; err != nil {
+				t.Fatalf("runEventStream returned error: %v", err)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	t.Fatalf("timed out waiting for publish.requested in streamed events, got %q", output.String())
+}
+
 func TestCLIRepoSubcommandsRemainReachable(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -244,4 +323,21 @@ func TestCLIRepoSubcommandsRemainReachable(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Initialized ") {
 		t.Fatalf("expected repo init output, got %q", stdout.String())
 	}
+}
+
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
 }

@@ -27,17 +27,19 @@ type statusCounts struct {
 }
 
 type statusResult struct {
-	RepositoryRoot     string                       `json:"repository_root"`
-	StatePath          string                       `json:"state_path"`
-	CurrentWorktree    string                       `json:"current_worktree"`
-	CurrentBranch      string                       `json:"current_branch"`
-	ProtectedBranch    string                       `json:"protected_branch"`
-	ProtectedBranchSHA string                       `json:"protected_branch_sha"`
-	ProtectedUpstream  git.BranchStatus             `json:"protected_upstream"`
-	Counts             statusCounts                 `json:"counts"`
-	LatestSubmission   *state.IntegrationSubmission `json:"latest_submission,omitempty"`
-	LatestPublish      *state.PublishRequest        `json:"latest_publish,omitempty"`
-	RecentEvents       []state.EventRecord          `json:"recent_events"`
+	RepositoryRoot     string                        `json:"repository_root"`
+	StatePath          string                        `json:"state_path"`
+	CurrentWorktree    string                        `json:"current_worktree"`
+	CurrentBranch      string                        `json:"current_branch"`
+	ProtectedBranch    string                        `json:"protected_branch"`
+	ProtectedBranchSHA string                        `json:"protected_branch_sha"`
+	ProtectedUpstream  git.BranchStatus              `json:"protected_upstream"`
+	Counts             statusCounts                  `json:"counts"`
+	LatestSubmission   *state.IntegrationSubmission  `json:"latest_submission,omitempty"`
+	LatestPublish      *state.PublishRequest         `json:"latest_publish,omitempty"`
+	ActiveSubmissions  []state.IntegrationSubmission `json:"active_submissions,omitempty"`
+	ActivePublishes    []state.PublishRequest        `json:"active_publishes,omitempty"`
+	RecentEvents       []state.EventRecord           `json:"recent_events"`
 }
 
 func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -109,6 +111,8 @@ func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
 		ProtectedBranchSHA: protectedSHA,
 		ProtectedUpstream:  protectedStatus,
 		Counts:             summarizeCounts(submissions, requests),
+		ActiveSubmissions:  activeSubmissions(submissions),
+		ActivePublishes:    activePublishes(requests),
 		RecentEvents:       events,
 	}
 	if len(submissions) > 0 {
@@ -170,6 +174,18 @@ func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
 	} else {
 		fmt.Fprintln(stdout, "Latest publish: none")
 	}
+	if len(result.ActiveSubmissions) > 0 {
+		fmt.Fprintln(stdout, "Active submissions:")
+		for _, submission := range result.ActiveSubmissions {
+			fmt.Fprintf(stdout, "  #%d %s (%s)\n", submission.ID, submission.BranchName, submission.Status)
+		}
+	}
+	if len(result.ActivePublishes) > 0 {
+		fmt.Fprintln(stdout, "Active publishes:")
+		for _, request := range result.ActivePublishes {
+			fmt.Fprintf(stdout, "  #%d %s (%s)\n", request.ID, request.TargetSHA, request.Status)
+		}
+	}
 	if len(result.RecentEvents) == 0 {
 		fmt.Fprintln(stdout, "Recent events: none")
 		return nil
@@ -185,6 +201,28 @@ func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	return nil
+}
+
+func activeSubmissions(submissions []state.IntegrationSubmission) []state.IntegrationSubmission {
+	var active []state.IntegrationSubmission
+	for _, submission := range submissions {
+		switch submission.Status {
+		case "queued", "running", "blocked":
+			active = append(active, submission)
+		}
+	}
+	return active
+}
+
+func activePublishes(requests []state.PublishRequest) []state.PublishRequest {
+	var active []state.PublishRequest
+	for _, request := range requests {
+		switch request.Status {
+		case "queued", "running":
+			active = append(active, request)
+		}
+	}
+	return active
 }
 
 func summarizeCounts(submissions []state.IntegrationSubmission, requests []state.PublishRequest) statusCounts {

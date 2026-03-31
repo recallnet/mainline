@@ -119,6 +119,7 @@ mainline submit --repo /path/to/repo --branch fix-login --worktree /path/to/feat
 mainline run-once --repo /path/to/repo
 mainline retry --repo /path/to/repo --submission 17
 mainline cancel --repo /path/to/repo --publish 4
+mainline events --repo /path/to/repo --follow
 mainline publish --repo /path/to/repo
 mainline completion zsh
 ```
@@ -134,6 +135,7 @@ mq submit --repo /path/to/feature-worktree
 mq run-once --repo /path/to/repo
 mq retry --repo /path/to/repo --submission 17
 mq cancel --repo /path/to/repo --publish 4
+mq events --repo /path/to/repo --follow
 mq publish --repo /path/to/repo
 ```
 
@@ -249,8 +251,15 @@ Current status behavior:
 - summarizes queued, running, blocked, failed, and succeeded work
 - includes cancelled queue items
 - shows the latest submission and publish request
+- exposes active queued, running, and blocked work directly
 - emits machine-readable JSON with `status --json`
 - includes recent durable events for quick operator context
+
+Current live-operator behavior:
+
+- `events` prints durable queue history in chronological order
+- `events --follow` streams newly appended events without reading raw SQLite manually
+- active integrations, publishes, retries, and cancels are visible through `status` and `events`
 
 Current operator-control behavior:
 

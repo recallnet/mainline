@@ -39,7 +39,7 @@ _mainline_completions()
   _init_completion || return
 
   if [[ ${cword} -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "submit status run-once retry cancel publish doctor completion repo" -- "$cur") )
+    COMPREPLY=( $(compgen -W "submit status run-once retry cancel publish events doctor completion repo" -- "$cur") )
     return
   fi
 
@@ -62,6 +62,9 @@ _mainline_completions()
       ;;
     retry|cancel)
       COMPREPLY=( $(compgen -W "--repo --submission --publish" -- "$cur") )
+      ;;
+    events)
+      COMPREPLY=( $(compgen -W "--repo --json --follow --limit --poll-interval --idle-exit" -- "$cur") )
       ;;
     run-once|publish)
       COMPREPLY=( $(compgen -W "--repo" -- "$cur") )
@@ -99,6 +102,7 @@ _mainline() {
     'retry:requeue a blocked, failed, or cancelled item'
     'cancel:cancel a queued or failed item'
     'publish:queue publish of the protected tip'
+    'events:stream durable queue events'
     'doctor:inspect repo health'
     'completion:emit shell completion script'
     'repo:repository commands'
@@ -132,6 +136,10 @@ _mainline() {
       _arguments '--repo[repository path]:path:_files -/' '--submission[integration submission id]:id:' '--publish[publish request id]:id:'
       return
       ;;
+    events)
+      _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--follow[stream events continuously]' '--limit[number of initial events]:count:' '--poll-interval[poll interval]:duration:' '--idle-exit[exit after an idle follow poll]'
+      return
+      ;;
     run-once|publish)
       _arguments '--repo[repository path]:path:_files -/'
       return
@@ -148,8 +156,8 @@ _mainline "$@"
 }
 
 func fishCompletionScript() string {
-	return `complete -c mainline -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish doctor completion repo"
-complete -c mq -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish doctor completion repo"
+	return `complete -c mainline -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish events doctor completion repo"
+complete -c mq -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish events doctor completion repo"
 
 complete -c mainline -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"
 complete -c mq -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"
@@ -161,6 +169,14 @@ complete -c mainline -l repo
 complete -c mq -l repo
 complete -c mainline -n "__fish_seen_subcommand_from status doctor repo show" -l json
 complete -c mq -n "__fish_seen_subcommand_from status doctor repo show" -l json
+complete -c mainline -n "__fish_seen_subcommand_from events" -l follow
+complete -c mq -n "__fish_seen_subcommand_from events" -l follow
+complete -c mainline -n "__fish_seen_subcommand_from events" -l limit
+complete -c mq -n "__fish_seen_subcommand_from events" -l limit
+complete -c mainline -n "__fish_seen_subcommand_from events" -l poll-interval
+complete -c mq -n "__fish_seen_subcommand_from events" -l poll-interval
+complete -c mainline -n "__fish_seen_subcommand_from events" -l idle-exit
+complete -c mq -n "__fish_seen_subcommand_from events" -l idle-exit
 complete -c mainline -n "__fish_seen_subcommand_from status" -l events
 complete -c mq -n "__fish_seen_subcommand_from status" -l events
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l branch
