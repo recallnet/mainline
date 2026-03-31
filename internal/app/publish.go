@@ -86,6 +86,9 @@ func loadRepoContext(repoPath string) (git.RepositoryLayout, string, policy.File
 	if !store.Exists() {
 		return git.RepositoryLayout{}, "", policy.File{}, state.RepositoryRecord{}, state.Store{}, fmt.Errorf("repository is not initialized; run `mainline repo init` first")
 	}
+	if err := store.EnsureSchema(context.Background()); err != nil {
+		return git.RepositoryLayout{}, "", policy.File{}, state.RepositoryRecord{}, state.Store{}, err
+	}
 
 	repoRecord, err := store.GetRepositoryByPath(context.Background(), repoRoot)
 	if err != nil {
