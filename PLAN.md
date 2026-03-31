@@ -444,6 +444,25 @@ Acceptance criteria:
 - pushing a version tag produces downloadable archives for `mainline`, `mq`, and `mainlined`
 - release docs match the actual GitHub release artifact layout
 
+## Milestone 17: Binary Identity And Versioning
+
+Goal:
+
+- make shipped binaries identify themselves correctly and report build metadata
+
+Deliverables:
+
+- program-aware help text so `mq` and `mainlined` do not identify as `mainline`
+- `version` command and `--version` flag support
+- ldflags-based build metadata wired through normal builds and release builds
+- docs that point operators at the version surface for support and bug reports
+
+Acceptance criteria:
+
+- `mq --help` identifies itself as `mq`
+- `mainline version`, `mq version`, and `mainlined --version` report build metadata
+- release artifacts embed the tagged version instead of always reporting `dev`
+
 ## Architecture Plan
 
 ## Repository Layout

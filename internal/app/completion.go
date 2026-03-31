@@ -39,7 +39,7 @@ _mainline_completions()
   _init_completion || return
 
   if [[ ${cword} -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "submit status run-once retry cancel publish logs watch events doctor completion config repo" -- "$cur") )
+    COMPREPLY=( $(compgen -W "submit status run-once retry cancel publish logs watch events doctor completion version config repo" -- "$cur") )
     return
   fi
 
@@ -125,6 +125,7 @@ _mainline() {
     'events:stream durable queue events'
     'doctor:inspect repo health'
     'completion:emit shell completion script'
+    'version:show build metadata'
     'config:configuration commands'
     'repo:repository commands'
   )
@@ -195,8 +196,8 @@ _mainline "$@"
 }
 
 func fishCompletionScript() string {
-	return `complete -c mainline -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish logs watch events doctor completion config repo"
-complete -c mq -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish logs watch events doctor completion config repo"
+	return `complete -c mainline -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish logs watch events doctor completion version config repo"
+complete -c mq -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish logs watch events doctor completion version config repo"
 
 complete -c mainline -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"
 complete -c mq -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"

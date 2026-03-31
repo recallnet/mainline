@@ -27,6 +27,14 @@ Each archive contains:
 - `mainlined`
 - `README.md`
 
+Confirm the installed binary version:
+
+```bash
+mq version
+mainline version
+mainlined --version
+```
+
 ## Go Install
 
 ```bash

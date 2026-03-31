@@ -3,6 +3,8 @@ set -euo pipefail
 
 version="dev"
 output_dir="dist"
+commit="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -37,6 +39,8 @@ fi
 rm -rf "${release_root}"
 mkdir -p "${release_root}"
 
+ldflags="-X github.com/recallnet/mainline/internal/app.Version=${version} -X github.com/recallnet/mainline/internal/app.Commit=${commit} -X github.com/recallnet/mainline/internal/app.Date=${date}"
+
 build_archive() {
   local goos="$1"
   local goarch="$2"
@@ -49,11 +53,11 @@ build_archive() {
   mkdir -p "${stage_dir}"
 
   GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
-    go build -trimpath -o "${stage_dir}/mainline" ./cmd/mainline
+    go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mainline" ./cmd/mainline
   GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
-    go build -trimpath -o "${stage_dir}/mq" ./cmd/mq
+    go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mq" ./cmd/mq
   GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
-    go build -trimpath -o "${stage_dir}/mainlined" ./cmd/mainlined
+    go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mainlined" ./cmd/mainlined
 
   cp "${repo_root}/README.md" "${stage_dir}/README.md"
   if [[ -f "${repo_root}/LICENSE" ]]; then

@@ -32,14 +32,24 @@ type daemonLog struct {
 
 // RunDaemon executes the mainlined command-line interface.
 func RunDaemon(args []string) error {
-	return runDaemon(args, os.Stdout, os.Stderr)
+	return RunDaemonWithName("mainlined", args)
+}
+
+// RunDaemonWithName executes the daemon CLI using the provided program name.
+func RunDaemonWithName(programName string, args []string) error {
+	return runDaemonWithName(programName, args, os.Stdout, os.Stderr)
 }
 
 func runDaemon(args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainlined", flag.ContinueOnError)
+	return runDaemonWithName("mainlined", args, stdout, stderr)
+}
+
+func runDaemonWithName(programName string, args []string, stdout io.Writer, stderr io.Writer) error {
+	fs := flag.NewFlagSet(programName, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	var showHelp bool
+	var showVersion bool
 	opts := daemonOptions{
 		repoPath: ".",
 		interval: time.Second,
@@ -47,6 +57,7 @@ func runDaemon(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	fs.BoolVar(&showHelp, "help", false, "show help")
 	fs.BoolVar(&showHelp, "h", false, "show help")
+	fs.BoolVar(&showVersion, "version", false, "show version")
 	fs.StringVar(&opts.repoPath, "repo", opts.repoPath, "repository path")
 	fs.DurationVar(&opts.interval, "interval", opts.interval, "poll interval")
 	fs.IntVar(&opts.maxCycles, "max-cycles", 0, "stop after N worker cycles (0 means run forever)")
@@ -55,14 +66,18 @@ func runDaemon(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			printDaemonHelp(stdout)
+			printDaemonHelp(stdout, programName)
 			return nil
 		}
 		return err
 	}
 
 	if showHelp {
-		printDaemonHelp(stdout)
+		printDaemonHelp(stdout, programName)
+		return nil
+	}
+	if showVersion {
+		printVersion(stdout, programName)
 		return nil
 	}
 	if opts.interval <= 0 {
@@ -131,22 +146,23 @@ func logDaemon(w io.Writer, opts daemonOptions, level string, event string, cycl
 	fmt.Fprintf(w, "[%s] %s: %s\n", level, event, message)
 }
 
-func printDaemonHelp(w io.Writer) {
-	fmt.Fprint(w, daemonHelpText())
+func printDaemonHelp(w io.Writer, programName string) {
+	fmt.Fprint(w, daemonHelpText(programName))
 }
 
-func daemonHelpText() string {
-	return `mainlined runs the background worker loop for mainline.
+func daemonHelpText(programName string) string {
+	return fmt.Sprintf(`%s runs the background worker loop for mainline.
 
 Usage:
-  mainlined [flags]
+  %s [flags]
 
 Flags:
   -h, --help            show help
+  --version             show version
   --repo string         repository path (default ".")
   --interval duration   poll interval (default 1s)
   --max-cycles int      stop after N cycles (default 0 means forever)
   --json                emit structured json logs
   --idle-exit           exit after the first idle cycle
-`
+`, programName, programName)
 }

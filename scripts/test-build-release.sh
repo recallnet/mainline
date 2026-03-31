@@ -18,3 +18,20 @@ done
 
 test -f "${output_dir}/SHA256SUMS"
 tar -tzf "${output_dir}/mainline_v0.0.0-test_linux_amd64.tar.gz" | grep -q 'mainline_v0.0.0-test_linux_amd64/mainline$'
+
+extract_dir="$(mktemp -d)"
+trap 'rm -rf "${output_dir}" "${extract_dir}"' EXIT
+host_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+host_arch="$(uname -m)"
+case "${host_arch}" in
+  x86_64) host_arch="amd64" ;;
+  arm64|aarch64) host_arch="arm64" ;;
+  *)
+    echo "unsupported host arch: ${host_arch}" >&2
+    exit 1
+    ;;
+esac
+
+host_archive_base="mainline_v0.0.0-test_${host_os}_${host_arch}"
+tar -xzf "${output_dir}/${host_archive_base}.tar.gz" -C "${extract_dir}"
+"${extract_dir}/${host_archive_base}/mainline" version | grep -q '^mainline v0.0.0-test '

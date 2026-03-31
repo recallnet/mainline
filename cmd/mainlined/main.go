@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	if err := app.RunDaemon(os.Args[1:]); err != nil {
+	if err := app.RunDaemonWithName("mainlined", os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

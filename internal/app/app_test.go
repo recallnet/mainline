@@ -27,6 +27,19 @@ func TestCLIHelp(t *testing.T) {
 	}
 }
 
+func TestMQHelpUsesMQIdentity(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	if err := runCLIWithName("mq", []string{"--help"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLIWithName returned error: %v", err)
+	}
+
+	if !strings.Contains(stdout.String(), "mq coordinates local protected-branch integrations and publishes.") {
+		t.Fatalf("expected mq help identity, got %q", stdout.String())
+	}
+}
+
 func TestDaemonHelp(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -37,6 +50,32 @@ func TestDaemonHelp(t *testing.T) {
 
 	if !strings.Contains(stdout.String(), "mainlined runs the background worker loop") {
 		t.Fatalf("expected daemon help output, got %q", stdout.String())
+	}
+}
+
+func TestVersionCommandsReportBuildMetadata(t *testing.T) {
+	originalVersion, originalCommit, originalDate := Version, Commit, Date
+	Version, Commit, Date = "v1.2.3", "abc1234", "2026-03-31T00:00:00Z"
+	t.Cleanup(func() {
+		Version, Commit, Date = originalVersion, originalCommit, originalDate
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLIWithName("mq", []string{"version"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLIWithName version returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "mq v1.2.3 commit=abc1234 date=2026-03-31T00:00:00Z") {
+		t.Fatalf("expected version output, got %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := runDaemonWithName("mainlined", []string{"--version"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runDaemonWithName version returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "mainlined v1.2.3 commit=abc1234 date=2026-03-31T00:00:00Z") {
+		t.Fatalf("expected daemon version output, got %q", stdout.String())
 	}
 }
 
@@ -165,7 +204,7 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "retry cancel publish") {
 		t.Fatalf("expected completion script to include retry and cancel, got %q", output)
 	}
-	if !strings.Contains(output, "publish logs watch events doctor completion config") {
+	if !strings.Contains(output, "publish logs watch events doctor completion version config") {
 		t.Fatalf("expected completion script to include config surface, got %q", output)
 	}
 	if strings.Contains(output, "run-once|publish|doctor") {

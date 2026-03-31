@@ -149,6 +149,7 @@ The rule is simple:
 - shell completions for `bash`, `zsh`, and `fish`
 - Homebrew and Nix packaging
 - tag-built GitHub release archives with checksums
+- version-reporting binaries for support and release verification
 
 ## Install
 
@@ -200,6 +201,7 @@ mq watch --repo /path/to/main
 mq logs --repo /path/to/main --follow
 mq retry --repo /path/to/main --submission 17
 mq cancel --repo /path/to/main --publish 4
+mq version
 ```
 
 Daemon mode:

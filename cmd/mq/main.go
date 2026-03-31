@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	if err := app.RunCLI(os.Args[1:]); err != nil {
+	if err := app.RunCLIWithName("mq", os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
