@@ -391,6 +391,18 @@ func TestSubmitRejectsExactDuplicateActiveSubmission(t *testing.T) {
 	}
 }
 
+func TestSubmitRejectsCheckOnlyWaitCombination(t *testing.T) {
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err := runSubmit([]string{"--repo", ".", "--check-only", "--wait"}, &submitOut, &submitErr)
+	if err == nil {
+		t.Fatalf("expected flag conflict failure")
+	}
+	if !strings.Contains(err.Error(), "--check/--check-only and --wait cannot be used together") {
+		t.Fatalf("expected combined check/check-only conflict error, got %v", err)
+	}
+}
+
 func TestSubmitJSONFailureIncludesStableErrorCode(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	featurePath := filepath.Join(t.TempDir(), "dirty-json")

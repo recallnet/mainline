@@ -108,7 +108,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 	checkOnly = checkOnly || checkOnlyAlias
 	if checkOnly && waitForResult {
-		return fmt.Errorf("--check and --wait cannot be used together")
+		return fmt.Errorf("--check/--check-only and --wait cannot be used together")
 	}
 	if timeout <= 0 {
 		return fmt.Errorf("timeout must be greater than zero")
