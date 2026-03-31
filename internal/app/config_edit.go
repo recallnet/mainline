@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -20,10 +21,12 @@ func runConfigEdit(args []string, stdout io.Writer, stderr io.Writer) error {
 	var repoPath string
 	var editor string
 	var printPath bool
+	var asJSON bool
 
 	fs.StringVar(&repoPath, "repo", ".", "repository path")
 	fs.StringVar(&editor, "editor", "", "editor binary to launch")
 	fs.BoolVar(&printPath, "print-path", false, "print config path before opening editor")
+	fs.BoolVar(&asJSON, "json", false, "output json")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -40,7 +43,7 @@ func runConfigEdit(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	configPath := policy.ConfigPath(repoRoot)
-	if printPath {
+	if printPath && !asJSON {
 		fmt.Fprintln(stdout, configPath)
 	}
 
@@ -57,6 +60,18 @@ func runConfigEdit(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("run editor %q: %w", editorCommand[0], err)
+	}
+
+	if asJSON {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(map[string]any{
+			"ok":              true,
+			"config_path":     configPath,
+			"repository_root": repoRoot,
+			"editor":          editorCommand[0],
+			"printed_path":    printPath,
+		})
 	}
 
 	fmt.Fprintf(stdout, "Edited %s\n", configPath)

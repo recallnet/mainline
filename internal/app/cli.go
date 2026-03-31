@@ -49,9 +49,11 @@ func runCLIWithName(programName string, args []string, stdout io.Writer, stderr 
 
 	var showHelp bool
 	var showVersion bool
+	var asJSON bool
 	fs.BoolVar(&showHelp, "help", false, "show help")
 	fs.BoolVar(&showHelp, "h", false, "show help")
 	fs.BoolVar(&showVersion, "version", false, "show version")
+	fs.BoolVar(&asJSON, "json", false, "output json where supported")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -66,7 +68,7 @@ func runCLIWithName(programName string, args []string, stdout io.Writer, stderr 
 		return nil
 	}
 	if showVersion {
-		printVersion(stdout, programName)
+		printVersion(stdout, programName, asJSON)
 		return nil
 	}
 
@@ -81,8 +83,12 @@ func runCLIWithName(programName string, args []string, stdout io.Writer, stderr 
 		return fmt.Errorf("unknown command %q\n\n%s", command, cliHelpText(programName))
 	}
 	if command == "version" {
-		printVersion(stdout, programName)
+		printVersion(stdout, programName, asJSON)
 		return nil
+	}
+
+	if asJSON {
+		commandArgs = appendJSONFlag(commandArgs)
 	}
 
 	return handleCommand(command, commandArgs, stdout, stderr)
@@ -96,7 +102,7 @@ func cliHelpText(programName string) string {
 	return fmt.Sprintf(`%s coordinates local protected-branch integrations and publishes.
 
 Usage:
-  %s [command]
+  %s [--json] [command]
 
 Commands:
   land
@@ -143,4 +149,13 @@ func parseCLICommand(args []string) (string, []string) {
 	}
 
 	return args[0], args[1:]
+}
+
+func appendJSONFlag(args []string) []string {
+	for _, arg := range args {
+		if arg == "--json" {
+			return args
+		}
+	}
+	return append([]string{"--json"}, args...)
 }

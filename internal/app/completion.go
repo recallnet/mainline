@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -9,6 +10,8 @@ import (
 func runCompletion(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline completion", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	var asJSON bool
+	fs.BoolVar(&asJSON, "json", false, "output json")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -16,19 +19,28 @@ func runCompletion(args []string, stdout io.Writer, stderr io.Writer) error {
 		return fmt.Errorf("usage: mainline completion [bash|zsh|fish]")
 	}
 
+	shell := fs.Arg(0)
+	var script string
 	switch fs.Arg(0) {
 	case "bash":
-		_, err := io.WriteString(stdout, bashCompletionScript())
-		return err
+		script = bashCompletionScript()
 	case "zsh":
-		_, err := io.WriteString(stdout, zshCompletionScript())
-		return err
+		script = zshCompletionScript()
 	case "fish":
-		_, err := io.WriteString(stdout, fishCompletionScript())
-		return err
+		script = fishCompletionScript()
 	default:
 		return fmt.Errorf("unknown shell %q; expected bash, zsh, or fish", fs.Arg(0))
 	}
+	if asJSON {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(map[string]string{
+			"shell":  shell,
+			"script": script,
+		})
+	}
+	_, err := io.WriteString(stdout, script)
+	return err
 }
 
 func bashCompletionScript() string {

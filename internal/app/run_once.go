@@ -22,7 +22,9 @@ func runRunOnce(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 
 	var repoPath string
+	var asJSON bool
 	fs.StringVar(&repoPath, "repo", ".", "repository path")
+	fs.BoolVar(&asJSON, "json", false, "output json")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -31,6 +33,15 @@ func runRunOnce(args []string, stdout io.Writer, stderr io.Writer) error {
 	result, err := runOneCycle(repoPath)
 	if err != nil {
 		return err
+	}
+	if asJSON {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(map[string]any{
+			"ok":     true,
+			"repo":   repoPath,
+			"result": result,
+		})
 	}
 	fmt.Fprintln(stdout, result)
 	return nil

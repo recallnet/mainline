@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"testing"
@@ -157,5 +158,87 @@ func TestCancelAndRetryPublishRequest(t *testing.T) {
 	}
 	if request.Status != "queued" {
 		t.Fatalf("expected retried publish queued, got %q", request.Status)
+	}
+}
+
+func TestRetrySubmissionSupportsJSONOutput(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featureOne := t.TempDir() + "/feature-one"
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/one", featureOne)
+	replaceFileAndCommit(t, featureOne, "README.md", "# alpha\n", "feature one")
+	submitBranch(t, featureOne)
+
+	featureTwo := t.TempDir() + "/feature-two"
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/two", featureTwo)
+	replaceFileAndCommit(t, featureTwo, "README.md", "# beta\n", "feature two")
+	submitBranch(t, featureTwo)
+
+	runOnce(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	blockedID := submissions[1].ID
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runRetry([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(blockedID, 10), "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runRetry returned error: %v", err)
+	}
+
+	var result controlResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.OK || result.Action != "retry" || result.ItemType != "submission" || result.ID != blockedID || result.Status != "queued" {
+		t.Fatalf("unexpected retry json: %+v", result)
+	}
+}
+
+func TestCancelPublishSupportsJSONOutput(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	queuePublish(t, repoRoot)
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	requestID := requests[0].ID
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCancel([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requestID, 10), "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCancel returned error: %v", err)
+	}
+
+	var result controlResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.OK || result.Action != "cancel" || result.ItemType != "publish_request" || result.ID != requestID || result.Status != "cancelled" {
+		t.Fatalf("unexpected cancel json: %+v", result)
 	}
 }

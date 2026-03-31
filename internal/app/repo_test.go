@@ -40,6 +40,30 @@ func TestRepoInitAndShow(t *testing.T) {
 	}
 }
 
+func TestRepoInitSupportsJSONOutput(t *testing.T) {
+	repoRoot, worktreePath := createTestRepo(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath, "--json"}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(initOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result["ok"] != true {
+		t.Fatalf("expected ok=true, got %#v", result)
+	}
+	if result["protected_branch"] != "main" {
+		t.Fatalf("expected protected branch main, got %#v", result["protected_branch"])
+	}
+	if result["main_worktree"] != worktreePath {
+		t.Fatalf("expected main worktree %q, got %#v", worktreePath, result["main_worktree"])
+	}
+}
+
 func TestDoctorDetectsDirtyProtectedBranch(t *testing.T) {
 	repoRoot, worktreePath := createTestRepo(t)
 
@@ -378,6 +402,7 @@ func createTestRepo(t *testing.T) (string, string) {
 	runTestCommand(t, root, "git", "init", "-b", "main")
 	runTestCommand(t, root, "git", "config", "user.name", "Test User")
 	runTestCommand(t, root, "git", "config", "user.email", "test@example.com")
+	runTestCommand(t, root, "git", "config", "core.hooksPath", ".git/hooks")
 
 	readme := filepath.Join(root, "README.md")
 	if err := os.WriteFile(readme, []byte("# test\n"), 0o644); err != nil {

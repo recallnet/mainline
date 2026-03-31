@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -11,12 +12,23 @@ import (
 	"github.com/recallnet/mainline/internal/state"
 )
 
+type publishResult struct {
+	OK               bool   `json:"ok"`
+	PublishRequestID int64  `json:"publish_request_id"`
+	RepositoryRoot   string `json:"repository_root"`
+	StatePath        string `json:"state_path"`
+	TargetSHA        string `json:"target_sha"`
+	Status           string `json:"status"`
+}
+
 func runPublish(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline publish", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	var repoPath string
+	var asJSON bool
 	fs.StringVar(&repoPath, "repo", ".", "repository path")
+	fs.BoolVar(&asJSON, "json", false, "output json")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -59,6 +71,19 @@ func runPublish(args []string, stdout io.Writer, stderr io.Writer) error {
 		}),
 	}); err != nil {
 		return err
+	}
+
+	if asJSON {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(publishResult{
+			OK:               true,
+			PublishRequestID: request.ID,
+			RepositoryRoot:   repoRoot,
+			StatePath:        state.DefaultPath(layout.GitDir),
+			TargetSHA:        targetSHA,
+			Status:           request.Status,
+		})
 	}
 
 	fmt.Fprintf(stdout, "Queued publish request %d\n", request.ID)

@@ -84,11 +84,13 @@ func runRepoInit(args []string, stdout io.Writer, stderr io.Writer) error {
 	var protectedBranch string
 	var remote string
 	var mainWorktree string
+	var asJSON bool
 
 	fs.StringVar(&repoPath, "repo", ".", "repository path")
 	fs.StringVar(&protectedBranch, "protected-branch", "", "protected branch name")
 	fs.StringVar(&remote, "remote", "", "default remote name")
 	fs.StringVar(&mainWorktree, "main-worktree", "", "canonical protected-branch worktree path")
+	fs.BoolVar(&asJSON, "json", false, "output json")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -156,6 +158,19 @@ func runRepoInit(args []string, stdout io.Writer, stderr io.Writer) error {
 		Payload:   payload,
 	}); err != nil {
 		return err
+	}
+
+	if asJSON {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(map[string]any{
+			"ok":               true,
+			"config_path":      policy.ConfigPath(repoRoot),
+			"protected_branch": cfg.Repo.ProtectedBranch,
+			"main_worktree":    cfg.Repo.MainWorktree,
+			"state_path":       state.DefaultPath(layout.GitDir),
+			"repository_root":  repoRoot,
+		})
 	}
 
 	fmt.Fprintf(stdout, "Initialized %s\n", policy.ConfigPath(repoRoot))

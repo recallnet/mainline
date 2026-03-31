@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -25,10 +26,12 @@ func runControlAction(action string, args []string, stdout io.Writer, stderr io.
 	var repoPath string
 	var submissionID int64
 	var publishID int64
+	var asJSON bool
 
 	fs.StringVar(&repoPath, "repo", ".", "repository path")
 	fs.Int64Var(&submissionID, "submission", 0, "integration submission id")
 	fs.Int64Var(&publishID, "publish", 0, "publish request id")
+	fs.BoolVar(&asJSON, "json", false, "output json")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -44,12 +47,22 @@ func runControlAction(action string, args []string, stdout io.Writer, stderr io.
 	ctx := context.Background()
 
 	if submissionID != 0 {
-		return controlSubmission(ctx, action, store, repoRecord.ID, submissionID, stdout)
+		return controlSubmission(ctx, action, store, repoRecord.ID, submissionID, stdout, asJSON)
 	}
-	return controlPublish(ctx, action, store, repoRecord.ID, publishID, stdout)
+	return controlPublish(ctx, action, store, repoRecord.ID, publishID, stdout, asJSON)
 }
 
-func controlSubmission(ctx context.Context, action string, store state.Store, repoID int64, submissionID int64, stdout io.Writer) error {
+type controlResult struct {
+	OK        bool   `json:"ok"`
+	Action    string `json:"action"`
+	ItemType  string `json:"item_type"`
+	ID        int64  `json:"id"`
+	Branch    string `json:"branch,omitempty"`
+	TargetSHA string `json:"target_sha,omitempty"`
+	Status    string `json:"status"`
+}
+
+func controlSubmission(ctx context.Context, action string, store state.Store, repoID int64, submissionID int64, stdout io.Writer, asJSON bool) error {
 	submission, err := store.GetIntegrationSubmission(ctx, submissionID)
 	if err != nil {
 		return err
@@ -73,6 +86,16 @@ func controlSubmission(ctx context.Context, action string, store state.Store, re
 		}); err != nil {
 			return err
 		}
+		if asJSON {
+			return json.NewEncoder(stdout).Encode(controlResult{
+				OK:       true,
+				Action:   action,
+				ItemType: "submission",
+				ID:       updated.ID,
+				Branch:   updated.BranchName,
+				Status:   updated.Status,
+			})
+		}
 		fmt.Fprintf(stdout, "Retried submission %d\n", updated.ID)
 		fmt.Fprintf(stdout, "Branch: %s\n", updated.BranchName)
 		fmt.Fprintf(stdout, "Status: %s\n", updated.Status)
@@ -91,6 +114,16 @@ func controlSubmission(ctx context.Context, action string, store state.Store, re
 		}); err != nil {
 			return err
 		}
+		if asJSON {
+			return json.NewEncoder(stdout).Encode(controlResult{
+				OK:       true,
+				Action:   action,
+				ItemType: "submission",
+				ID:       updated.ID,
+				Branch:   updated.BranchName,
+				Status:   updated.Status,
+			})
+		}
 		fmt.Fprintf(stdout, "Cancelled submission %d\n", updated.ID)
 		fmt.Fprintf(stdout, "Branch: %s\n", updated.BranchName)
 		fmt.Fprintf(stdout, "Status: %s\n", updated.Status)
@@ -100,7 +133,7 @@ func controlSubmission(ctx context.Context, action string, store state.Store, re
 	}
 }
 
-func controlPublish(ctx context.Context, action string, store state.Store, repoID int64, publishID int64, stdout io.Writer) error {
+func controlPublish(ctx context.Context, action string, store state.Store, repoID int64, publishID int64, stdout io.Writer, asJSON bool) error {
 	request, err := store.GetPublishRequest(ctx, publishID)
 	if err != nil {
 		return err
@@ -130,6 +163,16 @@ func controlPublish(ctx context.Context, action string, store state.Store, repoI
 		}); err != nil {
 			return err
 		}
+		if asJSON {
+			return json.NewEncoder(stdout).Encode(controlResult{
+				OK:        true,
+				Action:    action,
+				ItemType:  "publish_request",
+				ID:        updated.ID,
+				TargetSHA: updated.TargetSHA,
+				Status:    updated.Status,
+			})
+		}
 		fmt.Fprintf(stdout, "Retried publish request %d\n", updated.ID)
 		fmt.Fprintf(stdout, "Target SHA: %s\n", updated.TargetSHA)
 		fmt.Fprintf(stdout, "Status: %s\n", updated.Status)
@@ -153,6 +196,16 @@ func controlPublish(ctx context.Context, action string, store state.Store, repoI
 			}),
 		}); err != nil {
 			return err
+		}
+		if asJSON {
+			return json.NewEncoder(stdout).Encode(controlResult{
+				OK:        true,
+				Action:    action,
+				ItemType:  "publish_request",
+				ID:        updated.ID,
+				TargetSHA: updated.TargetSHA,
+				Status:    updated.Status,
+			})
 		}
 		fmt.Fprintf(stdout, "Cancelled publish request %d\n", updated.ID)
 		fmt.Fprintf(stdout, "Target SHA: %s\n", updated.TargetSHA)

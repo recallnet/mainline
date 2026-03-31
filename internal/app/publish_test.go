@@ -231,7 +231,7 @@ func TestPublishRespectsHookPolicyBypassingPrePushHook(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
 
-	hookPath := filepath.Join(repoRoot, ".git", "hooks", "pre-push")
+	hookPath := filepath.Join(hooksDirForRepo(t, repoRoot), "pre-push")
 	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestRunOnceCanPreemptInFlightPublishForNewerTarget(t *testing.T) {
 	initRepoForWorker(t, repoRoot)
 
 	hookPIDPath := filepath.Join(t.TempDir(), "pre-push.pid")
-	hookPath := filepath.Join(repoRoot, ".git", "hooks", "pre-push")
+	hookPath := filepath.Join(hooksDirForRepo(t, repoRoot), "pre-push")
 	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\necho $$ > "+hookPIDPath+"\nsleep 5\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}

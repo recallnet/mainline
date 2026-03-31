@@ -77,7 +77,7 @@ func runDaemonWithName(programName string, args []string, stdout io.Writer, stde
 		return nil
 	}
 	if showVersion {
-		printVersion(stdout, programName)
+		printVersion(stdout, programName, false)
 		return nil
 	}
 	if opts.interval <= 0 {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -24,6 +25,29 @@ func versionText(name string) string {
 	return strings.Join(fields, " ")
 }
 
-func printVersion(w io.Writer, name string) {
+type versionResult struct {
+	Program string `json:"program"`
+	Version string `json:"version"`
+	Commit  string `json:"commit,omitempty"`
+	Date    string `json:"date,omitempty"`
+}
+
+func printVersion(w io.Writer, name string, asJSON bool) {
+	if asJSON {
+		result := versionResult{
+			Program: name,
+			Version: Version,
+		}
+		if Commit != "" && Commit != "unknown" {
+			result.Commit = Commit
+		}
+		if Date != "" && Date != "unknown" {
+			result.Date = Date
+		}
+		encoder := json.NewEncoder(w)
+		encoder.SetIndent("", "  ")
+		_ = encoder.Encode(result)
+		return
+	}
 	fmt.Fprintln(w, versionText(name))
 }

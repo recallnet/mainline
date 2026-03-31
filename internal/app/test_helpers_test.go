@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -33,6 +34,7 @@ func createBareCloneWorktree(t *testing.T) (string, string) {
 	runTestCommand(t, seedRoot, "git", "init", "-b", "main")
 	runTestCommand(t, seedRoot, "git", "config", "user.name", "Test User")
 	runTestCommand(t, seedRoot, "git", "config", "user.email", "test@example.com")
+	runTestCommand(t, seedRoot, "git", "config", "core.hooksPath", ".git/hooks")
 
 	readme := filepath.Join(seedRoot, "README.md")
 	if err := os.WriteFile(readme, []byte("# test\n"), 0o644); err != nil {
@@ -61,6 +63,7 @@ func createTestRepoWithRemote(t *testing.T) (string, string) {
 	runTestCommand(t, repoRoot, "git", "init", "-b", "main")
 	runTestCommand(t, repoRoot, "git", "config", "user.name", "Test User")
 	runTestCommand(t, repoRoot, "git", "config", "user.email", "test@example.com")
+	runTestCommand(t, repoRoot, "git", "config", "core.hooksPath", ".git/hooks")
 
 	readme := filepath.Join(repoRoot, "README.md")
 	if err := os.WriteFile(readme, []byte("# test\n"), 0o644); err != nil {
@@ -73,4 +76,23 @@ func createTestRepoWithRemote(t *testing.T) (string, string) {
 	runTestCommand(t, repoRoot, "git", "push", "-u", "origin", "main")
 
 	return repoRoot, remoteDir
+}
+
+func hooksDirForRepo(t *testing.T, repoRoot string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", "config", "--get", "core.hooksPath")
+	cmd.Dir = repoRoot
+	output, err := cmd.Output()
+	hooksPath := strings.TrimSpace(string(output))
+	if err != nil && hooksPath == "" {
+		return filepath.Join(repoRoot, ".git", "hooks")
+	}
+	if hooksPath == "" {
+		return filepath.Join(repoRoot, ".git", "hooks")
+	}
+	if filepath.IsAbs(hooksPath) {
+		return hooksPath
+	}
+	return filepath.Join(repoRoot, hooksPath)
 }

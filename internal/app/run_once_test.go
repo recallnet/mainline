@@ -179,6 +179,7 @@ func TestRunOnceReportsProtectedBranchSyncFromUpstream(t *testing.T) {
 	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
 	runTestCommand(t, upstreamClone, "git", "config", "user.name", "Test User")
 	runTestCommand(t, upstreamClone, "git", "config", "user.email", "test@example.com")
+	runTestCommand(t, upstreamClone, "git", "config", "core.hooksPath", ".git/hooks")
 	writeFileAndCommit(t, upstreamClone, "upstream.txt", "upstream\n", "upstream advance")
 	upstreamHead := trimNewline(runTestCommand(t, upstreamClone, "git", "rev-parse", "HEAD"))
 	runTestCommand(t, upstreamClone, "git", "push", "origin", "main")
@@ -248,6 +249,7 @@ func TestRunOnceReportsProtectedBranchSyncBeforeConflictBlock(t *testing.T) {
 	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
 	runTestCommand(t, upstreamClone, "git", "config", "user.name", "Test User")
 	runTestCommand(t, upstreamClone, "git", "config", "user.email", "test@example.com")
+	runTestCommand(t, upstreamClone, "git", "config", "core.hooksPath", ".git/hooks")
 	replaceFileAndCommit(t, upstreamClone, "README.md", "# upstream\n", "upstream advance")
 	runTestCommand(t, upstreamClone, "git", "push", "origin", "main")
 

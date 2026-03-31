@@ -82,6 +82,82 @@ func TestVersionCommandsReportBuildMetadata(t *testing.T) {
 	}
 }
 
+func TestGlobalJSONVersionReportsStructuredBuildMetadata(t *testing.T) {
+	originalVersion, originalCommit, originalDate := Version, Commit, Date
+	Version, Commit, Date = "v1.2.3", "abc1234", "2026-03-31T00:00:00Z"
+	t.Cleanup(func() {
+		Version, Commit, Date = originalVersion, originalCommit, originalDate
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLIWithName("mq", []string{"--json", "version"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLIWithName version returned error: %v", err)
+	}
+
+	var result versionResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.Program != "mq" || result.Version != "v1.2.3" || result.Commit != "abc1234" || result.Date != "2026-03-31T00:00:00Z" {
+		t.Fatalf("unexpected version json: %+v", result)
+	}
+}
+
+func TestGlobalJSONCompletionReportsStructuredScript(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"--json", "completion", "bash"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var result struct {
+		Shell  string `json:"shell"`
+		Script string `json:"script"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.Shell != "bash" || !strings.Contains(result.Script, "complete -F _mainline_completions mainline") {
+		t.Fatalf("unexpected completion json: %+v", result)
+	}
+}
+
+func TestGlobalJSONForwardsToRunOnceAndPublish(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"--json", "publish", "--repo", repoRoot}, &stdout, &stderr); err != nil {
+		t.Fatalf("publish returned error: %v", err)
+	}
+	var publish publishResult
+	if err := json.Unmarshal(stdout.Bytes(), &publish); err != nil {
+		t.Fatalf("Unmarshal publish: %v", err)
+	}
+	if !publish.OK || publish.PublishRequestID == 0 || publish.Status != "queued" {
+		t.Fatalf("unexpected publish json: %+v", publish)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := runCLI([]string{"--json", "run-once", "--repo", repoRoot}, &stdout, &stderr); err != nil {
+		t.Fatalf("run-once returned error: %v", err)
+	}
+	var result struct {
+		OK     bool   `json:"ok"`
+		Repo   string `json:"repo"`
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal run-once: %v", err)
+	}
+	if !result.OK || result.Repo != repoRoot || result.Result == "" {
+		t.Fatalf("unexpected run-once json: %+v", result)
+	}
+}
+
 func TestDaemonProcessesIntegrationAndPublishWork(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
