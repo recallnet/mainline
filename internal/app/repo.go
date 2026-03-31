@@ -34,6 +34,10 @@ func handleCommand(command string, args []string, stdout io.Writer, stderr io.Wr
 		return runStatus(args, stdout, stderr)
 	case "run-once":
 		return runRunOnce(args, stdout, stderr)
+	case "retry":
+		return runRetry(args, stdout, stderr)
+	case "cancel":
+		return runCancel(args, stdout, stderr)
 	case "publish":
 		return runPublish(args, stdout, stderr)
 	case "completion":

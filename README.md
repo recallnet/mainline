@@ -114,6 +114,8 @@ mainline status --repo . --json
 mainline submit --repo /path/to/feature-worktree
 mainline submit --repo /path/to/repo --branch fix-login --worktree /path/to/feature-worktree
 mainline run-once --repo /path/to/repo
+mainline retry --repo /path/to/repo --submission 17
+mainline cancel --repo /path/to/repo --publish 4
 mainline publish --repo /path/to/repo
 mainline completion zsh
 ```
@@ -127,6 +129,8 @@ mq doctor --repo .
 mq status --repo .
 mq submit --repo /path/to/feature-worktree
 mq run-once --repo /path/to/repo
+mq retry --repo /path/to/repo --submission 17
+mq cancel --repo /path/to/repo --publish 4
 mq publish --repo /path/to/repo
 ```
 
@@ -240,9 +244,18 @@ Current daemon behavior:
 Current status behavior:
 
 - summarizes queued, running, blocked, failed, and succeeded work
+- includes cancelled queue items
 - shows the latest submission and publish request
 - emits machine-readable JSON with `status --json`
 - includes recent durable events for quick operator context
+
+Current operator-control behavior:
+
+- `retry` requeues blocked, failed, or cancelled submissions
+- `retry` requeues failed or cancelled publish requests
+- `cancel` marks queued, blocked, or failed submissions cancelled
+- `cancel` marks queued or failed publish requests cancelled
+- every operator action appends a durable event
 
 Current policy behavior:
 

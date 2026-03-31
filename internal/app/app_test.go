@@ -161,6 +161,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "complete -F _mainline_completions mainline") {
 		t.Fatalf("expected completion script output, got %q", output)
 	}
+	if !strings.Contains(output, "retry cancel publish") {
+		t.Fatalf("expected completion script to include retry and cancel, got %q", output)
+	}
 	if strings.Contains(output, "run-once|publish|doctor") {
 		t.Fatalf("expected split completion cases for real command flags, got %q", output)
 	}

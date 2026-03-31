@@ -39,7 +39,7 @@ _mainline_completions()
   _init_completion || return
 
   if [[ ${cword} -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "submit status run-once publish doctor completion repo" -- "$cur") )
+    COMPREPLY=( $(compgen -W "submit status run-once retry cancel publish doctor completion repo" -- "$cur") )
     return
   fi
 
@@ -59,6 +59,9 @@ _mainline_completions()
       ;;
     status)
       COMPREPLY=( $(compgen -W "--repo --json --events" -- "$cur") )
+      ;;
+    retry|cancel)
+      COMPREPLY=( $(compgen -W "--repo --submission --publish" -- "$cur") )
       ;;
     run-once|publish)
       COMPREPLY=( $(compgen -W "--repo" -- "$cur") )
@@ -93,6 +96,8 @@ _mainline() {
     'submit:queue a source worktree'
     'status:show queue and publish status'
     'run-once:run one integration or publish cycle'
+    'retry:requeue a blocked, failed, or cancelled item'
+    'cancel:cancel a queued or failed item'
     'publish:queue publish of the protected tip'
     'doctor:inspect repo health'
     'completion:emit shell completion script'
@@ -123,6 +128,10 @@ _mainline() {
       _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--events[number of recent events]:count:'
       return
       ;;
+    retry|cancel)
+      _arguments '--repo[repository path]:path:_files -/' '--submission[integration submission id]:id:' '--publish[publish request id]:id:'
+      return
+      ;;
     run-once|publish)
       _arguments '--repo[repository path]:path:_files -/'
       return
@@ -139,8 +148,8 @@ _mainline "$@"
 }
 
 func fishCompletionScript() string {
-	return `complete -c mainline -f -n "__fish_use_subcommand" -a "submit status run-once publish doctor completion repo"
-complete -c mq -f -n "__fish_use_subcommand" -a "submit status run-once publish doctor completion repo"
+	return `complete -c mainline -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish doctor completion repo"
+complete -c mq -f -n "__fish_use_subcommand" -a "submit status run-once retry cancel publish doctor completion repo"
 
 complete -c mainline -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"
 complete -c mq -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show" -a "init show"
@@ -158,6 +167,10 @@ complete -c mainline -n "__fish_seen_subcommand_from submit" -l branch
 complete -c mq -n "__fish_seen_subcommand_from submit" -l branch
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l worktree
 complete -c mq -n "__fish_seen_subcommand_from submit" -l worktree
+complete -c mainline -n "__fish_seen_subcommand_from retry cancel" -l submission
+complete -c mq -n "__fish_seen_subcommand_from retry cancel" -l submission
+complete -c mainline -n "__fish_seen_subcommand_from retry cancel" -l publish
+complete -c mq -n "__fish_seen_subcommand_from retry cancel" -l publish
 complete -c mainline -n "__fish_seen_subcommand_from repo init" -l protected-branch
 complete -c mq -n "__fish_seen_subcommand_from repo init" -l protected-branch
 complete -c mainline -n "__fish_seen_subcommand_from repo init" -l remote

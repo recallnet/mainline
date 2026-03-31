@@ -14,14 +14,16 @@ import (
 )
 
 type statusCounts struct {
-	QueuedSubmissions  int `json:"queued_submissions"`
-	RunningSubmissions int `json:"running_submissions"`
-	BlockSubmissions   int `json:"blocked_submissions"`
-	FailedSubmissions  int `json:"failed_submissions"`
-	QueuedPublishes    int `json:"queued_publishes"`
-	RunningPublishes   int `json:"running_publishes"`
-	FailedPublishes    int `json:"failed_publishes"`
-	SucceededPublishes int `json:"succeeded_publishes"`
+	QueuedSubmissions    int `json:"queued_submissions"`
+	RunningSubmissions   int `json:"running_submissions"`
+	BlockSubmissions     int `json:"blocked_submissions"`
+	FailedSubmissions    int `json:"failed_submissions"`
+	CancelledSubmissions int `json:"cancelled_submissions"`
+	QueuedPublishes      int `json:"queued_publishes"`
+	RunningPublishes     int `json:"running_publishes"`
+	FailedPublishes      int `json:"failed_publishes"`
+	CancelledPublishes   int `json:"cancelled_publishes"`
+	SucceededPublishes   int `json:"succeeded_publishes"`
 }
 
 type statusResult struct {
@@ -134,14 +136,16 @@ func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
 	} else {
 		fmt.Fprintln(stdout, "Protected upstream: none")
 	}
-	fmt.Fprintf(stdout, "Queue: submissions queued=%d running=%d blocked=%d failed=%d | publishes queued=%d running=%d failed=%d succeeded=%d\n",
+	fmt.Fprintf(stdout, "Queue: submissions queued=%d running=%d blocked=%d failed=%d cancelled=%d | publishes queued=%d running=%d failed=%d cancelled=%d succeeded=%d\n",
 		result.Counts.QueuedSubmissions,
 		result.Counts.RunningSubmissions,
 		result.Counts.BlockSubmissions,
 		result.Counts.FailedSubmissions,
+		result.Counts.CancelledSubmissions,
 		result.Counts.QueuedPublishes,
 		result.Counts.RunningPublishes,
 		result.Counts.FailedPublishes,
+		result.Counts.CancelledPublishes,
 		result.Counts.SucceededPublishes,
 	)
 	if result.LatestSubmission != nil {
@@ -195,6 +199,8 @@ func summarizeCounts(submissions []state.IntegrationSubmission, requests []state
 			counts.BlockSubmissions++
 		case "failed":
 			counts.FailedSubmissions++
+		case "cancelled":
+			counts.CancelledSubmissions++
 		}
 	}
 	for _, request := range requests {
@@ -205,6 +211,8 @@ func summarizeCounts(submissions []state.IntegrationSubmission, requests []state
 			counts.RunningPublishes++
 		case "failed":
 			counts.FailedPublishes++
+		case "cancelled":
+			counts.CancelledPublishes++
 		case "succeeded":
 			counts.SucceededPublishes++
 		}

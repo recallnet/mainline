@@ -63,3 +63,12 @@ mq status --repo /path/to/main --json
 mq run-once --repo /path/to/main
 mq publish --repo /path/to/main
 ```
+
+If a queue item needs operator intervention:
+
+```bash
+mq cancel --repo /path/to/main --submission 17
+mq retry --repo /path/to/main --submission 17
+mq cancel --repo /path/to/main --publish 4
+mq retry --repo /path/to/main --publish 4
+```
