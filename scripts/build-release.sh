@@ -29,7 +29,11 @@ platforms=(
 )
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-release_root="${repo_root}/${output_dir}"
+if [[ "${output_dir}" = /* ]]; then
+  release_root="${output_dir}"
+else
+  release_root="${repo_root}/${output_dir}"
+fi
 rm -rf "${release_root}"
 mkdir -p "${release_root}"
 

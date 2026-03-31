@@ -27,5 +27,8 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Release script regression test
+        run: ./scripts/test-build-release.sh
+
       - name: Release build
         run: make release-snapshot VERSION=ci
