@@ -92,10 +92,10 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 
-	fs := flag.NewFlagSet("mainline submit", flag.ContinueOnError)
+	fs := flag.NewFlagSet(currentCLIProgramName()+" submit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	setFlagUsage(fs, `Usage:
-  mainline submit [flags]
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s submit [flags]
 
 Queue a topic worktree or detached sha for serialized integration.
 
@@ -109,7 +109,7 @@ Examples:
   mq submit --sha <commit> --json
 
 Flags:
-`)
+`, currentCLIProgramName()))
 
 	var repoPath string
 	var branch string

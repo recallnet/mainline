@@ -8,10 +8,10 @@ import (
 )
 
 func runCompletion(args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainline completion", flag.ContinueOnError)
+	fs := flag.NewFlagSet(currentCLIProgramName()+" completion", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	setFlagUsage(fs, `Usage:
-  mainline completion [--json] [bash|zsh|fish]
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s completion [--json] [bash|zsh|fish]
 
 Emit a shell completion script for mainline and mq.
 
@@ -20,7 +20,7 @@ Examples:
   mq --json completion bash
 
 Flags:
-`)
+`, currentCLIProgramName()))
 	var asJSON bool
 	fs.BoolVar(&asJSON, "json", false, "output json")
 	if err := fs.Parse(args); err != nil {

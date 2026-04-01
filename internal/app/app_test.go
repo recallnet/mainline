@@ -944,13 +944,16 @@ func TestLogsHelpUsesLogsCommandName(t *testing.T) {
 func TestSubmitHelpMentionsAgentTurboPath(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err := runCLI([]string{"submit", "--help"}, &stdout, &stderr)
+	err := runCLIWithName("mq", []string{"submit", "--help"}, &stdout, &stderr)
 	if err == nil {
 		t.Fatalf("expected help error for submit command")
 	}
 	output := stderr.String()
 	if !strings.Contains(output, "mq submit --wait --timeout 15m --json") {
 		t.Fatalf("expected submit help to mention wait json path, got %q", output)
+	}
+	if !strings.Contains(output, "Usage:\n  mq submit [flags]") {
+		t.Fatalf("expected submit help to use mq identity, got %q", output)
 	}
 }
 

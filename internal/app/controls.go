@@ -19,10 +19,10 @@ func runCancel(args []string, stdout io.Writer, stderr io.Writer) error {
 }
 
 func runControlAction(action string, args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainline "+action, flag.ContinueOnError)
+	fs := flag.NewFlagSet(currentCLIProgramName()+" "+action, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
-  mainline %s [flags]
+  %s %s [flags]
 
 Operate on exactly one queue item.
 
@@ -31,7 +31,7 @@ Examples:
   mq %s --repo /path/to/protected-main --publish 4 --json
 
 Flags:
-`, action, action, action))
+`, currentCLIProgramName(), action, action, action))
 
 	var repoPath string
 	var submissionID int64

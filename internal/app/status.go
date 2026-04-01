@@ -59,10 +59,10 @@ type blockedSubmissionDetails struct {
 }
 
 func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainline status", flag.ContinueOnError)
+	fs := flag.NewFlagSet(currentCLIProgramName()+" status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	setFlagUsage(fs, `Usage:
-  mainline status [flags]
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s status [flags]
 
 Show protected-branch state, queue counts, active work, and recent durable
 events.
@@ -72,7 +72,7 @@ Examples:
   mq status --repo /path/to/protected-main --json --events 10
 
 Flags:
-`)
+`, currentCLIProgramName()))
 
 	var repoPath string
 	var asJSON bool

@@ -15,10 +15,10 @@ import (
 )
 
 func runConfigEdit(args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainline config edit", flag.ContinueOnError)
+	fs := flag.NewFlagSet(currentCLIProgramName()+" config edit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	setFlagUsage(fs, `Usage:
-  mainline config edit [flags]
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s config edit [flags]
 
 Open the shared repo config, even when invoked from a linked worktree.
 
@@ -27,7 +27,7 @@ Examples:
   mq config edit --print-path
 
 Flags:
-`)
+`, currentCLIProgramName()))
 
 	var repoPath string
 	var editor string

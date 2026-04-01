@@ -22,10 +22,10 @@ type publishResult struct {
 }
 
 func runPublish(args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainline publish", flag.ContinueOnError)
+	fs := flag.NewFlagSet(currentCLIProgramName()+" publish", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	setFlagUsage(fs, `Usage:
-  mainline publish [flags]
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s publish [flags]
 
 Queue publish of the current protected-branch tip.
 
@@ -34,7 +34,7 @@ Examples:
   mq publish --repo /path/to/protected-main --json
 
 Flags:
-`)
+`, currentCLIProgramName()))
 
 	var repoPath string
 	var asJSON bool

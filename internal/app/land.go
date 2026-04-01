@@ -34,10 +34,10 @@ type landResult struct {
 }
 
 func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainline land", flag.ContinueOnError)
+	fs := flag.NewFlagSet(currentCLIProgramName()+" land", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	setFlagUsage(fs, `Usage:
-  mainline land [flags]
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s land [flags]
 
 Submit a topic worktree and wait until it is integrated and published.
 
@@ -49,7 +49,7 @@ Examples:
   mq land --repo /path/to/topic-worktree --json
 
 Flags:
-`)
+`, currentCLIProgramName()))
 
 	var repoPath string
 	var branch string

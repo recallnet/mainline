@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+var activeCLIProgramName = "mainline"
+
 var cliCommands = []string{
 	"land",
 	"submit",
@@ -44,6 +46,12 @@ func runCLI(args []string, stdout io.Writer, stderr io.Writer) error {
 }
 
 func runCLIWithName(programName string, args []string, stdout io.Writer, stderr io.Writer) error {
+	previousProgramName := activeCLIProgramName
+	activeCLIProgramName = programName
+	defer func() {
+		activeCLIProgramName = previousProgramName
+	}()
+
 	fs := flag.NewFlagSet(programName, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -183,4 +191,11 @@ func setFlagUsage(fs *flag.FlagSet, text string) {
 		fmt.Fprint(fs.Output(), text)
 		fs.PrintDefaults()
 	}
+}
+
+func currentCLIProgramName() string {
+	if activeCLIProgramName == "" {
+		return "mainline"
+	}
+	return activeCLIProgramName
 }

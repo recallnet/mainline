@@ -23,10 +23,10 @@ type watchFrame struct {
 }
 
 func runWatch(args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainline watch", flag.ContinueOnError)
+	fs := flag.NewFlagSet(currentCLIProgramName()+" watch", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	setFlagUsage(fs, `Usage:
-  mainline watch [flags]
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s watch [flags]
 
 Continuously refresh protected-branch and queue state.
 
@@ -35,7 +35,7 @@ Examples:
   mq watch --repo /path/to/protected-main --json --interval 1s
 
 Flags:
-`)
+`, currentCLIProgramName()))
 
 	opts := watchOptions{
 		repoPath:   ".",

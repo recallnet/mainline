@@ -78,10 +78,10 @@ func runPlaceholderCommand(command string, args []string, stdout io.Writer) erro
 }
 
 func runRepoInit(args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainline repo init", flag.ContinueOnError)
+	fs := flag.NewFlagSet(currentCLIProgramName()+" repo init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	setFlagUsage(fs, `Usage:
-  mainline repo init [flags]
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s repo init [flags]
 
 Initialize durable mq state for the current repo and scaffold mainline.toml.
 
@@ -93,7 +93,7 @@ Then install hooks:
   ./scripts/install-hooks.sh
 
 Flags:
-`)
+`, currentCLIProgramName()))
 
 	var repoPath string
 	var protectedBranch string
@@ -210,10 +210,10 @@ Flags:
 }
 
 func runRepoShow(args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainline repo show", flag.ContinueOnError)
+	fs := flag.NewFlagSet(currentCLIProgramName()+" repo show", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	setFlagUsage(fs, `Usage:
-  mainline repo show [flags]
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s repo show [flags]
 
 Show the stored repo config, protected-branch status, and discovered worktrees.
 
@@ -222,7 +222,7 @@ Examples:
   mq repo show --json
 
 Flags:
-`)
+`, currentCLIProgramName()))
 
 	var repoPath string
 	var asJSON bool
@@ -314,10 +314,10 @@ Flags:
 }
 
 func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mainline doctor", flag.ContinueOnError)
+	fs := flag.NewFlagSet(currentCLIProgramName()+" doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	setFlagUsage(fs, `Usage:
-  mainline doctor [flags]
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s doctor [flags]
 
 Inspect repo health and optionally apply safe automatic recovery steps.
 
@@ -326,7 +326,7 @@ Examples:
   mq doctor --repo /path/to/protected-main --fix --json
 
 Flags:
-`)
+`, currentCLIProgramName()))
 
 	var repoPath string
 	var asJSON bool
