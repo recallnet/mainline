@@ -32,6 +32,11 @@ launch-agent label:
 - verify: `launchctl print gui/$(id -u)/com.recallnet.mainline.global`
 - if macOS says `Could not find service "com.recallnet.mainline.global"`, the
   daemon is not installed yet
+- when proving the daemon path is nominal, inspect:
+  - `tail -n 50 ~/Library/Logs/mainline/mainlined.out.log`
+  - `tail -n 50 ~/Library/Logs/mainline/mainlined.err.log`
+  - `mq repo root --repo ~/Projects/recallnet/mainline --json`
+  - `mq doctor --repo ~/Projects/recallnet/mainline --json`
 
 Do not use this skill to bypass `mq`. It exists to dogfood the workflow that
 `mainline` is building for other repos.

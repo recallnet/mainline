@@ -261,6 +261,24 @@ the exact label with:
 launchctl print gui/$(id -u)/com.recallnet.mainline.global
 ```
 
+When you want to prove the daemon path is nominal instead of trusting it by
+assumption, use:
+
+```bash
+tail -n 50 ~/Library/Logs/mainline/mainlined.out.log
+tail -n 50 ~/Library/Logs/mainline/mainlined.err.log
+mq repo root --repo /path/to/repo-root --json
+mq doctor --repo /path/to/repo-root --json
+```
+
+Healthy state means:
+
+- launchd shows the service installed and running
+- stderr is quiet
+- stdout is normal cycle JSON, not a storm of dead temp repos
+- `mq repo root` says the canonical root checkout is trustworthy
+- `mq doctor` says the repo is initialized and safe to operate
+
 If you see `Could not find service "com.recallnet.mainline.global"`, the
 service has not been installed yet.
 

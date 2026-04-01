@@ -9,6 +9,22 @@ import (
 	"testing"
 )
 
+func TestMain(m *testing.M) {
+	registryDir, err := os.MkdirTemp("", "mainline-app-tests-")
+	if err != nil {
+		_, _ = os.Stderr.WriteString("create temp registry dir: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+	defer os.RemoveAll(registryDir)
+
+	if err := os.Setenv("MAINLINE_REGISTRY_PATH", filepath.Join(registryDir, "registry.json")); err != nil {
+		_, _ = os.Stderr.WriteString("set MAINLINE_REGISTRY_PATH: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+
+	os.Exit(m.Run())
+}
+
 func runTestCommand(t *testing.T, dir string, name string, args ...string) string {
 	t.Helper()
 

@@ -203,6 +203,25 @@ Could not find service "com.recallnet.mainline.global"
 the service is simply not installed yet. Run
 `./scripts/install-launch-agent.sh` and verify again.
 
+Healthy machine-global daemon checklist:
+
+```bash
+launchctl print gui/$(id -u)/com.recallnet.mainline.global
+tail -n 50 ~/Library/Logs/mainline/mainlined.out.log
+tail -n 50 ~/Library/Logs/mainline/mainlined.err.log
+mq repo root --repo /path/to/repo-root --json
+mq doctor --repo /path/to/repo-root --json
+```
+
+What good looks like:
+
+- launchd reports the service present and running
+- stderr is quiet
+- stdout shows normal `cycle.completed` / `daemon.idle_exit` style JSON, not a
+  flood of dead temp repos
+- `mq repo root` reports the canonical root checkout is trustworthy
+- `mq doctor` reports the repo is initialized and operator-safe
+
 ## Completion Install
 
 Bash:

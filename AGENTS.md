@@ -36,6 +36,11 @@ instructions.
     `launchctl print gui/$(id -u)/com.recallnet.mainline.global`
   - `Could not find service "com.recallnet.mainline.global"` means it is not
     installed yet, not that the label changed
+  - healthy-machine checks:
+    - `tail -n 50 ~/Library/Logs/mainline/mainlined.out.log`
+    - `tail -n 50 ~/Library/Logs/mainline/mainlined.err.log`
+    - `mq repo root --repo /Users/devrel/Projects/recallnet/mainline --json`
+    - `mq doctor --repo /Users/devrel/Projects/recallnet/mainline --json`
 - If `mq repo show` or `mq doctor` warns that the root checkout is dirty or not
   canonical, fix that before trusting local binaries or local docs.
 - Use `mq repo root --repo /Users/devrel/Projects/recallnet/mainline --json`
