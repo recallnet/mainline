@@ -30,6 +30,12 @@ instructions.
 - Controllers and factory-style daemons should prefer:
   - `mq land --json --timeout 30m`
   - or one machine-global `mainlined --all --json`
+  - on macOS, `./scripts/install-launch-agent.sh` installs the global service
+    label `com.recallnet.mainline.global`
+  - verify it with
+    `launchctl print gui/$(id -u)/com.recallnet.mainline.global`
+  - `Could not find service "com.recallnet.mainline.global"` means it is not
+    installed yet, not that the label changed
 - If `mq repo show` or `mq doctor` warns that the root checkout is dirty or not
   canonical, fix that before trusting local binaries or local docs.
 - Use `mq repo root --repo /Users/devrel/Projects/recallnet/mainline --json`

@@ -182,6 +182,24 @@ Or install the macOS launch agent:
 ./scripts/install-launch-agent.sh
 ```
 
+The launch agent is opt-in. `mq repo init` registers repos for `--all` mode,
+but it does not install the service by itself.
+
+Verify the exact label:
+
+```bash
+launchctl print gui/$(id -u)/com.recallnet.mainline.global
+```
+
+If macOS reports:
+
+```text
+Could not find service "com.recallnet.mainline.global"
+```
+
+the service is simply not installed yet. Run
+`./scripts/install-launch-agent.sh` and verify again.
+
 ## Completion Install
 
 Bash:

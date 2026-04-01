@@ -253,6 +253,17 @@ mq retry --repo /path/to/repo-root --submission 17
 mq cancel --repo /path/to/repo-root --publish 4
 ```
 
+`mainlined --all` is supported, but not installed automatically. If you want it
+as a login service on macOS, run `./scripts/install-launch-agent.sh` and verify
+the exact label with:
+
+```bash
+launchctl print gui/$(id -u)/com.recallnet.mainline.global
+```
+
+If you see `Could not find service "com.recallnet.mainline.global"`, the
+service has not been installed yet.
+
 ## Repository Layouts
 
 `mainline` supports both:

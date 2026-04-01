@@ -25,6 +25,14 @@ Default commands to optimize for:
 - `mainlined --all --json`
 - `mq events --follow --json --lifecycle`
 
+If you want the machine-global daemon on macOS, install and verify the exact
+launch-agent label:
+
+- install: `./scripts/install-launch-agent.sh`
+- verify: `launchctl print gui/$(id -u)/com.recallnet.mainline.global`
+- if macOS says `Could not find service "com.recallnet.mainline.global"`, the
+  daemon is not installed yet
+
 Do not use this skill to bypass `mq`. It exists to dogfood the workflow that
 `mainline` is building for other repos.
 
