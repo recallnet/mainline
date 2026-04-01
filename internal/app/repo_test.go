@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -52,6 +53,50 @@ func TestRepoInitAndShow(t *testing.T) {
 	}
 	if !strings.Contains(initOut.String(), "Initialize mainline repo policy") {
 		t.Fatalf("expected init output to include recommended commit, got %q", initOut.String())
+	}
+}
+
+func TestRepoShowRepairsMissingRepositoryRecord(t *testing.T) {
+	repoRoot, worktreePath := createTestRepo(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	statePath := state.DefaultPath(layout.GitDir)
+	db, err := sql.Open("sqlite", statePath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`DELETE FROM repositories`); err != nil {
+		t.Fatalf("DELETE repositories: %v", err)
+	}
+
+	var showOut bytes.Buffer
+	var showErr bytes.Buffer
+	if err := runRepoShow([]string{"--repo", repoRoot}, &showOut, &showErr); err != nil {
+		t.Fatalf("runRepoShow returned error: %v", err)
+	}
+
+	output := showOut.String()
+	if !strings.Contains(output, "State path: "+statePath) {
+		t.Fatalf("expected state path after record repair, got %q", output)
+	}
+
+	store := state.NewStore(statePath)
+	record, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath after repair: %v", err)
+	}
+	if record.CanonicalPath != layout.RepositoryRoot {
+		t.Fatalf("expected repaired canonical path %q, got %+v", layout.RepositoryRoot, record)
 	}
 }
 
@@ -112,6 +157,45 @@ func TestDoctorDetectsDirtyProtectedBranch(t *testing.T) {
 	}
 	if !strings.Contains(output, "Main worktree exists: yes") {
 		t.Fatalf("expected main worktree report, got %q", output)
+	}
+}
+
+func TestDoctorRepairsMissingRepositoryRecord(t *testing.T) {
+	repoRoot, worktreePath := createTestRepo(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	statePath := state.DefaultPath(layout.GitDir)
+	db, err := sql.Open("sqlite", statePath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`DELETE FROM repositories`); err != nil {
+		t.Fatalf("DELETE repositories: %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	store := state.NewStore(statePath)
+	record, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath after doctor repair: %v", err)
+	}
+	if record.CanonicalPath != layout.RepositoryRoot {
+		t.Fatalf("expected repaired canonical path %q, got %+v", layout.RepositoryRoot, record)
 	}
 }
 

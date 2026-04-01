@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -126,10 +127,35 @@ func loadRepoContext(repoPath string) (git.RepositoryLayout, string, policy.File
 		return git.RepositoryLayout{}, "", policy.File{}, state.RepositoryRecord{}, state.Store{}, err
 	}
 
-	repoRecord, err := store.GetRepositoryByPath(context.Background(), repoRoot)
+	repoRecord, _, err := ensureRepositoryRecord(context.Background(), store, repoRoot, cfg)
 	if err != nil {
 		return git.RepositoryLayout{}, "", policy.File{}, state.RepositoryRecord{}, state.Store{}, err
 	}
 
 	return layout, repoRoot, cfg, repoRecord, store, nil
+}
+
+func ensureRepositoryRecord(ctx context.Context, store state.Store, repoRoot string, cfg policy.File) (state.RepositoryRecord, bool, error) {
+	record, err := store.GetRepositoryByPath(ctx, repoRoot)
+	if err == nil {
+		return record, false, nil
+	}
+	if !errors.Is(err, state.ErrNotFound) {
+		return state.RepositoryRecord{}, false, err
+	}
+	if cfg.Repo.ProtectedBranch == "" {
+		return state.RepositoryRecord{}, false, fmt.Errorf("repository state exists at %s but no repo record matches %s; run `mq repo init --repo %s` to repair it", store.Path, repoRoot, repoRoot)
+	}
+
+	record, err = store.UpsertRepository(ctx, state.RepositoryRecord{
+		CanonicalPath:   repoRoot,
+		ProtectedBranch: cfg.Repo.ProtectedBranch,
+		RemoteName:      cfg.Repo.RemoteName,
+		MainWorktree:    cfg.Repo.MainWorktree,
+		PolicyVersion:   "v1",
+	})
+	if err != nil {
+		return state.RepositoryRecord{}, false, err
+	}
+	return record, true, nil
 }

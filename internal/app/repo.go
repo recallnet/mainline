@@ -271,7 +271,7 @@ Flags:
 	ctx := context.Background()
 	var record state.RepositoryRecord
 	if store.Exists() {
-		if found, err := store.GetRepositoryByPath(ctx, repoRoot); err == nil {
+		if found, _, err := ensureRepositoryRecord(ctx, store, repoRoot, cfg); err == nil {
 			record = found
 		}
 	}
@@ -569,7 +569,7 @@ Flags:
 	var repoRecord state.RepositoryRecord
 	var hasRepoRecord bool
 	if store.Exists() {
-		if record, err := store.GetRepositoryByPath(ctx, repoRoot); err == nil {
+		if record, _, err := ensureRepositoryRecord(ctx, store, repoRoot, cfg); err == nil {
 			repoRecord = record
 			hasRepoRecord = true
 			count, err := store.CountUnfinishedItems(ctx, record.ID)
