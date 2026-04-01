@@ -283,6 +283,51 @@ func TestWaitBySubmissionIDReturnsLandedOutcome(t *testing.T) {
 	}
 }
 
+func TestWaitBySubmissionIDReturnsFailedWhenCorrelatedPublishFails(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishMode(t, repoRoot, "auto")
+
+	gateFlag := filepath.Join(t.TempDir(), "block-publish")
+	hookPath := filepath.Join(hooksDirForRepo(t, repoRoot), "pre-push")
+	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nif [ ! -f "+gateFlag+" ]; then\n  echo gate failed >&2\n  exit 9\nfi\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	featurePath := filepath.Join(t.TempDir(), "feature-wait-publish-failed")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/wait-publish-failed", featurePath)
+	writeFileAndCommit(t, featurePath, "wait.txt", "wait\n", "wait feature")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+	var submit submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &submit); err != nil {
+		t.Fatalf("Unmarshal submit: %v", err)
+	}
+
+	var waitOut bytes.Buffer
+	var waitErr bytes.Buffer
+	err := runCLI([]string{"wait", "--repo", repoRoot, "--submission", strconv.FormatInt(submit.SubmissionID, 10), "--for", "landed", "--json", "--timeout", "10s"}, &waitOut, &waitErr)
+	if err == nil {
+		t.Fatalf("expected landed wait to fail when publish fails")
+	}
+	var exitErr *cliExitError
+	if !errors.As(err, &exitErr) || CLIExitCode(err) != 1 {
+		t.Fatalf("expected exit code 1, got %v", err)
+	}
+
+	var result submissionWaitResult
+	if err := json.Unmarshal(waitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal wait: %v", err)
+	}
+	if result.Outcome != waitOutcomeFailed || result.PublishStatus != "failed" || result.PublishRequestID == 0 {
+		t.Fatalf("expected failed landed wait with failed publish correlation, got %+v", result)
+	}
+}
+
 func TestStatusJSONCorrelatesSubmissionToPublish(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

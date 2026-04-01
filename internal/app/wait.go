@@ -341,6 +341,18 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 				result.DurationMS = time.Since(start).Milliseconds()
 				return result, nil
 			}
+			switch info.PublishStatus {
+			case "failed":
+				result.Outcome = waitOutcomeFailed
+				result.DurationMS = time.Since(start).Milliseconds()
+				result.Error = fmt.Sprintf("publish request %d failed", info.PublishRequestID)
+				return result, exitWithCode(1, fmt.Errorf("publish request %d failed", info.PublishRequestID))
+			case "cancelled":
+				result.Outcome = waitOutcomeCancelled
+				result.DurationMS = time.Since(start).Milliseconds()
+				result.Error = fmt.Sprintf("publish request %d cancelled", info.PublishRequestID)
+				return result, exitWithCode(1, fmt.Errorf("publish request %d cancelled", info.PublishRequestID))
+			}
 		}
 
 		cycleResult, err := runOneCycle(queued.Config.Repo.MainWorktree)
