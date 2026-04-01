@@ -98,6 +98,8 @@ def main():
         "make commits there, then use `mq submit --check-only --json` and either "
         "`mq submit --wait --timeout 15m --json` or `mq submit --json` followed by "
         "`mq wait --submission <id> --for landed --json --timeout 30m`.\n"
+        "Keep /Users/devrel/Projects/recallnet/mainline clean on branch main; "
+        "that root checkout is the canonical protected checkout humans inspect.\n"
         "If you are the controller agent, use `mq land --json --timeout 30m` or let "
         "one machine-global `mainlined --all --json` drainer own registered repos.\n"
         "Allowed on main: read-only inspection and worktree creation. "

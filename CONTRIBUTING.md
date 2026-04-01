@@ -10,6 +10,7 @@
 ## Repo Workflow
 
 - treat `main` as protected
+- keep the repo root checkout clean on `main`; that is the canonical protected checkout humans inspect and wrappers build from
 - do feature work in a dedicated topic worktree
 - initialize new clones with `mq repo init`, commit `mainline.toml`, and run `./scripts/install-hooks.sh`
 - most agents should finish from a topic worktree with `mq submit --check-only --json` and `mq submit --wait --timeout 15m --json`

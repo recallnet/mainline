@@ -65,6 +65,12 @@ git commit -m "Initialize mainline repo policy"
 
 `mq repo init` automatically registers the repo for the machine-global daemon
 registry used by `mainlined --all`.
+For ordinary repos, treat that root checkout as the canonical protected `main`.
+Keep it clean and on `main`, because humans inspect it and the machine wrappers
+build from it.
+The machine-level `mq` and `mainlined` wrappers refuse to build from a dirty
+root checkout so local binaries cannot silently drift away from the code humans
+are reading.
 
 State compatibility:
 

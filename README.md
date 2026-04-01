@@ -53,6 +53,7 @@ There is one rule that matters:
 
 Once that line is real, the rest follows:
 
+- the repo root checkout stays as the canonical protected `main`
 - feature work happens in topic worktrees
 - submissions are recorded durably
 - integration is serialized
@@ -208,6 +209,10 @@ That init commit matters. It turns the repo’s queue policy into versioned,
 reviewable state instead of one more local convention that agents have to infer.
 `mq repo init` also registers the repo for `mainlined --all`, so one machine
 daemon can drain many repos without one idle process per repo.
+For normal repos, the root checkout should be the canonical protected `main`.
+Keep it clean and boring. Humans inspect that path, and the machine wrapper
+builds `mq` and `mainlined` from it. If it is dirty, the wrapper should refuse
+to build rather than silently drift.
 
 ## The Core Commands
 

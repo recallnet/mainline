@@ -5,11 +5,12 @@ instructions.
 
 ## Protected Main Worktrees
 
-- Treat `/Users/devrel/Projects/_wt/recallnet/mainline/protected-main` as the
-  canonical protected `main` worktree for this repo.
-- Treat `/Users/devrel/Projects/recallnet/mainline` as protected too unless you
-  have explicitly confirmed it is a disposable feature checkout. Do not assume
-  the root checkout is safe for feature commits.
+- Treat `/Users/devrel/Projects/recallnet/mainline` as the canonical protected
+  `main` checkout for this repo.
+- Treat `/Users/devrel/Projects/_wt/recallnet/mainline/protected-main` as a
+  protected mirror, not as the human-facing source of truth.
+- The root checkout must stay clean and on branch `main`. Humans inspect it,
+  wrappers build from it, and docs refer to it.
 - Do not use native mutating `git` commands from that worktree while on branch
   `main`.
 - Blocked examples: `git commit`, `git merge`, `git rebase`, `git push`,
@@ -31,6 +32,8 @@ instructions.
 - Controllers and factory-style daemons should prefer:
   - `mq land --json --timeout 30m`
   - or one machine-global `mainlined --all --json`
+- If `mq repo show` or `mq doctor` warns that the root checkout is dirty or not
+  canonical, fix that before trusting local binaries or local docs.
 - Plain `mq submit` now opportunistically tries to drain after queueing. If the
   integration lock is already held, it exits cleanly and the active worker keeps
   draining.

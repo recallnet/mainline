@@ -297,6 +297,7 @@ MVP checks:
 
 - worktree clean
 - protected branch worktree clean
+- for ordinary repos, the repository root checkout should be the canonical protected `main` checkout that humans inspect and local wrappers build from
 - branch not already integrated
 - branch HEAD still matches submitted SHA unless `--allow-newer-head` is set;
   when that flag is set, newer queued branch heads are allowed only if the new

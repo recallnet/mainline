@@ -27,6 +27,8 @@ type repoShowResult struct {
 	Worktrees      []git.Worktree   `json:"worktrees"`
 	Branch         string           `json:"branch"`
 	BranchStatus   git.BranchStatus `json:"branch_status"`
+	RootCheckout   rootCheckoutInfo `json:"root_checkout,omitempty"`
+	Warnings       []string         `json:"warnings,omitempty"`
 }
 
 type unmergedBranch struct {
@@ -41,6 +43,14 @@ type repoAuditResult struct {
 	ProtectedBranch string           `json:"protected_branch"`
 	ProtectedSHA    string           `json:"protected_sha,omitempty"`
 	Unmerged        []unmergedBranch `json:"unmerged"`
+}
+
+type rootCheckoutInfo struct {
+	Path        string `json:"path,omitempty"`
+	Exists      bool   `json:"exists"`
+	Branch      string `json:"branch,omitempty"`
+	Clean       bool   `json:"clean"`
+	IsCanonical bool   `json:"is_canonical"`
 }
 
 func handleCommand(command string, args []string, stdout io.Writer, stderr io.Writer) error {
@@ -151,7 +161,7 @@ Flags:
 		remote = cfg.Repo.RemoteName
 	}
 	if mainWorktree == "" {
-		mainWorktree = layout.WorktreeRoot
+		mainWorktree = defaultMainWorktree(layout)
 	}
 
 	cfg.Repo.ProtectedBranch = protectedBranch
@@ -314,6 +324,9 @@ Flags:
 		Branch:         branch,
 		BranchStatus:   branchStatus,
 	}
+	rootInfo, warnings := inspectCanonicalRootCheckout(cfg, layout)
+	result.RootCheckout = rootInfo
+	result.Warnings = warnings
 
 	if asJSON {
 		encoder := json.NewEncoder(stdout)
@@ -329,6 +342,14 @@ Flags:
 	fmt.Fprintf(stdout, "Main worktree: %s\n", result.Config.Repo.MainWorktree)
 	fmt.Fprintf(stdout, "Remote: %s\n", result.Config.Repo.RemoteName)
 	fmt.Fprintf(stdout, "Worktrees: %d\n", len(result.Worktrees))
+	if result.RootCheckout.Path != "" {
+		fmt.Fprintf(stdout, "Root checkout: %s\n", result.RootCheckout.Path)
+		fmt.Fprintf(stdout, "Root checkout canonical: %s\n", yesNo(result.RootCheckout.IsCanonical))
+		if result.RootCheckout.Branch != "" {
+			fmt.Fprintf(stdout, "Root checkout branch: %s\n", result.RootCheckout.Branch)
+		}
+		fmt.Fprintf(stdout, "Root checkout clean: %s\n", yesNo(result.RootCheckout.Clean))
+	}
 	if record.ID != 0 {
 		fmt.Fprintf(stdout, "State path: %s\n", state.DefaultPath(layout.GitDir))
 	}
@@ -336,6 +357,9 @@ Flags:
 		fmt.Fprintf(stdout, "Protected upstream: %s (ahead %d, behind %d)\n", result.BranchStatus.Upstream, result.BranchStatus.AheadCount, result.BranchStatus.BehindCount)
 	} else {
 		fmt.Fprintln(stdout, "Protected upstream: none")
+	}
+	for _, warning := range result.Warnings {
+		fmt.Fprintf(stdout, "Warning: %s\n", warning)
 	}
 	return nil
 }
@@ -546,6 +570,8 @@ Flags:
 	if err != nil {
 		return err
 	}
+	rootInfo, rootWarnings := inspectCanonicalRootCheckout(cfg, layout)
+	report.Warnings = append(report.Warnings, rootWarnings...)
 
 	if cfg.Repo.WorktreeLayoutPolicy == "enforce-prefix" && cfg.Repo.WorktreeRootPrefix != "" {
 		engine := git.NewEngine(layout.WorktreeRoot)
@@ -590,7 +616,7 @@ Flags:
 	}
 
 	lockManager := state.NewLockManager(repoRoot, layout.GitDir)
-	result := doctorResult{HealthReport: report}
+	result := doctorResult{HealthReport: report, RootCheckout: rootInfo}
 	if fix {
 		applied, skipped, err := runDoctorFix(ctx, engine, cfg, lockManager, store, repoRecord, hasRepoRecord)
 		if err != nil {
@@ -602,7 +628,10 @@ Flags:
 		if err != nil {
 			return err
 		}
+		rootInfo, rootWarnings = inspectCanonicalRootCheckout(cfg, layout)
+		report.Warnings = append(report.Warnings, rootWarnings...)
 		result.HealthReport = report
+		result.RootCheckout = rootInfo
 		if store.Exists() && hasRepoRecord {
 			count, err := store.CountUnfinishedItems(ctx, repoRecord.ID)
 			if err != nil {
@@ -629,6 +658,14 @@ Flags:
 	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
 	fmt.Fprintf(stdout, "Protected branch: %s\n", result.ProtectedBranch)
 	fmt.Fprintf(stdout, "Main worktree: %s\n", result.MainWorktreePath)
+	if result.RootCheckout.Path != "" {
+		fmt.Fprintf(stdout, "Root checkout: %s\n", result.RootCheckout.Path)
+		fmt.Fprintf(stdout, "Root checkout canonical: %s\n", yesNo(result.RootCheckout.IsCanonical))
+		if result.RootCheckout.Branch != "" {
+			fmt.Fprintf(stdout, "Root checkout branch: %s\n", result.RootCheckout.Branch)
+		}
+		fmt.Fprintf(stdout, "Root checkout clean: %s\n", yesNo(result.RootCheckout.Clean))
+	}
 	fmt.Fprintf(stdout, "Git repository: %s\n", yesNo(result.IsGitRepository))
 	fmt.Fprintf(stdout, "Protected branch exists: %s\n", yesNo(result.ProtectedBranchExists))
 	fmt.Fprintf(stdout, "Main worktree exists: %s\n", yesNo(result.MainWorktreeExists))
@@ -665,8 +702,60 @@ Flags:
 
 type doctorResult struct {
 	git.HealthReport
-	FixesApplied []string `json:"fixes_applied,omitempty"`
-	FixesSkipped []string `json:"fixes_skipped,omitempty"`
+	RootCheckout rootCheckoutInfo `json:"root_checkout,omitempty"`
+	FixesApplied []string         `json:"fixes_applied,omitempty"`
+	FixesSkipped []string         `json:"fixes_skipped,omitempty"`
+}
+
+func defaultMainWorktree(layout git.RepositoryLayout) string {
+	if hasGitWorktreeMarker(layout.RepositoryRoot) {
+		return layout.RepositoryRoot
+	}
+	return layout.WorktreeRoot
+}
+
+func hasGitWorktreeMarker(path string) bool {
+	info, err := os.Stat(filepath.Join(path, ".git"))
+	return err == nil && (info.IsDir() || info.Mode().IsRegular())
+}
+
+func inspectCanonicalRootCheckout(cfg policy.File, layout git.RepositoryLayout) (rootCheckoutInfo, []string) {
+	if !hasGitWorktreeMarker(layout.RepositoryRoot) {
+		return rootCheckoutInfo{}, nil
+	}
+
+	rootPath := filepath.Clean(layout.RepositoryRoot)
+	info := rootCheckoutInfo{
+		Path:        rootPath,
+		Exists:      true,
+		IsCanonical: filepath.Clean(cfg.Repo.MainWorktree) == rootPath,
+	}
+	var warnings []string
+	if !info.IsCanonical {
+		warnings = append(warnings, fmt.Sprintf("configured main worktree %s differs from repository root %s; keep the root checkout as the canonical protected main", filepath.Clean(cfg.Repo.MainWorktree), rootPath))
+	}
+
+	rootEngine := git.NewEngine(rootPath)
+	if branch, err := rootEngine.CurrentBranch(); err == nil {
+		info.Branch = branch
+		if branch != cfg.Repo.ProtectedBranch {
+			warnings = append(warnings, fmt.Sprintf("repository root checkout is on %s, expected protected branch %s", branch, cfg.Repo.ProtectedBranch))
+		}
+	} else {
+		warnings = append(warnings, fmt.Sprintf("repository root checkout is not on a branch: %v", err))
+	}
+
+	clean, err := rootEngine.WorktreeIsClean(rootPath)
+	if err != nil {
+		warnings = append(warnings, fmt.Sprintf("could not inspect repository root checkout cleanliness: %v", err))
+		return info, warnings
+	}
+	info.Clean = clean
+	if !clean {
+		warnings = append(warnings, fmt.Sprintf("repository root checkout %s is dirty; humans and wrappers will see stale local drift until it is cleaned", rootPath))
+	}
+
+	return info, warnings
 }
 
 func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockManager state.LockManager, store state.Store, repoRecord state.RepositoryRecord, hasRepoRecord bool) ([]string, []string, error) {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -61,7 +62,13 @@ func loadRegisteredReposFromPath(path string) ([]registeredRepo, error) {
 
 	var registry registryFile
 	if err := json.Unmarshal(data, &registry); err != nil {
-		return nil, err
+		sanitized, sanitizeErr := firstJSONObject(data)
+		if sanitizeErr != nil {
+			return nil, err
+		}
+		if unmarshalErr := json.Unmarshal(sanitized, &registry); unmarshalErr != nil {
+			return nil, err
+		}
 	}
 	sort.Slice(registry.Repositories, func(i, j int) bool {
 		return registry.Repositories[i].RepositoryRoot < registry.Repositories[j].RepositoryRoot
@@ -130,4 +137,44 @@ func canonicalRegistryPath(path string) string {
 		return filepath.Clean(resolved)
 	}
 	return filepath.Clean(path)
+}
+
+func firstJSONObject(data []byte) ([]byte, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return nil, errors.New("registry does not start with json object")
+	}
+
+	depth := 0
+	inString := false
+	escaped := false
+	for i, b := range trimmed {
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if b == '\\' {
+				escaped = true
+				continue
+			}
+			if b == '"' {
+				inString = false
+			}
+			continue
+		}
+
+		switch b {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return trimmed[:i+1], nil
+			}
+		}
+	}
+	return nil, errors.New("registry json object did not terminate cleanly")
 }

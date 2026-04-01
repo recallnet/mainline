@@ -57,6 +57,7 @@ Deliverables:
 - detect repo root from current directory
 - inspect worktrees and refs using `go-git`-backed repository access
 - identify canonical protected branch worktree
+- for ordinary repos, treat the repo root checkout as the canonical protected `main`
 - detect and model bare repo storage path separately from worktree path
 - config file support
 - `mainline repo init`

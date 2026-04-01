@@ -160,6 +160,30 @@ func TestRepoInitRegistersRepoForGlobalDaemon(t *testing.T) {
 	}
 }
 
+func TestRepoInitRepairsMalformedGlobalRegistryOnWrite(t *testing.T) {
+	registryPath := filepath.Join(t.TempDir(), "registry.json")
+	t.Setenv("MAINLINE_REGISTRY_PATH", registryPath)
+	if err := os.WriteFile(registryPath, []byte("{\n  \"version\": \"v1\",\n  \"repositories\": []\n}\n}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(registryPath): %v", err)
+	}
+
+	repoRoot, worktreePath := createTestRepo(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	repos, err := loadRegisteredReposFromPath(registryPath)
+	if err != nil {
+		t.Fatalf("loadRegisteredReposFromPath: %v", err)
+	}
+	if len(repos) != 1 {
+		t.Fatalf("expected one registered repo after registry repair, got %+v", repos)
+	}
+}
+
 func TestDoctorDetectsDirtyProtectedBranch(t *testing.T) {
 	repoRoot, worktreePath := createTestRepo(t)
 
@@ -268,6 +292,106 @@ func TestRepoInitFromLinkedWorktreeWritesSharedConfig(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(linkedWorktree, "mainline.toml")); !os.IsNotExist(err) {
 		t.Fatalf("expected no separate config in linked worktree, got err=%v", err)
 	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	wantRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(repoRoot): %v", err)
+	}
+	if cfg.Repo.MainWorktree != wantRepoRoot {
+		t.Fatalf("expected repo init to default canonical main worktree to repo root %q, got %q", wantRepoRoot, cfg.Repo.MainWorktree)
+	}
+}
+
+func TestRepoShowWarnsWhenRootCheckoutIsDirtyAndNonCanonical(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-root-warning")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/root-warning", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", featurePath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "dirty-root.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile dirty-root.txt: %v", err)
+	}
+
+	var showOut bytes.Buffer
+	var showErr bytes.Buffer
+	if err := runRepoShow([]string{"--repo", repoRoot, "--json"}, &showOut, &showErr); err != nil {
+		t.Fatalf("runRepoShow returned error: %v", err)
+	}
+
+	var result repoShowResult
+	if err := json.Unmarshal(showOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	wantRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(repoRoot): %v", err)
+	}
+	if result.RootCheckout.Path != wantRepoRoot {
+		t.Fatalf("expected root checkout path %q, got %+v", wantRepoRoot, result.RootCheckout)
+	}
+	if result.RootCheckout.IsCanonical {
+		t.Fatalf("expected non-canonical root checkout warning state, got %+v", result.RootCheckout)
+	}
+	if result.RootCheckout.Clean {
+		t.Fatalf("expected dirty root checkout, got %+v", result.RootCheckout)
+	}
+	joined := strings.Join(result.Warnings, "\n")
+	if !strings.Contains(joined, "differs from repository root") {
+		t.Fatalf("expected canonical root mismatch warning, got %#v", result.Warnings)
+	}
+	if !strings.Contains(joined, "is dirty") {
+		t.Fatalf("expected dirty root warning, got %#v", result.Warnings)
+	}
+}
+
+func TestDoctorWarnsWhenRootCheckoutIsDirtyAndNonCanonical(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-doctor-root-warning")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/doctor-root-warning", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", featurePath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "dirty-root.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile dirty-root.txt: %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	var result doctorResult
+	if err := json.Unmarshal(doctorOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	wantRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(repoRoot): %v", err)
+	}
+	if result.RootCheckout.Path != wantRepoRoot {
+		t.Fatalf("expected root checkout path %q, got %+v", wantRepoRoot, result.RootCheckout)
+	}
+	joined := strings.Join(result.Warnings, "\n")
+	if !strings.Contains(joined, "differs from repository root") {
+		t.Fatalf("expected canonical root mismatch warning, got %#v", result.Warnings)
+	}
+	if !strings.Contains(joined, "is dirty") {
+		t.Fatalf("expected dirty root warning, got %#v", result.Warnings)
+	}
 }
 
 func TestRepoAuditListsUnmergedWorktreeBranches(t *testing.T) {
@@ -278,6 +402,8 @@ func TestRepoAuditListsUnmergedWorktreeBranches(t *testing.T) {
 	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "Initialize mainline repo policy")
 
 	mergedPath := filepath.Join(t.TempDir(), "feature-merged")
 	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/merged", mergedPath)
@@ -397,6 +523,8 @@ func TestDoctorWarnsWhenWorktreeOutsidePolicyPrefix(t *testing.T) {
 	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "Initialize mainline repo policy")
 
 	cfg, _, err := policy.LoadOrDefault(repoRoot)
 	if err != nil {
@@ -407,6 +535,8 @@ func TestDoctorWarnsWhenWorktreeOutsidePolicyPrefix(t *testing.T) {
 	if err := policy.SaveFile(repoRoot, cfg); err != nil {
 		t.Fatalf("SaveFile: %v", err)
 	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "Update worktree layout policy")
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
@@ -451,6 +581,8 @@ func TestDoctorAcceptsSymlinkedPolicyPrefix(t *testing.T) {
 	if err := policy.SaveFile(repoRoot, cfg); err != nil {
 		t.Fatalf("SaveFile: %v", err)
 	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "Update worktree layout policy")
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer

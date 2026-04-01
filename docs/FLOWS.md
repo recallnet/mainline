@@ -49,6 +49,10 @@ mq doctor --repo /path/to/main
 mq status --repo /path/to/main
 ```
 
+For ordinary repos, `/path/to/main` should be the repo root checkout that
+humans inspect and local wrappers build from. Keep that checkout clean and on
+the protected branch. Topic worktrees are where feature edits belong.
+
 Submit from any linked worktree in the same repo:
 
 ```bash

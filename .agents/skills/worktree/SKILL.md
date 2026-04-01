@@ -11,6 +11,7 @@ that work back through `mq`.
 The goal is simple:
 
 - `main` stays clean
+- the repo root checkout stays boring and trustworthy
 - each task gets its own worktree
 - all commits happen in the feature worktree
 - landing happens through `mq`, not manual merge into `main`
@@ -50,7 +51,7 @@ positive to work around. Move to a feature worktree and continue there.
 
 ### 1. Start from a clean protected branch worktree
 
-Use the canonical repo worktree as the protected branch worktree.
+Use the repo root checkout as the canonical protected branch worktree.
 
 Example:
 
@@ -64,6 +65,7 @@ Expected:
 
 - worktree is clean
 - branch is `main`
+- this root checkout is the one humans inspect and wrappers build from
 
 ### 2. Create a dedicated feature worktree
 
@@ -203,6 +205,8 @@ Expected:
 - `status --json` can correlate a succeeded submission to `publish_request_id`,
   `publish_status`, and `outcome`
 - `unmerged` is empty once the branch is truly reachable from protected `main`
+- `mq repo show` and `mq doctor` do not warn that the repo root checkout is
+  dirty or non-canonical
 
 ## Review and fix loop
 
