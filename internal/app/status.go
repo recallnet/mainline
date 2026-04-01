@@ -35,6 +35,7 @@ type statusResult struct {
 	ProtectedBranch    string                 `json:"protected_branch"`
 	ProtectedBranchSHA string                 `json:"protected_branch_sha"`
 	ProtectedUpstream  git.BranchStatus       `json:"protected_upstream"`
+	ExecutionEstimate  executionEstimate      `json:"execution_estimate"`
 	Counts             statusCounts           `json:"counts"`
 	LatestSubmission   *statusSubmission      `json:"latest_submission,omitempty"`
 	LatestPublish      *state.PublishRequest  `json:"latest_publish,omitempty"`
@@ -47,13 +48,16 @@ type statusResult struct {
 
 type statusSubmission struct {
 	state.IntegrationSubmission
-	PublishRequestID int64    `json:"publish_request_id,omitempty"`
-	PublishStatus    string   `json:"publish_status,omitempty"`
-	Outcome          string   `json:"outcome,omitempty"`
-	BlockedReason    string   `json:"blocked_reason,omitempty"`
-	ConflictFiles    []string `json:"conflict_files,omitempty"`
-	ProtectedTipSHA  string   `json:"protected_tip_sha,omitempty"`
-	RetryHint        string   `json:"retry_hint,omitempty"`
+	PublishRequestID      int64    `json:"publish_request_id,omitempty"`
+	PublishStatus         string   `json:"publish_status,omitempty"`
+	Outcome               string   `json:"outcome,omitempty"`
+	QueuePosition         int      `json:"queue_position,omitempty"`
+	EstimatedCompletionMS int64    `json:"estimated_completion_ms,omitempty"`
+	EstimateBasis         string   `json:"estimate_basis,omitempty"`
+	BlockedReason         string   `json:"blocked_reason,omitempty"`
+	ConflictFiles         []string `json:"conflict_files,omitempty"`
+	ProtectedTipSHA       string   `json:"protected_tip_sha,omitempty"`
+	RetryHint             string   `json:"retry_hint,omitempty"`
 }
 
 type blockedSubmissionDetails struct {
@@ -155,6 +159,11 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 	if err != nil {
 		return statusResult{}, err
 	}
+	estimate, err := collectExecutionEstimate(ctx, store, repoRecord.ID, cfg, submissions)
+	if err != nil {
+		return statusResult{}, err
+	}
+	enrichedSubmissions = annotateQueueEstimates(enrichedSubmissions, estimate)
 
 	result := statusResult{
 		RepositoryRoot:     repoRecord.CanonicalPath,
@@ -164,6 +173,7 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		ProtectedBranch:    cfg.Repo.ProtectedBranch,
 		ProtectedBranchSHA: protectedSHA,
 		ProtectedUpstream:  protectedStatus,
+		ExecutionEstimate:  estimate,
 		Counts:             summarizeCounts(submissions, requests),
 		ActiveSubmissions:  activeSubmissions(enrichedSubmissions),
 		ActivePublishes:    activePublishes(requests),
@@ -212,6 +222,13 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 		result.Counts.CancelledPublishes,
 		result.Counts.SucceededPublishes,
 	)
+	if result.ExecutionEstimate.AvgExecutionMS > 0 {
+		fmt.Fprintf(stdout, "Execution estimate (24h rolling): basis=%s avg=%s samples=%d\n",
+			result.ExecutionEstimate.Basis,
+			(time.Duration(result.ExecutionEstimate.AvgExecutionMS) * time.Millisecond).Round(time.Millisecond),
+			result.ExecutionEstimate.SampleCount,
+		)
+	}
 	if result.LatestSubmission != nil {
 		fmt.Fprintf(stdout, "Latest submission: #%d %s from %s (%s, priority=%s)\n",
 			result.LatestSubmission.ID,
@@ -231,6 +248,13 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 		}
 		if result.LatestSubmission.RetryHint != "" {
 			fmt.Fprintf(stdout, "  retry hint: %s\n", result.LatestSubmission.RetryHint)
+		}
+		if result.LatestSubmission.QueuePosition > 0 && result.LatestSubmission.EstimatedCompletionMS > 0 {
+			fmt.Fprintf(stdout, "  queue position: %d\n", result.LatestSubmission.QueuePosition)
+			fmt.Fprintf(stdout, "  estimated completion: %s (%s basis)\n",
+				(time.Duration(result.LatestSubmission.EstimatedCompletionMS) * time.Millisecond).Round(time.Millisecond),
+				result.LatestSubmission.EstimateBasis,
+			)
 		}
 	} else {
 		fmt.Fprintln(stdout, "Latest submission: none")

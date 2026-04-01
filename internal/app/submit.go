@@ -70,28 +70,31 @@ type queuedSubmission struct {
 }
 
 type submitResult struct {
-	OK               bool   `json:"ok"`
-	Checked          bool   `json:"checked"`
-	Queued           bool   `json:"queued"`
-	Waited           bool   `json:"waited"`
-	DrainAttempted   bool   `json:"drain_attempted,omitempty"`
-	SubmissionID     int64  `json:"submission_id,omitempty"`
-	Branch           string `json:"branch,omitempty"`
-	SourceRef        string `json:"source_ref,omitempty"`
-	RefKind          string `json:"ref_kind,omitempty"`
-	SourceWorktree   string `json:"source_worktree,omitempty"`
-	SourceSHA        string `json:"source_sha,omitempty"`
-	AllowNewerHead   bool   `json:"allow_newer_head,omitempty"`
-	RepositoryRoot   string `json:"repository_root,omitempty"`
-	RequestedBy      string `json:"requested_by,omitempty"`
-	Priority         string `json:"priority,omitempty"`
-	SubmissionStatus string `json:"submission_status,omitempty"`
-	Outcome          string `json:"outcome,omitempty"`
-	DurationMS       int64  `json:"duration_ms,omitempty"`
-	DrainResult      string `json:"drain_result,omitempty"`
-	LastWorkerResult string `json:"last_worker_result,omitempty"`
-	ErrorCode        string `json:"error_code,omitempty"`
-	Error            string `json:"error,omitempty"`
+	OK                    bool   `json:"ok"`
+	Checked               bool   `json:"checked"`
+	Queued                bool   `json:"queued"`
+	Waited                bool   `json:"waited"`
+	DrainAttempted        bool   `json:"drain_attempted,omitempty"`
+	SubmissionID          int64  `json:"submission_id,omitempty"`
+	Branch                string `json:"branch,omitempty"`
+	SourceRef             string `json:"source_ref,omitempty"`
+	RefKind               string `json:"ref_kind,omitempty"`
+	SourceWorktree        string `json:"source_worktree,omitempty"`
+	SourceSHA             string `json:"source_sha,omitempty"`
+	AllowNewerHead        bool   `json:"allow_newer_head,omitempty"`
+	RepositoryRoot        string `json:"repository_root,omitempty"`
+	RequestedBy           string `json:"requested_by,omitempty"`
+	Priority              string `json:"priority,omitempty"`
+	SubmissionStatus      string `json:"submission_status,omitempty"`
+	Outcome               string `json:"outcome,omitempty"`
+	QueuePosition         int    `json:"queue_position,omitempty"`
+	EstimatedCompletionMS int64  `json:"estimated_completion_ms,omitempty"`
+	EstimateBasis         string `json:"estimate_basis,omitempty"`
+	DurationMS            int64  `json:"duration_ms,omitempty"`
+	DrainResult           string `json:"drain_result,omitempty"`
+	LastWorkerResult      string `json:"last_worker_result,omitempty"`
+	ErrorCode             string `json:"error_code,omitempty"`
+	Error                 string `json:"error,omitempty"`
 }
 
 func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -266,6 +269,11 @@ Flags:
 		RequestedBy:      queued.Submission.RequestedBy,
 		Priority:         queued.Submission.Priority,
 		SubmissionStatus: queued.Submission.Status,
+	}
+	if estimate, queuePosition, estimateErr := submissionQueueEstimate(context.Background(), queued); estimateErr == nil {
+		result.QueuePosition = queuePosition
+		result.EstimatedCompletionMS = estimate.AvgExecutionMS * int64(queuePosition)
+		result.EstimateBasis = estimate.Basis
 	}
 	if waitForResult {
 		waitResult, waitErr := waitForIntegratedSubmission(queued, timeout, pollInterval)

@@ -43,6 +43,9 @@ Optional fields:
 - `allow_newer_head`
 - `requested_by`
 - `priority`
+- `queue_position`
+- `estimated_completion_ms`
+- `estimate_basis`
 - `submission_status`
 - `outcome`
 - `duration_ms`
@@ -77,6 +80,7 @@ Optional top-level keys:
 - `active_publishes`
 - `integration_worker`
 - `publish_worker`
+- `execution_estimate`
 
 `protected_upstream` is a `git.BranchStatus` object with:
 
@@ -98,6 +102,9 @@ submission record with optional blocked-state diagnostics:
 - `publish_request_id`
 - `publish_status`
 - `outcome`
+- `queue_position`
+- `estimated_completion_ms`
+- `estimate_basis`
 - `blocked_reason`
 - `conflict_files`
 - `protected_tip_sha`
@@ -111,6 +118,31 @@ For succeeded submissions:
 - `outcome` is:
   - `integrated` when the submission succeeded but publish is absent or not yet succeeded
   - `landed` when the correlated publish request succeeded
+
+When enough successful submissions exist in the last 24 hours, queued and
+running submissions may also include:
+
+- `queue_position`
+- `estimated_completion_ms`
+- `estimate_basis`
+
+`queue_position` is the current runnable position among `running` and `queued`
+submissions after priority ordering is applied. `estimated_completion_ms` is a
+rolling average execution estimate multiplied by that position. `estimate_basis`
+is:
+
+- `integrated` when the estimate is based on integration completion
+- `landed` when publish mode is `auto` and enough landed samples exist
+
+`execution_estimate` describes the repo-wide rolling basis used for those per-
+submission estimates:
+
+- `window_hours`
+- `basis`
+- `sample_count`
+- `avg_execution_ms`
+- `avg_integration_ms`
+- `avg_landed_ms`
 
 `integration_worker` and `publish_worker` mirror the active lock metadata when a
 worker is currently holding that lease:

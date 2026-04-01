@@ -201,6 +201,7 @@ func TestStatusJSONContractContainsStableTopLevelFields(t *testing.T) {
 		"counts",
 		"current_branch",
 		"current_worktree",
+		"execution_estimate",
 		"protected_branch",
 		"protected_branch_sha",
 		"protected_upstream",
@@ -213,6 +214,63 @@ func TestStatusJSONContractContainsStableTopLevelFields(t *testing.T) {
 		if !slices.Contains(gotKeys, key) {
 			t.Fatalf("expected status json to contain key %q, got %v", key, gotKeys)
 		}
+	}
+}
+
+func TestStatusAndSubmitJSONIncludeRollingExecutionEstimate(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishMode(t, repoRoot, "auto")
+
+	restoreHooks := setAppTestFaultHooks(testFaultHooks{
+		before: func(point string) error {
+			if point == "publish.push" {
+				time.Sleep(1100 * time.Millisecond)
+			}
+			return nil
+		},
+	})
+	defer restoreHooks()
+
+	featureOne := filepath.Join(t.TempDir(), "feature-estimate-one")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/estimate-one", featureOne)
+	writeFileAndCommit(t, featureOne, "estimate-one.txt", "one\n", "estimate one")
+	submitBranch(t, featureOne)
+	runOnce(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+	featureTwo := filepath.Join(t.TempDir(), "feature-estimate-two")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/estimate-two", featureTwo)
+	writeFileAndCommit(t, featureTwo, "estimate-two.txt", "two\n", "estimate two")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featureTwo, "--json"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+	var submit submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &submit); err != nil {
+		t.Fatalf("Unmarshal submit: %v", err)
+	}
+	if submit.QueuePosition != 1 || submit.EstimatedCompletionMS <= 0 || submit.EstimateBasis != submissionOutcomeLanded {
+		t.Fatalf("unexpected submit estimate: %+v", submit)
+	}
+
+	var statusOut bytes.Buffer
+	var statusErr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, &statusOut, &statusErr); err != nil {
+		t.Fatalf("runCLI status returned error: %v", err)
+	}
+	var status statusResult
+	if err := json.Unmarshal(statusOut.Bytes(), &status); err != nil {
+		t.Fatalf("Unmarshal status: %v", err)
+	}
+	if status.ExecutionEstimate.SampleCount < 1 || status.ExecutionEstimate.AvgExecutionMS <= 0 || status.ExecutionEstimate.Basis != submissionOutcomeLanded {
+		t.Fatalf("unexpected execution estimate: %+v", status.ExecutionEstimate)
+	}
+	if status.LatestSubmission == nil || status.LatestSubmission.QueuePosition != 1 || status.LatestSubmission.EstimatedCompletionMS <= 0 {
+		t.Fatalf("expected queued submission estimate in status, got %+v", status.LatestSubmission)
 	}
 }
 
