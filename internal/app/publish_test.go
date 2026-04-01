@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -227,6 +228,183 @@ func TestRunOncePrePublishChecksFailBeforePush(t *testing.T) {
 	}
 }
 
+func TestRunOnceSchedulesRetryForTransientPublishFailure(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	writeFileAndCommit(t, repoRoot, "retry.txt", "retry\n", "main change retry")
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+
+	restoreBackoff := setPublishRetryBackoffsForTest([]time.Duration{0, 0, 0})
+	defer restoreBackoff()
+
+	attempts := 0
+	restoreFaults := setAppTestFaultHooks(testFaultHooks{
+		before: func(point string) error {
+			if point == "publish.push" {
+				attempts++
+				if attempts <= 2 {
+					return errors.New("remote: HTTP 502 bad gateway")
+				}
+			}
+			return nil
+		},
+	})
+	defer restoreFaults()
+
+	result, err := runOneCycle(repoRoot)
+	if err != nil {
+		t.Fatalf("first runOneCycle returned error: %v", err)
+	}
+	if !strings.Contains(result, "Scheduled publish retry 1") {
+		t.Fatalf("expected retry scheduling output, got %q", result)
+	}
+
+	result, err = runOneCycle(repoRoot)
+	if err != nil {
+		t.Fatalf("second runOneCycle returned error: %v", err)
+	}
+	if !strings.Contains(result, "Scheduled publish retry 2") {
+		t.Fatalf("expected second retry scheduling output, got %q", result)
+	}
+
+	result, err = runOneCycle(repoRoot)
+	if err != nil {
+		t.Fatalf("third runOneCycle returned error: %v", err)
+	}
+	if !strings.Contains(result, "Published request") {
+		t.Fatalf("expected publish success output, got %q", result)
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 publish request, got %d", len(requests))
+	}
+	if requests[0].Status != "succeeded" || requests[0].AttemptCount != 2 {
+		t.Fatalf("expected succeeded request after two retries, got %+v", requests[0])
+	}
+	if requests[0].NextAttemptAt.Valid {
+		t.Fatalf("expected retry schedule to clear after success, got %+v", requests[0].NextAttemptAt)
+	}
+}
+
+func TestRunOnceGivesUpAfterTransientPublishRetryBudget(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	writeFileAndCommit(t, repoRoot, "fail.txt", "fail\n", "main change fail")
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+
+	restoreBackoff := setPublishRetryBackoffsForTest([]time.Duration{0, 0, 0})
+	defer restoreBackoff()
+	restoreFaults := setAppTestFaultHooks(testFaultHooks{
+		before: func(point string) error {
+			if point == "publish.push" {
+				return errors.New("remote: HTTP 503 service unavailable")
+			}
+			return nil
+		},
+	})
+	defer restoreFaults()
+
+	for attempt := 1; attempt <= 3; attempt++ {
+		result, err := runOneCycle(repoRoot)
+		if err != nil {
+			t.Fatalf("retry cycle %d returned error: %v", attempt, err)
+		}
+		if !strings.Contains(result, "Scheduled publish retry") {
+			t.Fatalf("expected scheduled retry output on cycle %d, got %q", attempt, result)
+		}
+	}
+
+	result, err := runOneCycle(repoRoot)
+	if err != nil {
+		t.Fatalf("final runOneCycle returned error: %v", err)
+	}
+	if !strings.Contains(result, "Failed publish request") {
+		t.Fatalf("expected terminal failure output, got %q", result)
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead == localHead {
+		t.Fatalf("expected remote head to remain behind local head %q", localHead)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 publish request, got %d", len(requests))
+	}
+	if requests[0].Status != "failed" || requests[0].AttemptCount != 3 {
+		t.Fatalf("expected failed request after retry exhaustion, got %+v", requests[0])
+	}
+}
+
+func TestRunOnceReportsDelayedPublishRetryWhenNothingIsReady(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	writeFileAndCommit(t, repoRoot, "delay.txt", "delay\n", "main change delay")
+	queuePublish(t, repoRoot)
+
+	restoreFaults := setAppTestFaultHooks(testFaultHooks{
+		before: func(point string) error {
+			if point == "publish.push" {
+				return errors.New("remote: HTTP 500 internal server error")
+			}
+			return nil
+		},
+	})
+	defer restoreFaults()
+
+	result, err := runOneCycle(repoRoot)
+	if err != nil {
+		t.Fatalf("first runOneCycle returned error: %v", err)
+	}
+	if !strings.Contains(result, "Scheduled publish retry 1") {
+		t.Fatalf("expected retry scheduling output, got %q", result)
+	}
+
+	restoreFaults()
+	result, err = runOneCycle(repoRoot)
+	if err != nil {
+		t.Fatalf("second runOneCycle returned error: %v", err)
+	}
+	if !strings.Contains(result, "No ready publish requests. Next retry for request") {
+		t.Fatalf("expected delayed retry output, got %q", result)
+	}
+}
+
 func TestPublishRespectsHookPolicyBypassingPrePushHook(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
@@ -399,4 +577,12 @@ func updatePublishMode(t *testing.T, repoRoot string, mode string) {
 	}
 	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
 	runTestCommand(t, repoRoot, "git", "commit", "-m", "update publish mode")
+}
+
+func setPublishRetryBackoffsForTest(backoffs []time.Duration) func() {
+	previous := publishRetryBackoffs
+	publishRetryBackoffs = append([]time.Duration(nil), backoffs...)
+	return func() {
+		publishRetryBackoffs = previous
+	}
 }

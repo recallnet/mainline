@@ -17,7 +17,7 @@ import (
 const (
 	defaultDirName       = "mainline"
 	defaultDBName        = "state.db"
-	currentSchemaVersion = 3
+	currentSchemaVersion = 4
 )
 
 var ErrUnsupportedSchemaVersion = errors.New("unsupported state schema version")
@@ -58,13 +58,15 @@ type IntegrationSubmission struct {
 
 // PublishRequest is the durable publish row.
 type PublishRequest struct {
-	ID           int64
-	RepoID       int64
-	TargetSHA    string
-	Status       string
-	SupersededBy sql.NullInt64
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID            int64
+	RepoID        int64
+	TargetSHA     string
+	Status        string
+	AttemptCount  int
+	NextAttemptAt sql.NullTime
+	SupersededBy  sql.NullInt64
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // EventRecord is the durable event row.
@@ -363,13 +365,17 @@ func (s Store) CreatePublishRequest(ctx context.Context, request PublishRequest)
 			repo_id,
 			target_sha,
 			status,
+			attempt_count,
+			next_attempt_at,
 			superseded_by
-		) VALUES (?, ?, ?, ?)
-		RETURNING id, repo_id, target_sha, status, superseded_by, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?)
+		RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 	`,
 		request.RepoID,
 		request.TargetSHA,
 		request.Status,
+		request.AttemptCount,
+		request.NextAttemptAt,
 		request.SupersededBy,
 	)
 
@@ -385,7 +391,7 @@ func (s Store) GetPublishRequest(ctx context.Context, requestID int64) (PublishR
 	defer db.Close()
 
 	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, target_sha, status, superseded_by, created_at, updated_at
+		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 		FROM publish_requests
 		WHERE id = ?
 	`, requestID)
@@ -410,12 +416,66 @@ func (s Store) LatestQueuedPublishRequest(ctx context.Context, repoID int64) (Pu
 	defer db.Close()
 
 	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, target_sha, status, superseded_by, created_at, updated_at
+		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 		FROM publish_requests
 		WHERE repo_id = ? AND status = 'queued'
 		ORDER BY created_at DESC, id DESC
 		LIMIT 1
 	`, repoID)
+
+	request, err := scanPublishRequest(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublishRequest{}, ErrNotFound
+		}
+		return PublishRequest{}, err
+	}
+
+	return request, nil
+}
+
+// LatestReadyQueuedPublishRequest returns the newest queued publish request ready to run now.
+func (s Store) LatestReadyQueuedPublishRequest(ctx context.Context, repoID int64, now time.Time) (PublishRequest, error) {
+	db, err := s.open()
+	if err != nil {
+		return PublishRequest{}, err
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(ctx, `
+		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+		FROM publish_requests
+		WHERE repo_id = ? AND status = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+		ORDER BY created_at DESC, id DESC
+		LIMIT 1
+	`, repoID, now.UTC())
+
+	request, err := scanPublishRequest(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublishRequest{}, ErrNotFound
+		}
+		return PublishRequest{}, err
+	}
+
+	return request, nil
+}
+
+// NextDelayedQueuedPublishRequest returns the earliest delayed queued publish request for a repo.
+func (s Store) NextDelayedQueuedPublishRequest(ctx context.Context, repoID int64, now time.Time) (PublishRequest, error) {
+	db, err := s.open()
+	if err != nil {
+		return PublishRequest{}, err
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(ctx, `
+		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+		FROM publish_requests
+		WHERE repo_id = ? AND status = 'queued' AND next_attempt_at IS NOT NULL AND next_attempt_at > ?
+		ORDER BY next_attempt_at ASC, id ASC
+		LIMIT 1
+	`, repoID, now.UTC())
 
 	request, err := scanPublishRequest(row)
 	if err != nil {
@@ -457,10 +517,68 @@ func (s Store) UpdatePublishRequestStatus(ctx context.Context, requestID int64, 
 
 	row := db.QueryRowContext(ctx, `
 		UPDATE publish_requests
-		SET status = ?, superseded_by = ?, updated_at = CURRENT_TIMESTAMP
+		SET status = ?, superseded_by = ?, next_attempt_at = NULL, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
-		RETURNING id, repo_id, target_sha, status, superseded_by, created_at, updated_at
+		RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 	`, status, supersededBy, requestID)
+
+	request, err := scanPublishRequest(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublishRequest{}, ErrNotFound
+		}
+		return PublishRequest{}, err
+	}
+
+	return request, nil
+}
+
+// SchedulePublishRetry requeues a publish request for a later retry attempt.
+func (s Store) SchedulePublishRetry(ctx context.Context, requestID int64, attemptCount int, nextAttemptAt time.Time) (PublishRequest, error) {
+	if err := applyTestFault("UpdatePublishRequestStatus"); err != nil {
+		return PublishRequest{}, err
+	}
+	db, err := s.open()
+	if err != nil {
+		return PublishRequest{}, err
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(ctx, `
+		UPDATE publish_requests
+		SET status = 'queued', attempt_count = ?, next_attempt_at = ?, superseded_by = NULL, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+		RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+	`, attemptCount, nextAttemptAt.UTC(), requestID)
+
+	request, err := scanPublishRequest(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PublishRequest{}, ErrNotFound
+		}
+		return PublishRequest{}, err
+	}
+
+	return request, nil
+}
+
+// ResetPublishRequestForRetry clears delayed retry state and manual retry budget exhaustion.
+func (s Store) ResetPublishRequestForRetry(ctx context.Context, requestID int64) (PublishRequest, error) {
+	if err := applyTestFault("UpdatePublishRequestStatus"); err != nil {
+		return PublishRequest{}, err
+	}
+	db, err := s.open()
+	if err != nil {
+		return PublishRequest{}, err
+	}
+	defer db.Close()
+
+	row := db.QueryRowContext(ctx, `
+		UPDATE publish_requests
+		SET status = 'queued', attempt_count = 0, next_attempt_at = NULL, superseded_by = NULL, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+		RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+	`, requestID)
 
 	request, err := scanPublishRequest(row)
 	if err != nil {
@@ -482,7 +600,7 @@ func (s Store) ListPublishRequests(ctx context.Context, repoID int64) ([]Publish
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, target_sha, status, superseded_by, created_at, updated_at
+		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 		FROM publish_requests
 		WHERE repo_id = ?
 		ORDER BY created_at ASC, id ASC
@@ -670,6 +788,22 @@ func ensureSchemaVersion(ctx context.Context, db *sql.DB) error {
 		version = 3
 		migrated = true
 	}
+	if version < 4 {
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE publish_requests
+			ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0
+		`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return fmt.Errorf("add publish request attempt_count column: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE publish_requests
+			ADD COLUMN next_attempt_at DATETIME
+		`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return fmt.Errorf("add publish request next_attempt_at column: %w", err)
+		}
+		version = 4
+		migrated = true
+	}
 	if migrated && version < currentSchemaVersion {
 		version = currentSchemaVersion
 	}
@@ -741,6 +875,8 @@ func scanPublishRequest(row scanner) (PublishRequest, error) {
 		&request.RepoID,
 		&request.TargetSHA,
 		&request.Status,
+		&request.AttemptCount,
+		&request.NextAttemptAt,
 		&request.SupersededBy,
 		&request.CreatedAt,
 		&request.UpdatedAt,
@@ -948,7 +1084,7 @@ func (s Store) ListPublishRequestsByStatus(ctx context.Context, repoID int64, st
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, target_sha, status, superseded_by, created_at, updated_at
+		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 		FROM publish_requests
 		WHERE repo_id = ? AND status = ?
 		ORDER BY created_at ASC, id ASC
@@ -1009,6 +1145,8 @@ CREATE TABLE IF NOT EXISTS publish_requests (
 	repo_id INTEGER NOT NULL,
 	target_sha TEXT NOT NULL,
 	status TEXT NOT NULL,
+	attempt_count INTEGER NOT NULL DEFAULT 0,
+	next_attempt_at DATETIME,
 	superseded_by INTEGER,
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

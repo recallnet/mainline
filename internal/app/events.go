@@ -305,6 +305,13 @@ func (e *lifecycleEmitter) project(event state.EventRecord) (lifecycleEvent, boo
 			e.shaToBranch[record.SHA] = record.Branch
 		}
 		return record, true, nil
+	case "publish.retry_scheduled":
+		record.Event = "publish_retry_scheduled"
+		record.Status = "queued"
+		record.SHA = getString("target_sha")
+		record.Branch = e.shaToBranch[record.SHA]
+		record.Error = getString("error")
+		return record, true, nil
 	case "publish.completed":
 		record.Event = "published"
 		record.Status = "succeeded"

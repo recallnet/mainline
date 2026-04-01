@@ -577,8 +577,8 @@ func TestStatusUpgradesExistingLegacyStateSchema(t *testing.T) {
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 3 {
-		t.Fatalf("expected schema version 3 after status upgrade, got %d", version)
+	if version != 4 {
+		t.Fatalf("expected schema version 4 after status upgrade, got %d", version)
 	}
 }
 

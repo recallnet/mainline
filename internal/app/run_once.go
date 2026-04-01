@@ -326,6 +326,12 @@ type protectedSyncResult struct {
 	AfterSHA  string
 }
 
+var publishRetryBackoffs = []time.Duration{
+	time.Second,
+	5 * time.Second,
+	30 * time.Second,
+}
+
 func syncProtectedBranch(engine git.Engine, cfg policy.File) (protectedSyncResult, error) {
 	if cfg.Integration.SyncPolicy != "sync-before-integrate" {
 		return protectedSyncResult{}, nil
@@ -381,10 +387,15 @@ func syncProtectedBranch(engine git.Engine, cfg policy.File) (protectedSyncResul
 
 func processPublishRequest(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File, publishLease *state.Lease) (string, error) {
 	mainEngine := git.NewEngine(cfg.Repo.MainWorktree)
+	now := time.Now().UTC()
 
-	request, err := store.LatestQueuedPublishRequest(ctx, repoRecord.ID)
+	request, err := store.LatestReadyQueuedPublishRequest(ctx, repoRecord.ID, now)
 	if err != nil {
 		if errors.Is(err, state.ErrNotFound) {
+			delayed, delayedErr := store.NextDelayedQueuedPublishRequest(ctx, repoRecord.ID, now)
+			if delayedErr == nil && delayed.NextAttemptAt.Valid {
+				return fmt.Sprintf("No ready publish requests. Next retry for request %d at %s", delayed.ID, delayed.NextAttemptAt.Time.UTC().Format(time.RFC3339)), nil
+			}
 			return "No queued publish requests.", nil
 		}
 		return "", err
@@ -460,11 +471,11 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 	}
 
 	if err := applyAppTestFault("publish.push"); err != nil {
-		return markPublishFailed(ctx, store, repoRecord.ID, request.ID, request.TargetSHA, err)
+		return handlePublishFailure(ctx, store, repoRecord.ID, request, err)
 	}
 	handle, err := mainEngine.StartPushBranch(cfg.Repo.MainWorktree, cfg.Repo.RemoteName, cfg.Repo.ProtectedBranch, shouldBypassGitHooks(cfg))
 	if err != nil {
-		return markPublishFailed(ctx, store, repoRecord.ID, request.ID, request.TargetSHA, err)
+		return handlePublishFailure(ctx, store, repoRecord.ID, request, err)
 	}
 	if publishLease != nil {
 		_ = publishLease.UpdateMetadata(state.LeaseMetadata{
@@ -501,7 +512,7 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 			}
 			return fmt.Sprintf("Preempted publish request %d for newer target %s", request.ID, replacement.TargetSHA), nil
 		}
-		return markPublishFailed(ctx, store, repoRecord.ID, request.ID, request.TargetSHA, err)
+		return handlePublishFailure(ctx, store, repoRecord.ID, request, err)
 	}
 
 	latestProtectedSHA, err := mainEngine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
@@ -535,6 +546,81 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 	}
 
 	return fmt.Sprintf("Published request %d for %s", request.ID, latestProtectedSHA), nil
+}
+
+func handlePublishFailure(ctx context.Context, store state.Store, repoID int64, request state.PublishRequest, cause error) (string, error) {
+	if delay, ok := publishRetryDelay(request.AttemptCount, cause); ok {
+		retryAt := time.Now().UTC().Add(delay)
+		updated, err := store.SchedulePublishRetry(ctx, request.ID, request.AttemptCount+1, retryAt)
+		if err != nil {
+			return "", err
+		}
+		if eventErr := appendStateEvent(ctx, store, state.EventRecord{
+			RepoID:    repoID,
+			ItemType:  "publish_request",
+			ItemID:    state.NullInt64(request.ID),
+			EventType: "publish.retry_scheduled",
+			Payload: mustJSON(map[string]any{
+				"target_sha":        request.TargetSHA,
+				"error":             cause.Error(),
+				"attempt_count":     updated.AttemptCount,
+				"next_attempt_at":   retryAt.Format(time.RFC3339),
+				"backoff_seconds":   int(delay / time.Second),
+				"retry_recommended": true,
+			}),
+		}); eventErr != nil {
+			return "", eventErr
+		}
+		return fmt.Sprintf("Scheduled publish retry %d for request %d at %s", updated.AttemptCount, updated.ID, retryAt.Format(time.RFC3339)), nil
+	}
+	return markPublishFailed(ctx, store, repoID, request.ID, request.TargetSHA, cause)
+}
+
+func publishRetryDelay(attemptCount int, cause error) (time.Duration, bool) {
+	if !isTransientPublishError(cause) {
+		return 0, false
+	}
+	if attemptCount < 0 || attemptCount >= len(publishRetryBackoffs) {
+		return 0, false
+	}
+	return publishRetryBackoffs[attemptCount], true
+}
+
+func isTransientPublishError(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	transientIndicators := []string{
+		"connection reset",
+		"connection timed out",
+		"connection timeout",
+		"timed out",
+		"timeout",
+		"temporary failure",
+		"try again",
+		"rate limit",
+		"429",
+		"http 500",
+		"http 502",
+		"http 503",
+		"http 504",
+		"internal server error",
+		"remote end hung up unexpectedly",
+		"the remote end hung up unexpectedly",
+		"unexpected disconnect",
+		"connection closed by remote host",
+		"tls handshake timeout",
+		"network is unreachable",
+		"could not resolve host",
+		"transport endpoint is not connected",
+	}
+	for _, indicator := range transientIndicators {
+		if strings.Contains(text, indicator) {
+			return true
+		}
+	}
+	return false
 }
 
 func maybeRequestPublishPreemption(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File, lockManager state.LockManager) (string, error) {

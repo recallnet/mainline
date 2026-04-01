@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -151,7 +150,7 @@ func controlPublish(ctx context.Context, action string, store state.Store, repoI
 		if request.Status != "failed" && request.Status != "cancelled" {
 			return fmt.Errorf("publish request %d is %q; only failed or cancelled publishes can be retried", publishID, request.Status)
 		}
-		updated, err := store.UpdatePublishRequestStatus(ctx, publishID, "queued", sql.NullInt64{})
+		updated, err := store.ResetPublishRequestForRetry(ctx, publishID)
 		if err != nil {
 			return err
 		}
