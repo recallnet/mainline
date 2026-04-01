@@ -297,6 +297,20 @@ Flags:
 		}
 		if drainErr != nil {
 			result.Error = drainErr.Error()
+		} else {
+			submission, loadErr := queued.Store.GetIntegrationSubmission(context.Background(), queued.Submission.ID)
+			if loadErr == nil {
+				result.SubmissionStatus = submission.Status
+				if submission.Status == "succeeded" {
+					info, infoErr := resolveSubmissionPublishInfo(context.Background(), queued.Store, queued.RepoRecord.ID, submission)
+					if infoErr == nil {
+						result.Outcome = info.Outcome
+					}
+					if result.Outcome == "" {
+						result.Outcome = submissionOutcomeIntegrated
+					}
+				}
+			}
 		}
 	}
 	if asJSON {

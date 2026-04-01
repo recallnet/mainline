@@ -144,6 +144,9 @@ func TestSubmitOpportunisticallyDrainsQueuedWork(t *testing.T) {
 	if !result.DrainAttempted {
 		t.Fatalf("expected drain attempt, got %+v", result)
 	}
+	if result.SubmissionStatus != "succeeded" || result.Outcome != submissionOutcomeLanded {
+		t.Fatalf("expected submit json to reflect landed outcome after drain, got %+v", result)
+	}
 
 	layout, err := git.DiscoverRepositoryLayout(repoRoot)
 	if err != nil {
