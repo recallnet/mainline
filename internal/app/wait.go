@@ -31,6 +31,8 @@ type integrationWaitResult struct {
 	RepositoryRoot   string      `json:"repository_root"`
 	ProtectedBranch  string      `json:"protected_branch"`
 	SubmissionStatus string      `json:"submission_status"`
+	PublishRequestID int64       `json:"publish_request_id,omitempty"`
+	PublishStatus    string      `json:"publish_status,omitempty"`
 	Outcome          waitOutcome `json:"outcome"`
 	DurationMS       int64       `json:"duration_ms"`
 	LastWorkerResult string      `json:"last_worker_result,omitempty"`
@@ -209,6 +211,40 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 				return result, exitWithCode(1, err)
 			}
 			_ = protectedSHA
+			info, err := resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission)
+			if err != nil {
+				result.Outcome = waitOutcomeFailed
+				result.DurationMS = time.Since(start).Milliseconds()
+				result.Error = err.Error()
+				return result, err
+			}
+			result.PublishRequestID = info.PublishRequestID
+			result.PublishStatus = info.PublishStatus
+			if queued.Config.Publish.Mode == "auto" && info.PublishRequestID != 0 && info.PublishStatus == "queued" {
+				cycleResult, cycleErr := runOneCycle(queued.Config.Repo.MainWorktree)
+				if cycleResult != "" {
+					result.LastWorkerResult = cycleResult
+				}
+				if cycleErr != nil {
+					result.DurationMS = time.Since(start).Milliseconds()
+					result.Error = cycleErr.Error()
+					return result, cycleErr
+				}
+				info, err = resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission)
+				if err != nil {
+					result.Outcome = waitOutcomeFailed
+					result.DurationMS = time.Since(start).Milliseconds()
+					result.Error = err.Error()
+					return result, err
+				}
+				result.PublishRequestID = info.PublishRequestID
+				result.PublishStatus = info.PublishStatus
+				if info.Outcome == submissionOutcomeLanded {
+					result.Outcome = waitOutcome("landed")
+					result.DurationMS = time.Since(start).Milliseconds()
+					return result, nil
+				}
+			}
 			result.Outcome = waitOutcome("integrated")
 			result.DurationMS = time.Since(start).Milliseconds()
 			return result, nil
@@ -330,6 +366,34 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 			}
 			result.PublishRequestID = info.PublishRequestID
 			result.PublishStatus = info.PublishStatus
+
+			if target == waitTargetIntegrated && queued.Config.Publish.Mode == "auto" && info.PublishRequestID != 0 && info.PublishStatus == "queued" {
+				cycleResult, cycleErr := runOneCycle(queued.Config.Repo.MainWorktree)
+				if cycleResult != "" {
+					result.LastWorkerResult = cycleResult
+				}
+				if cycleErr != nil {
+					result.DurationMS = time.Since(start).Milliseconds()
+					result.Error = cycleErr.Error()
+					return result, cycleErr
+				}
+				info, err = resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission)
+				if err != nil {
+					result.DurationMS = time.Since(start).Milliseconds()
+					result.Error = err.Error()
+					return result, err
+				}
+				if info.ProtectedSHA != "" {
+					result.ProtectedSHA = info.ProtectedSHA
+				}
+				result.PublishRequestID = info.PublishRequestID
+				result.PublishStatus = info.PublishStatus
+				if info.Outcome == submissionOutcomeLanded {
+					result.Outcome = waitOutcome("landed")
+					result.DurationMS = time.Since(start).Milliseconds()
+					return result, nil
+				}
+			}
 
 			if target == waitTargetIntegrated {
 				result.Outcome = waitOutcome("integrated")

@@ -81,6 +81,12 @@ Important: `mq submit --wait` stops at `integrated`. In a repo with
 `[publish].Mode = 'manual'`, that means the commit is on local protected
 `main` but not yet pushed to remote.
 
+If the wrapper wants one blocking submit call that waits through auto-publish:
+
+```bash
+mq submit --wait --for landed --timeout 30m --json
+```
+
 Or, when the caller wants a durable machine handle instead of a one-shot wait:
 
 ```bash
@@ -246,6 +252,7 @@ cd /path/to/topic-worktree
 mq submit --check-only --json
 mq submit --allow-newer-head --wait --timeout 15m --json
 mq submit --wait --timeout 15m --json
+mq submit --wait --for landed --timeout 30m --json
 mq submit --json
 mq wait --submission 42 --for landed --json --timeout 30m
 mq land --json --timeout 30m
@@ -258,6 +265,7 @@ mq status --repo /path/to/repo-root --json
 mq repo audit --repo /path/to/repo-root --json
 mq watch --repo /path/to/repo-root
 mq events --repo /path/to/repo-root --follow --json --lifecycle
+mq registry prune --json
 mq retry --repo /path/to/repo-root --submission 17
 mq cancel --repo /path/to/repo-root --publish 4
 ```

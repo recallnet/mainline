@@ -1158,6 +1158,38 @@ func TestSubmitWaitIntegratesBranchAndReturnsIntegratedOutcome(t *testing.T) {
 	}
 }
 
+func TestSubmitWaitForLandedBlocksThroughAutoPublish(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishMode(t, repoRoot, "auto")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-wait-landed")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/wait-landed", featurePath)
+	writeFileAndCommit(t, featurePath, "wait-landed.txt", "wait landed\n", "feature wait landed")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--for", "landed", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.OK || !result.Waited || result.SubmissionStatus != "succeeded" || result.Outcome != submissionOutcomeLanded {
+		t.Fatalf("expected waited landed result, got %+v", result)
+	}
+	if result.PublishRequestID == 0 || result.PublishStatus != "succeeded" {
+		t.Fatalf("expected publish correlation in landed result, got %+v", result)
+	}
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+}
+
 func TestSubmitWaitSucceedsAfterQueuedRebaseRewritesBranchSHA(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

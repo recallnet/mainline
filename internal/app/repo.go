@@ -97,6 +97,8 @@ func handleCommand(command string, args []string, stdout io.Writer, stderr io.Wr
 		return runCompletion(args, stdout, stderr)
 	case "config edit":
 		return runConfigEdit(args, stdout, stderr)
+	case "registry prune":
+		return runRegistryPrune(args, stdout, stderr)
 	case "repo audit":
 		return runRepoAudit(args, stdout, stderr)
 	case "repo init":
@@ -273,6 +275,70 @@ Flags:
 	fmt.Fprintln(stdout, "  mq submit --check-only --json")
 	fmt.Fprintln(stdout, "  mq submit --wait --timeout 15m --json")
 	fmt.Fprintln(stdout, "  mq land --json --timeout 30m")
+	return nil
+}
+
+type registryPruneResult struct {
+	RegistryPath   string   `json:"registry_path"`
+	PrunedCount    int      `json:"pruned_count"`
+	RemainingCount int      `json:"remaining_count"`
+	PrunedRepos    []string `json:"pruned_repositories,omitempty"`
+}
+
+func runRegistryPrune(args []string, stdout io.Writer, stderr io.Writer) error {
+	fs := flag.NewFlagSet(currentCLIProgramName()+" registry prune", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s registry prune [flags]
+
+Remove stale repo entries from the global registry used by optional multi-repo
+helper mode.
+
+Examples:
+  mq registry prune
+  mq registry prune --json
+
+Flags:
+`, currentCLIProgramName()))
+
+	var asJSON bool
+	var registryPath string
+	fs.BoolVar(&asJSON, "json", false, "output json")
+	fs.StringVar(&registryPath, "registry", "", "registry path override")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	path := registryPath
+	if path == "" {
+		var err error
+		path, err = globalRegistryPath()
+		if err != nil {
+			return err
+		}
+	}
+	pruned, remaining, err := pruneRegisteredReposFromPath(path)
+	if err != nil {
+		return err
+	}
+	result := registryPruneResult{
+		RegistryPath:   path,
+		PrunedCount:    len(pruned),
+		RemainingCount: len(remaining),
+		PrunedRepos:    pruned,
+	}
+	if asJSON {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(result)
+	}
+
+	fmt.Fprintf(stdout, "Registry: %s\n", result.RegistryPath)
+	fmt.Fprintf(stdout, "Pruned: %d\n", result.PrunedCount)
+	fmt.Fprintf(stdout, "Remaining: %d\n", result.RemainingCount)
+	for _, repo := range result.PrunedRepos {
+		fmt.Fprintf(stdout, "  removed: %s\n", repo)
+	}
 	return nil
 }
 

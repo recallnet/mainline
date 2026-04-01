@@ -179,6 +179,12 @@ Mode = 'auto'
 With `Mode = 'manual'`, `mq submit --wait` only proves `integrated`. Remote
 publish still requires `mq publish`, `mq land`, or `mq wait --for landed`.
 
+With `Mode = 'auto'`, you can also wait through publish directly from submit:
+
+```bash
+mq submit --wait --for landed --timeout 30m --json
+```
+
 If you want to experiment manually with a long-lived helper process anyway, run
 it directly:
 
@@ -187,6 +193,12 @@ mainlined --all --json --interval 2s
 ```
 
 That path is optional and not part of the default machine setup.
+
+If old deleted repos are still present in the optional global registry:
+
+```bash
+mq registry prune --json
+```
 
 ## Completion Install
 

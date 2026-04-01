@@ -42,6 +42,7 @@ type submitOptions struct {
 	checkOnly    bool
 	queueOnly    bool
 	allowNewer   bool
+	waitTarget   string
 }
 
 type preparedSubmission struct {
@@ -87,6 +88,8 @@ type submitResult struct {
 	Priority              string `json:"priority,omitempty"`
 	SubmissionStatus      string `json:"submission_status,omitempty"`
 	Outcome               string `json:"outcome,omitempty"`
+	PublishRequestID      int64  `json:"publish_request_id,omitempty"`
+	PublishStatus         string `json:"publish_status,omitempty"`
 	QueuePosition         int    `json:"queue_position,omitempty"`
 	EstimatedCompletionMS int64  `json:"estimated_completion_ms,omitempty"`
 	EstimateBasis         string `json:"estimate_basis,omitempty"`
@@ -114,6 +117,7 @@ the branch is on local protected main but not yet pushed to remote.
 Turbo agent flow:
   mq submit --check-only --json
   mq submit --wait --timeout 15m --json
+  mq submit --wait --for landed --timeout 30m --json
   mq wait --submission <id> --for landed --json --timeout 30m
   mq land --json --timeout 30m
 
@@ -126,6 +130,7 @@ submission.
 Examples:
   mq submit
   mq submit --queue-only --json
+  mq submit --wait --for landed --timeout 30m --json
   mq submit --allow-newer-head --wait --timeout 15m --json
   mq submit --wait --timeout 15m --json
   mq submit --sha <commit> --json
@@ -143,6 +148,7 @@ Flags:
 	var checkOnly bool
 	var checkOnlyAlias bool
 	var waitForResult bool
+	var waitFor string
 	var queueOnly bool
 	var timeout time.Duration
 	var pollInterval time.Duration
@@ -159,7 +165,8 @@ Flags:
 	fs.BoolVar(&checkOnlyAlias, "check-only", false, "validate submission without queueing it")
 	fs.BoolVar(&queueOnly, "queue-only", false, "queue the submission without opportunistically draining it")
 	fs.BoolVar(&allowNewerHead, "allow-newer-head", false, "allow a queued branch head to advance before integration if it remains a descendant of the submitted sha")
-	fs.BoolVar(&waitForResult, "wait", false, "wait for the submission to integrate (not remote publish)")
+	fs.BoolVar(&waitForResult, "wait", false, "wait for the submission result")
+	fs.StringVar(&waitFor, "for", string(waitTargetIntegrated), "wait target when used with --wait: integrated or landed")
 	fs.DurationVar(&timeout, "timeout", 10*time.Minute, "maximum time to wait for integration")
 	fs.DurationVar(&pollInterval, "poll-interval", 500*time.Millisecond, "wait interval between worker checks")
 
@@ -176,6 +183,12 @@ Flags:
 	if pollInterval <= 0 {
 		return fmt.Errorf("poll-interval must be greater than zero")
 	}
+	if waitTarget(waitFor) != waitTargetIntegrated && waitTarget(waitFor) != waitTargetLanded {
+		return fmt.Errorf("--for must be %q or %q", waitTargetIntegrated, waitTargetLanded)
+	}
+	if waitFor != string(waitTargetIntegrated) && !waitForResult {
+		return fmt.Errorf("--for requires --wait")
+	}
 	opts := submitOptions{
 		repoPath:     repoPath,
 		branch:       branch,
@@ -186,6 +199,7 @@ Flags:
 		checkOnly:    checkOnly,
 		queueOnly:    queueOnly,
 		allowNewer:   allowNewerHead,
+		waitTarget:   waitFor,
 	}
 	prepared, err := prepareSubmission(opts)
 	if err != nil {
@@ -276,11 +290,17 @@ Flags:
 		result.EstimateBasis = estimate.Basis
 	}
 	if waitForResult {
-		waitResult, waitErr := waitForIntegratedSubmission(queued, timeout, pollInterval)
+		target := waitTarget(opts.waitTarget)
+		if target == "" {
+			target = waitTargetIntegrated
+		}
+		waitResult, waitErr := waitForSubmissionTarget(queued, target, timeout, pollInterval)
 		result.OK = waitErr == nil
 		result.Waited = true
 		result.SubmissionStatus = waitResult.SubmissionStatus
 		result.Outcome = string(waitResult.Outcome)
+		result.PublishRequestID = waitResult.PublishRequestID
+		result.PublishStatus = waitResult.PublishStatus
 		result.DurationMS = waitResult.DurationMS
 		result.LastWorkerResult = waitResult.LastWorkerResult
 		if waitResult.Error != "" {
@@ -300,6 +320,12 @@ Flags:
 			fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
 			if result.Outcome != "" {
 				fmt.Fprintf(stdout, "Outcome: %s\n", result.Outcome)
+			}
+			if result.PublishRequestID != 0 {
+				fmt.Fprintf(stdout, "Publish request: %d\n", result.PublishRequestID)
+			}
+			if result.PublishStatus != "" {
+				fmt.Fprintf(stdout, "Publish status: %s\n", result.PublishStatus)
 			}
 			if result.LastWorkerResult != "" {
 				fmt.Fprintf(stdout, "Last worker result: %s\n", result.LastWorkerResult)
@@ -329,6 +355,8 @@ Flags:
 				if submission.Status == "succeeded" {
 					info, infoErr := resolveSubmissionPublishInfo(context.Background(), queued.Store, queued.RepoRecord.ID, submission)
 					if infoErr == nil {
+						result.PublishRequestID = info.PublishRequestID
+						result.PublishStatus = info.PublishStatus
 						result.Outcome = info.Outcome
 					}
 					if result.Outcome == "" {
@@ -356,6 +384,12 @@ Flags:
 		fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
 		if result.Outcome != "" {
 			fmt.Fprintf(stdout, "Outcome: %s\n", result.Outcome)
+		}
+		if result.PublishRequestID != 0 {
+			fmt.Fprintf(stdout, "Publish request: %d\n", result.PublishRequestID)
+		}
+		if result.PublishStatus != "" {
+			fmt.Fprintf(stdout, "Publish status: %s\n", result.PublishStatus)
 		}
 		if result.LastWorkerResult != "" {
 			fmt.Fprintf(stdout, "Last worker result: %s\n", result.LastWorkerResult)

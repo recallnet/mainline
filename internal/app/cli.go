@@ -28,6 +28,7 @@ var cliCommands = []string{
 	"completion",
 	"version",
 	"config edit",
+	"registry prune",
 	"repo audit",
 	"repo init",
 	"repo root",
@@ -125,6 +126,7 @@ Turbo paths:
 
   Controller or factory caller:
     %s land --json --timeout 30m
+    %s submit --wait --for landed --timeout 30m --json
     %s wait --submission 42 --for landed --json --timeout 30m
     %s events --follow --json --lifecycle --repo /path/to/repo-root
 
@@ -155,13 +157,14 @@ Commands:
   completion    emit shell completion
   version       show build metadata
   config edit   open mainline.toml in an editor
+  registry prune remove stale repo entries from the global registry
   repo init     initialize repo config and durable state
   repo audit    list local branches not yet merged into protected main
   repo root     inspect or adopt the canonical root checkout
   repo show     inspect repo config and worktrees
 
 Use "%s <command> --help" for command-specific examples.
-`, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName)
+`, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName)
 }
 
 func isKnownCLICommand(command string) bool {
@@ -178,7 +181,7 @@ func parseCLICommand(args []string) (string, []string) {
 		return "", nil
 	}
 
-	if args[0] == "repo" || args[0] == "config" {
+	if args[0] == "repo" || args[0] == "config" || args[0] == "registry" {
 		if len(args) == 1 {
 			return args[0], nil
 		}

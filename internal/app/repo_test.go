@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -296,6 +297,54 @@ func TestRepoInitRepairsMalformedGlobalRegistryOnWrite(t *testing.T) {
 	}
 	if len(repos) != 1 {
 		t.Fatalf("expected one registered repo after registry repair, got %+v", repos)
+	}
+}
+
+func TestLoadRegisteredReposPrunesMissingEntries(t *testing.T) {
+	registryPath := filepath.Join(t.TempDir(), "registry.json")
+	repoRoot, worktreePath := createTestRepo(t)
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	missingRoot := filepath.Join(t.TempDir(), "missing-repo")
+	missingWorktree := filepath.Join(t.TempDir(), "missing-worktree")
+	missingState := filepath.Join(t.TempDir(), "missing.db")
+	if err := os.WriteFile(registryPath, []byte(fmt.Sprintf("{\n  \"version\": \"v1\",\n  \"repositories\": [\n    {\n      \"repository_root\": %q,\n      \"main_worktree\": %q,\n      \"state_path\": %q,\n      \"updated_at\": \"2026-04-01T00:00:00Z\"\n    },\n    {\n      \"repository_root\": %q,\n      \"main_worktree\": %q,\n      \"state_path\": %q,\n      \"updated_at\": \"2026-04-01T00:00:00Z\"\n    }\n  ]\n}\n",
+		canonicalRegistryPath(missingRoot), canonicalRegistryPath(missingWorktree), canonicalRegistryPath(missingState),
+		canonicalRegistryPath(repoRoot), canonicalRegistryPath(worktreePath), canonicalRegistryPath(state.DefaultPath(layout.GitDir)),
+	)), 0o644); err != nil {
+		t.Fatalf("WriteFile(registryPath): %v", err)
+	}
+
+	repos, err := loadRegisteredReposFromPath(registryPath)
+	if err != nil {
+		t.Fatalf("loadRegisteredReposFromPath: %v", err)
+	}
+	if len(repos) != 1 || repos[0].RepositoryRoot != canonicalRegistryPath(repoRoot) {
+		t.Fatalf("expected stale entry pruned, got %+v", repos)
+	}
+}
+
+func TestRegistryPruneCommandRemovesMissingEntries(t *testing.T) {
+	registryPath := filepath.Join(t.TempDir(), "registry.json")
+	missingRoot := filepath.Join(t.TempDir(), "missing-repo")
+	if err := os.WriteFile(registryPath, []byte(fmt.Sprintf("{\n  \"version\": \"v1\",\n  \"repositories\": [\n    {\n      \"repository_root\": %q,\n      \"main_worktree\": %q,\n      \"state_path\": %q,\n      \"updated_at\": \"2026-04-01T00:00:00Z\"\n    }\n  ]\n}\n",
+		canonicalRegistryPath(missingRoot), canonicalRegistryPath(filepath.Join(t.TempDir(), "missing-worktree")), canonicalRegistryPath(filepath.Join(t.TempDir(), "missing.db")))), 0o644); err != nil {
+		t.Fatalf("WriteFile(registryPath): %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runRegistryPrune([]string{"--registry", registryPath, "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runRegistryPrune: %v", err)
+	}
+	var result registryPruneResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.PrunedCount != 1 || result.RemainingCount != 0 {
+		t.Fatalf("expected one pruned entry, got %+v", result)
 	}
 }
 

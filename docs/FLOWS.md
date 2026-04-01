@@ -83,6 +83,13 @@ For unattended agent repos, set `[publish].Mode = 'auto'`. Otherwise
 `mq submit --wait` only proves `integrated`, not that remote `main` has been
 updated.
 
+If the repo uses `[publish].Mode = 'auto'` and the caller wants one blocking
+submit call through publish:
+
+```bash
+mq submit --wait --for landed --timeout 30m --json
+```
+
 This is the intended dogfooding direction for the repo-local worktree skill: agents do all edits and commits in topic worktrees, then land through `mq` instead of manually merging into `main`.
 
 ## Repo-Local Skill
@@ -204,4 +211,11 @@ For multi-repo experiments, one registered-repo daemon is still available:
 
 ```bash
 mainlined --all --json
+```
+
+If old deleted repos are still showing up in that optional global mode, clean
+the registry with:
+
+```bash
+mq registry prune --json
 ```

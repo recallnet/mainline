@@ -43,6 +43,8 @@ Optional fields:
 - `allow_newer_head`
 - `requested_by`
 - `priority`
+- `publish_request_id`
+- `publish_status`
 - `queue_position`
 - `estimated_completion_ms`
 - `estimate_basis`
@@ -57,6 +59,14 @@ Optional fields:
 
 For plain `mq submit`, `drain_attempted` and `drain_result` describe the
 opportunistic immediate drain attempt after queueing.
+
+For `mq submit --wait`:
+
+- default behavior waits for `integrated`
+- `mq submit --wait --for landed` waits for integrate plus correlated publish
+- in repos with `[publish].Mode = 'auto'`, `publish_request_id` and
+  `publish_status` may already be populated even when the final `outcome` is
+  still `integrated`
 
 ## `mq status --json`
 

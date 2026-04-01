@@ -844,7 +844,7 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "land submit status confidence run-once wait retry cancel publish") {
 		t.Fatalf("expected completion script to include wait and confidence, got %q", output)
 	}
-	if !strings.Contains(output, "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --check --check-only --queue-only --wait --timeout --poll-interval") {
+	if !strings.Contains(output, "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --check --check-only --queue-only --wait --for --timeout --poll-interval") {
 		t.Fatalf("expected submit completion flags, got %q", output)
 	}
 	if !strings.Contains(output, "retry cancel publish") {
@@ -855,6 +855,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	}
 	if !strings.Contains(output, "compgen -W \"init show audit root\"") {
 		t.Fatalf("expected repo root completion to be present, got %q", output)
+	}
+	if !strings.Contains(output, "compgen -W \"prune\"") {
+		t.Fatalf("expected registry prune completion to be present, got %q", output)
 	}
 	if strings.Contains(output, "run-once|publish|doctor") {
 		t.Fatalf("expected split completion cases for real command flags, got %q", output)
@@ -930,6 +933,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "__fish_seen_subcommand_from submit\" -l wait") {
 		t.Fatalf("expected fish completion to include submit wait flag, got %q", output)
 	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from submit\" -l for") {
+		t.Fatalf("expected fish completion to include submit for flag, got %q", output)
+	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from submit\" -l timeout") {
 		t.Fatalf("expected fish completion to include submit timeout flag, got %q", output)
 	}
@@ -938,6 +944,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit root") {
 		t.Fatalf("expected fish completion to include repo root subcommand, got %q", output)
+	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from registry; and not __fish_seen_subcommand_from prune") {
+		t.Fatalf("expected fish completion to include registry prune subcommand, got %q", output)
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from repo root\" -l adopt-root") {
 		t.Fatalf("expected fish completion to include repo root adopt flag, got %q", output)

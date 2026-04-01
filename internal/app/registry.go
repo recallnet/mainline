@@ -52,6 +52,10 @@ func loadRegisteredRepos() ([]registeredRepo, error) {
 }
 
 func loadRegisteredReposFromPath(path string) ([]registeredRepo, error) {
+	return loadRegisteredReposFromPathWithPrune(path, true)
+}
+
+func loadRegisteredReposFromPathWithPrune(path string, autoPrune bool) ([]registeredRepo, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -73,6 +77,15 @@ func loadRegisteredReposFromPath(path string) ([]registeredRepo, error) {
 	sort.Slice(registry.Repositories, func(i, j int) bool {
 		return registry.Repositories[i].RepositoryRoot < registry.Repositories[j].RepositoryRoot
 	})
+	if autoPrune {
+		pruned, remaining, pruneErr := pruneMissingRegisteredRepos(path, registry.Repositories)
+		if pruneErr != nil {
+			return nil, pruneErr
+		}
+		if len(pruned) > 0 {
+			return remaining, nil
+		}
+	}
 	return registry.Repositories, nil
 }
 
@@ -86,7 +99,7 @@ func registerRepo(mainWorktree string, repoRoot string, statePath string) error 
 	repoRoot = canonicalRegistryPath(repoRoot)
 	statePath = canonicalRegistryPath(statePath)
 
-	repositories, err := loadRegisteredReposFromPath(path)
+	repositories, err := loadRegisteredReposFromPathWithPrune(path, true)
 	if err != nil {
 		return err
 	}
@@ -177,4 +190,53 @@ func firstJSONObject(data []byte) ([]byte, error) {
 		}
 	}
 	return nil, errors.New("registry json object did not terminate cleanly")
+}
+
+func pruneRegisteredReposFromPath(path string) ([]string, []registeredRepo, error) {
+	repositories, err := loadRegisteredReposFromPathWithPrune(path, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	return pruneMissingRegisteredRepos(path, repositories)
+}
+
+func pruneMissingRegisteredRepos(path string, repositories []registeredRepo) ([]string, []registeredRepo, error) {
+	pruned := make([]string, 0)
+	remaining := make([]registeredRepo, 0, len(repositories))
+	for _, repo := range repositories {
+		if registeredRepoExists(repo) {
+			remaining = append(remaining, repo)
+			continue
+		}
+		pruned = append(pruned, repo.RepositoryRoot)
+	}
+	if len(pruned) == 0 {
+		return pruned, remaining, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, nil, err
+	}
+	payload, err := json.MarshalIndent(registryFile{
+		Version:      globalRegistryVersion,
+		Repositories: remaining,
+	}, "", "  ")
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := os.WriteFile(path, append(payload, '\n'), 0o644); err != nil {
+		return nil, nil, err
+	}
+	return pruned, remaining, nil
+}
+
+func registeredRepoExists(repo registeredRepo) bool {
+	return pathExists(repo.RepositoryRoot) || pathExists(repo.MainWorktree) || pathExists(repo.StatePath)
+}
+
+func pathExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
 }

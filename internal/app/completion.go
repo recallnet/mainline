@@ -62,12 +62,17 @@ _mainline_completions()
   _init_completion || return
 
   if [[ ${cword} -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo" -- "$cur") )
+    COMPREPLY=( $(compgen -W "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo registry" -- "$cur") )
     return
   fi
 
   if [[ ${words[1]} == "repo" && ${cword} -eq 2 ]]; then
     COMPREPLY=( $(compgen -W "init show audit root" -- "$cur") )
+    return
+  fi
+
+  if [[ ${words[1]} == "registry" && ${cword} -eq 2 ]]; then
+    COMPREPLY=( $(compgen -W "prune" -- "$cur") )
     return
   fi
 
@@ -86,7 +91,7 @@ _mainline_completions()
       COMPREPLY=( $(compgen -W "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --timeout --poll-interval" -- "$cur") )
       ;;
     submit)
-      COMPREPLY=( $(compgen -W "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --check --check-only --queue-only --wait --timeout --poll-interval" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --check --check-only --queue-only --wait --for --timeout --poll-interval" -- "$cur") )
       ;;
     status)
       COMPREPLY=( $(compgen -W "--repo --json --events" -- "$cur") )
@@ -138,6 +143,13 @@ _mainline_completions()
           ;;
       esac
       ;;
+    registry)
+      case "${words[2]}" in
+        prune)
+          COMPREPLY=( $(compgen -W "--json --registry" -- "$cur") )
+          ;;
+      esac
+      ;;
   esac
 }
 
@@ -169,6 +181,7 @@ _mainline() {
     'version:show build metadata'
     'config:configuration commands'
     'repo:repository commands'
+    'registry:global registry commands'
   )
 
   if (( CURRENT == 2 )); then
@@ -180,6 +193,12 @@ _mainline() {
     repo)
       if (( CURRENT == 3 )); then
         _describe 'repo command' 'init:initialize repo config' 'show:show repo config' 'audit:list refs not merged into protected main' 'root:inspect the canonical root checkout'
+        return
+      fi
+      ;;
+    registry)
+      if (( CURRENT == 3 )); then
+        _describe 'registry command' 'prune:remove stale global registry entries'
         return
       fi
       ;;
@@ -198,7 +217,7 @@ _mainline() {
       return
       ;;
     submit)
-      _arguments '--repo[repository path]:path:_files -/' '--branch[branch name]:branch:' '--sha[detached commit to submit]:sha:' '--worktree[source worktree]:path:_files -/' '--requested-by[submitter identity]:identity:' '--priority[submission priority]:priority:(high normal low)' '--allow-newer-head[allow the queued branch tip to advance before integration if it stays descended from the submitted sha]' '--json[json output]' '--check[validate submission without queueing]' '--check-only[validate submission without queueing]' '--queue-only[queue without opportunistically draining]' '--wait[wait for the submission to integrate]' '--timeout[maximum integration wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
+      _arguments '--repo[repository path]:path:_files -/' '--branch[branch name]:branch:' '--sha[detached commit to submit]:sha:' '--worktree[source worktree]:path:_files -/' '--requested-by[submitter identity]:identity:' '--priority[submission priority]:priority:(high normal low)' '--allow-newer-head[allow the queued branch tip to advance before integration if it stays descended from the submitted sha]' '--json[json output]' '--check[validate submission without queueing]' '--check-only[validate submission without queueing]' '--queue-only[queue without opportunistically draining]' '--wait[wait for the submission result]' '--for[wait target when used with --wait]:target:(integrated landed)' '--timeout[maximum integration wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
       return
       ;;
     status)
@@ -257,6 +276,14 @@ _mainline() {
           ;;
       esac
       ;;
+    registry)
+      case "$words[3]" in
+        prune)
+          _arguments '--json[json output]' '--registry[registry path override]:path:_files -/'
+          return
+          ;;
+      esac
+      ;;
   esac
 }
 
@@ -265,11 +292,13 @@ _mainline "$@"
 }
 
 func fishCompletionScript() string {
-	return `complete -c mainline -f -n "__fish_use_subcommand" -a "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo"
-complete -c mq -f -n "__fish_use_subcommand" -a "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo"
+	return `complete -c mainline -f -n "__fish_use_subcommand" -a "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo registry"
+complete -c mq -f -n "__fish_use_subcommand" -a "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo registry"
 
 complete -c mainline -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit root" -a "init show audit root"
 complete -c mq -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit root" -a "init show audit root"
+complete -c mainline -f -n "__fish_seen_subcommand_from registry; and not __fish_seen_subcommand_from prune" -a "prune"
+complete -c mq -f -n "__fish_seen_subcommand_from registry; and not __fish_seen_subcommand_from prune" -a "prune"
 complete -c mainline -f -n "__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from edit" -a "edit"
 complete -c mq -f -n "__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from edit" -a "edit"
 
@@ -352,6 +381,8 @@ complete -c mainline -n "__fish_seen_subcommand_from submit" -l queue-only
 complete -c mq -n "__fish_seen_subcommand_from submit" -l queue-only
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l wait
 complete -c mq -n "__fish_seen_subcommand_from submit" -l wait
+complete -c mainline -n "__fish_seen_subcommand_from submit" -l for
+complete -c mq -n "__fish_seen_subcommand_from submit" -l for
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l timeout
 complete -c mq -n "__fish_seen_subcommand_from submit" -l timeout
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l poll-interval
@@ -378,6 +409,10 @@ complete -c mainline -n "__fish_seen_subcommand_from repo init" -l main-worktree
 complete -c mq -n "__fish_seen_subcommand_from repo init" -l main-worktree
 complete -c mainline -n "__fish_seen_subcommand_from repo root" -l adopt-root
 complete -c mq -n "__fish_seen_subcommand_from repo root" -l adopt-root
+complete -c mainline -n "__fish_seen_subcommand_from registry prune" -l json
+complete -c mq -n "__fish_seen_subcommand_from registry prune" -l json
+complete -c mainline -n "__fish_seen_subcommand_from registry prune" -l registry
+complete -c mq -n "__fish_seen_subcommand_from registry prune" -l registry
 complete -c mainline -n "__fish_seen_subcommand_from config edit" -l editor
 complete -c mq -n "__fish_seen_subcommand_from config edit" -l editor
 complete -c mainline -n "__fish_seen_subcommand_from config edit" -l print-path

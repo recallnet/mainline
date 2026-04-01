@@ -24,6 +24,7 @@ instructions.
   - `mq submit --check-only --json`
   - `mq submit --wait --timeout 15m --json`
   - treat `submit --wait` as `integrated`, not remote-published
+  - use `mq submit --wait --for landed --timeout 30m --json` when one blocking submit call must include auto-publish too
   - capture `submission_id` from JSON when a wrapper needs durable tracking
   - use `mq submit --queue-only --json` only when the point is to let some other process, not submit, own the drain
   - `mq wait --submission <id> --for landed --json --timeout 30m` when the
@@ -48,6 +49,8 @@ instructions.
   draining.
 - Use `mq events --follow --json --lifecycle` from the protected worktree when a
   long-running agent or daemon needs push/integration notifications.
+- Use `mq registry prune --json` if stale temp repos or deleted repos are
+  polluting the optional global registry.
 - Treat `submission_id`, not branch name, as the stable factory handle for a
   queued change.
 - If an agent or daemon parses machine-readable output, bind only to the
