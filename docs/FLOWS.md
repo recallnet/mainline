@@ -16,6 +16,7 @@ Initialize once:
 mq repo init --repo . 
 git add mainline.toml && git commit -m "Initialize mainline repo policy"
 ./scripts/install-hooks.sh
+mq repo root --repo . --json
 mq repo audit --repo . --json
 mq config edit --repo .
 mq doctor --repo .
@@ -43,6 +44,7 @@ Keep one canonical protected-branch worktree and many topic worktrees:
 
 ```bash
 mq repo init --repo /path/to/main --main-worktree /path/to/main
+mq repo root --repo /path/to/main --json
 mq repo audit --repo /path/to/main --json
 mq config edit --repo /path/to/main
 mq doctor --repo /path/to/main
@@ -52,6 +54,9 @@ mq status --repo /path/to/main
 For ordinary repos, `/path/to/main` should be the repo root checkout that
 humans inspect and local wrappers build from. Keep that checkout clean and on
 the protected branch. Topic worktrees are where feature edits belong.
+If config drift ever points the canonical main worktree somewhere else, prefer
+`mq repo root --repo /path/to/main --adopt-root` once `/path/to/main` is clean
+and back on the protected branch.
 
 Submit from any linked worktree in the same repo:
 

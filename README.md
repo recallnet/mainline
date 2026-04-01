@@ -213,6 +213,9 @@ For normal repos, the root checkout should be the canonical protected `main`.
 Keep it clean and boring. Humans inspect that path, and the machine wrapper
 builds `mq` and `mainlined` from it. If it is dirty, the wrapper should refuse
 to build rather than silently drift.
+Use `mq repo root --repo . --json` to verify that the root checkout is still
+trustworthy. Use `mq repo root --repo . --adopt-root` only when the root
+checkout is already clean and on the protected branch.
 
 ## The Core Commands
 
@@ -220,6 +223,7 @@ Setup:
 
 ```bash
 mq repo init --repo /path/to/protected-main --main-worktree /path/to/protected-main
+mq repo root --repo /path/to/protected-main --json
 mq repo audit --repo /path/to/protected-main --json
 mq config edit --repo /path/to/protected-main
 mq doctor --repo /path/to/protected-main --fix --json

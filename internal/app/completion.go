@@ -67,7 +67,7 @@ _mainline_completions()
   fi
 
   if [[ ${words[1]} == "repo" && ${cword} -eq 2 ]]; then
-    COMPREPLY=( $(compgen -W "init show audit" -- "$cur") )
+    COMPREPLY=( $(compgen -W "init show audit root" -- "$cur") )
     return
   fi
 
@@ -133,6 +133,9 @@ _mainline_completions()
         audit)
           COMPREPLY=( $(compgen -W "--repo --json" -- "$cur") )
           ;;
+        root)
+          COMPREPLY=( $(compgen -W "--repo --json --adopt-root" -- "$cur") )
+          ;;
       esac
       ;;
   esac
@@ -176,7 +179,7 @@ _mainline() {
   case "$words[2]" in
     repo)
       if (( CURRENT == 3 )); then
-        _describe 'repo command' 'init:initialize repo config' 'show:show repo config' 'audit:list refs not merged into protected main'
+        _describe 'repo command' 'init:initialize repo config' 'show:show repo config' 'audit:list refs not merged into protected main' 'root:inspect the canonical root checkout'
         return
       fi
       ;;
@@ -248,6 +251,10 @@ _mainline() {
           _arguments '--repo[repository path]:path:_files -/' '--json[json output]'
           return
           ;;
+        root)
+          _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--adopt-root[set the repository root as the canonical main worktree when it is already clean and on the protected branch]'
+          return
+          ;;
       esac
       ;;
   esac
@@ -261,8 +268,8 @@ func fishCompletionScript() string {
 	return `complete -c mainline -f -n "__fish_use_subcommand" -a "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo"
 complete -c mq -f -n "__fish_use_subcommand" -a "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo"
 
-complete -c mainline -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit" -a "init show audit"
-complete -c mq -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit" -a "init show audit"
+complete -c mainline -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit root" -a "init show audit root"
+complete -c mq -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit root" -a "init show audit root"
 complete -c mainline -f -n "__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from edit" -a "edit"
 complete -c mq -f -n "__fish_seen_subcommand_from config; and not __fish_seen_subcommand_from edit" -a "edit"
 
@@ -271,8 +278,8 @@ complete -c mq -f -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 
 complete -c mainline -l repo
 complete -c mq -l repo
-complete -c mainline -n "__fish_seen_subcommand_from status doctor repo show repo audit" -l json
-complete -c mq -n "__fish_seen_subcommand_from status doctor repo show repo audit" -l json
+complete -c mainline -n "__fish_seen_subcommand_from status doctor repo show repo audit repo root" -l json
+complete -c mq -n "__fish_seen_subcommand_from status doctor repo show repo audit repo root" -l json
 complete -c mainline -n "__fish_seen_subcommand_from doctor" -l fix
 complete -c mq -n "__fish_seen_subcommand_from doctor" -l fix
 complete -c mainline -n "__fish_seen_subcommand_from logs events" -l json
@@ -367,6 +374,8 @@ complete -c mainline -n "__fish_seen_subcommand_from repo init" -l remote
 complete -c mq -n "__fish_seen_subcommand_from repo init" -l remote
 complete -c mainline -n "__fish_seen_subcommand_from repo init" -l main-worktree
 complete -c mq -n "__fish_seen_subcommand_from repo init" -l main-worktree
+complete -c mainline -n "__fish_seen_subcommand_from repo root" -l adopt-root
+complete -c mq -n "__fish_seen_subcommand_from repo root" -l adopt-root
 complete -c mainline -n "__fish_seen_subcommand_from config edit" -l editor
 complete -c mq -n "__fish_seen_subcommand_from config edit" -l editor
 complete -c mainline -n "__fish_seen_subcommand_from config edit" -l print-path

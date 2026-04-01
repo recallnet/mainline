@@ -61,6 +61,7 @@ git add mainline.toml
 git commit -m "Initialize mainline repo policy"
 ./scripts/install-hooks.sh
 ./scripts/install-launch-agent.sh
+mq repo root --repo . --json
 ```
 
 `mq repo init` automatically registers the repo for the machine-global daemon
@@ -71,6 +72,10 @@ build from it.
 The machine-level `mq` and `mainlined` wrappers refuse to build from a dirty
 root checkout so local binaries cannot silently drift away from the code humans
 are reading.
+Use `mq repo root --repo . --json` to confirm that the canonical root checkout
+is trustworthy. If the root checkout is already clean and on the protected
+branch but config drift points elsewhere, repair that with
+`mq repo root --repo . --adopt-root`.
 
 State compatibility:
 

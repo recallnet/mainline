@@ -100,6 +100,107 @@ func TestRepoShowRepairsMissingRepositoryRecord(t *testing.T) {
 	}
 }
 
+func TestRepoRootReportsTrustworthyCanonicalCheckout(t *testing.T) {
+	repoRoot, worktreePath := createTestRepo(t)
+	canonicalRoot := canonicalRegistryPath(repoRoot)
+	canonicalWorktree := canonicalRegistryPath(worktreePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "init mainline")
+
+	var rootOut bytes.Buffer
+	var rootErr bytes.Buffer
+	if err := runRepoRoot([]string{"--repo", repoRoot, "--json"}, &rootOut, &rootErr); err != nil {
+		t.Fatalf("runRepoRoot returned error: %v", err)
+	}
+
+	var result repoRootResult
+	if err := json.Unmarshal(rootOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.Trustworthy {
+		t.Fatalf("expected trustworthy root result, got %+v", result)
+	}
+	if result.RootCheckout.Path != canonicalRoot || !result.RootCheckout.IsCanonical || !result.RootCheckout.Clean {
+		t.Fatalf("unexpected root checkout info: %+v", result.RootCheckout)
+	}
+	if result.MainWorktree != canonicalWorktree {
+		t.Fatalf("expected canonical main worktree %q, got %+v", canonicalWorktree, result)
+	}
+}
+
+func TestRepoRootAdoptsCleanRootAsCanonicalMainWorktree(t *testing.T) {
+	repoRoot, worktreePath := createTestRepo(t)
+	canonicalWorktree := canonicalRegistryPath(worktreePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	nonCanonical := filepath.Join(repoRoot, "shadow-main")
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", nonCanonical}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "init mainline")
+
+	var rootOut bytes.Buffer
+	var rootErr bytes.Buffer
+	if err := runRepoRoot([]string{"--repo", repoRoot, "--adopt-root", "--json"}, &rootOut, &rootErr); err != nil {
+		t.Fatalf("runRepoRoot returned error: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	if cfg.Repo.MainWorktree != canonicalWorktree {
+		t.Fatalf("expected main worktree to be adopted to root %q, got %q", canonicalWorktree, cfg.Repo.MainWorktree)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	record, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	if record.MainWorktree != canonicalWorktree {
+		t.Fatalf("expected repo record main worktree %q, got %+v", canonicalWorktree, record)
+	}
+}
+
+func TestRepoRootRejectsAdoptWhenRootCheckoutIsDirty(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", filepath.Join(repoRoot, "shadow-main")}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "init mainline")
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "DIRTY.txt"), []byte("dirty"), 0o644); err != nil {
+		t.Fatalf("WriteFile(DIRTY.txt): %v", err)
+	}
+
+	var rootOut bytes.Buffer
+	var rootErr bytes.Buffer
+	err := runRepoRoot([]string{"--repo", repoRoot, "--adopt-root", "--json"}, &rootOut, &rootErr)
+	if err == nil {
+		t.Fatalf("expected adopt-root to fail when root checkout is dirty")
+	}
+	if !strings.Contains(err.Error(), "complete the recommended actions first") {
+		t.Fatalf("expected root adoption guidance, got %v", err)
+	}
+}
+
 func TestRepoInitSupportsJSONOutput(t *testing.T) {
 	repoRoot, worktreePath := createTestRepo(t)
 	registryPath := filepath.Join(t.TempDir(), "registry.json")
@@ -121,8 +222,8 @@ func TestRepoInitSupportsJSONOutput(t *testing.T) {
 	if result["protected_branch"] != "main" {
 		t.Fatalf("expected protected branch main, got %#v", result["protected_branch"])
 	}
-	if result["main_worktree"] != worktreePath {
-		t.Fatalf("expected main worktree %q, got %#v", worktreePath, result["main_worktree"])
+	if result["main_worktree"] != canonicalRegistryPath(worktreePath) {
+		t.Fatalf("expected main worktree %q, got %#v", canonicalRegistryPath(worktreePath), result["main_worktree"])
 	}
 	if result["recommended_commit_message"] != "Initialize mainline repo policy" {
 		t.Fatalf("expected recommended commit message, got %#v", result["recommended_commit_message"])

@@ -67,6 +67,20 @@ Expected:
 - branch is `main`
 - this root checkout is the one humans inspect and wrappers build from
 
+Before trusting that assumption on a machine you did not set up yourself:
+
+```bash
+mq repo root --repo ~/Projects/recallnet/mainline --json
+```
+
+If the root checkout is already clean and on `main` but config drift points the
+canonical main worktree somewhere else, repair the configuration instead of
+trying to outsmart the wrapper:
+
+```bash
+mq repo root --repo ~/Projects/recallnet/mainline --adopt-root
+```
+
 ### 2. Create a dedicated feature worktree
 
 Prefer the machine worktree layout convention:

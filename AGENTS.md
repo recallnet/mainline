@@ -34,6 +34,11 @@ instructions.
   - or one machine-global `mainlined --all --json`
 - If `mq repo show` or `mq doctor` warns that the root checkout is dirty or not
   canonical, fix that before trusting local binaries or local docs.
+- Use `mq repo root --repo /Users/devrel/Projects/recallnet/mainline --json`
+  as the explicit source of truth for whether the canonical root checkout is
+  trustworthy.
+- Use `mq repo root --repo /Users/devrel/Projects/recallnet/mainline --adopt-root`
+  only after the root checkout is already clean and on branch `main`.
 - Plain `mq submit` now opportunistically tries to drain after queueing. If the
   integration lock is already held, it exits cleanly and the active worker keeps
   draining.

@@ -30,6 +30,7 @@ var cliCommands = []string{
 	"config edit",
 	"repo audit",
 	"repo init",
+	"repo root",
 	"repo show",
 }
 
@@ -131,6 +132,7 @@ Turbo paths:
 
 Initialize once per repo:
   %s repo init --repo /path/to/protected-main --main-worktree /path/to/protected-main
+  %s repo root --repo /path/to/protected-main --json
   git add mainline.toml && git commit -m "Initialize mainline repo policy"
   ./scripts/install-hooks.sh
 
@@ -153,10 +155,11 @@ Commands:
   config edit   open mainline.toml in an editor
   repo init     initialize repo config and durable state
   repo audit    list local branches not yet merged into protected main
+  repo root     inspect or adopt the canonical root checkout
   repo show     inspect repo config and worktrees
 
 Use "%s <command> --help" for command-specific examples.
-`, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName)
+`, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName)
 }
 
 func isKnownCLICommand(command string) bool {

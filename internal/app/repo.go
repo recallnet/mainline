@@ -31,6 +31,19 @@ type repoShowResult struct {
 	Warnings       []string         `json:"warnings,omitempty"`
 }
 
+type repoRootResult struct {
+	RepositoryRoot     string           `json:"repository_root"`
+	ConfigPath         string           `json:"config_path"`
+	ProtectedBranch    string           `json:"protected_branch"`
+	MainWorktree       string           `json:"main_worktree"`
+	RootCheckout       rootCheckoutInfo `json:"root_checkout"`
+	Trustworthy        bool             `json:"trustworthy"`
+	CanAdoptRoot       bool             `json:"can_adopt_root"`
+	RecommendedActions []string         `json:"recommended_actions,omitempty"`
+	Warnings           []string         `json:"warnings,omitempty"`
+	FixesApplied       []string         `json:"fixes_applied,omitempty"`
+}
+
 type unmergedBranch struct {
 	Branch       string `json:"branch"`
 	HeadSHA      string `json:"head_sha"`
@@ -87,6 +100,8 @@ func handleCommand(command string, args []string, stdout io.Writer, stderr io.Wr
 		return runRepoAudit(args, stdout, stderr)
 	case "repo init":
 		return runRepoInit(args, stdout, stderr)
+	case "repo root":
+		return runRepoRoot(args, stdout, stderr)
 	case "repo show":
 		return runRepoShow(args, stdout, stderr)
 	case "doctor":
@@ -166,7 +181,7 @@ Flags:
 
 	cfg.Repo.ProtectedBranch = protectedBranch
 	cfg.Repo.RemoteName = remote
-	cfg.Repo.MainWorktree = filepath.Clean(mainWorktree)
+	cfg.Repo.MainWorktree = canonicalRegistryPath(mainWorktree)
 
 	if err := policy.SaveFile(repoRoot, cfg); err != nil {
 		return err
@@ -362,6 +377,168 @@ Flags:
 		fmt.Fprintf(stdout, "Warning: %s\n", warning)
 	}
 	return nil
+}
+
+func runRepoRoot(args []string, stdout io.Writer, stderr io.Writer) error {
+	fs := flag.NewFlagSet(currentCLIProgramName()+" repo root", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s repo root [flags]
+
+Inspect whether the repository root checkout is trustworthy as the canonical
+protected main, and optionally adopt it as the configured main worktree.
+
+Examples:
+  mq repo root --repo .
+  mq repo root --repo . --json
+  mq repo root --repo . --adopt-root --json
+
+Flags:
+`, currentCLIProgramName()))
+
+	var repoPath string
+	var asJSON bool
+	var adoptRoot bool
+
+	fs.StringVar(&repoPath, "repo", ".", "repository path")
+	fs.BoolVar(&asJSON, "json", false, "output json")
+	fs.BoolVar(&adoptRoot, "adopt-root", false, "set the repository root checkout as the canonical main worktree when it is already clean and on the protected branch")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoPath)
+	if err != nil {
+		return err
+	}
+	repoRoot := layout.RepositoryRoot
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		return err
+	}
+	if cfg.Repo.MainWorktree == "" {
+		cfg.Repo.MainWorktree = layout.WorktreeRoot
+	}
+
+	fixesApplied := []string{}
+	if adoptRoot {
+		if err := adoptRepositoryRoot(repoRoot, layout, &cfg); err != nil {
+			return err
+		}
+		fixesApplied = append(fixesApplied, fmt.Sprintf("set canonical main worktree to repository root %s", filepath.Clean(layout.RepositoryRoot)))
+	}
+
+	result := buildRepoRootResult(repoRoot, cfg, layout)
+	result.FixesApplied = fixesApplied
+
+	if asJSON {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(result)
+	}
+
+	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
+	fmt.Fprintf(stdout, "Config path: %s\n", result.ConfigPath)
+	fmt.Fprintf(stdout, "Protected branch: %s\n", result.ProtectedBranch)
+	fmt.Fprintf(stdout, "Main worktree: %s\n", result.MainWorktree)
+	fmt.Fprintf(stdout, "Root checkout: %s\n", result.RootCheckout.Path)
+	fmt.Fprintf(stdout, "Root checkout canonical: %s\n", yesNo(result.RootCheckout.IsCanonical))
+	if result.RootCheckout.Branch != "" {
+		fmt.Fprintf(stdout, "Root checkout branch: %s\n", result.RootCheckout.Branch)
+	}
+	fmt.Fprintf(stdout, "Root checkout clean: %s\n", yesNo(result.RootCheckout.Clean))
+	fmt.Fprintf(stdout, "Root trustworthy: %s\n", yesNo(result.Trustworthy))
+	fmt.Fprintf(stdout, "Can adopt root: %s\n", yesNo(result.CanAdoptRoot))
+	for _, warning := range result.Warnings {
+		fmt.Fprintf(stdout, "Warning: %s\n", warning)
+	}
+	for _, action := range result.RecommendedActions {
+		fmt.Fprintf(stdout, "Next: %s\n", action)
+	}
+	for _, applied := range result.FixesApplied {
+		fmt.Fprintf(stdout, "Fixed: %s\n", applied)
+	}
+	return nil
+}
+
+func adoptRepositoryRoot(repoRoot string, layout git.RepositoryLayout, cfg *policy.File) error {
+	result := buildRepoRootResult(repoRoot, *cfg, layout)
+	if !result.CanAdoptRoot {
+		return fmt.Errorf("cannot adopt repository root as canonical main worktree yet; run `mq repo root --repo %s --json` and complete the recommended actions first", repoRoot)
+	}
+
+	cfg.Repo.MainWorktree = canonicalRegistryPath(layout.RepositoryRoot)
+	if err := policy.SaveFile(repoRoot, *cfg); err != nil {
+		return err
+	}
+
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	if store.Exists() {
+		ctx := context.Background()
+		if err := store.EnsureSchema(ctx); err != nil {
+			return err
+		}
+		if _, _, err := ensureRepositoryRecord(ctx, store, repoRoot, *cfg); err != nil {
+			return err
+		}
+		if _, err := store.UpsertRepository(ctx, state.RepositoryRecord{
+			CanonicalPath:   repoRoot,
+			ProtectedBranch: cfg.Repo.ProtectedBranch,
+			RemoteName:      cfg.Repo.RemoteName,
+			MainWorktree:    cfg.Repo.MainWorktree,
+			PolicyVersion:   "v1",
+		}); err != nil {
+			return err
+		}
+	}
+	return registerRepo(cfg.Repo.MainWorktree, repoRoot, state.DefaultPath(layout.GitDir))
+}
+
+func buildRepoRootResult(repoRoot string, cfg policy.File, layout git.RepositoryLayout) repoRootResult {
+	rootInfo, warnings := inspectCanonicalRootCheckout(cfg, layout)
+	recommended := recommendedRootActions(repoRoot, cfg, rootInfo)
+	canAdopt := canAdoptRootCheckout(cfg, rootInfo)
+	return repoRootResult{
+		RepositoryRoot:     repoRoot,
+		ConfigPath:         policy.ConfigPath(repoRoot),
+		ProtectedBranch:    cfg.Repo.ProtectedBranch,
+		MainWorktree:       cfg.Repo.MainWorktree,
+		RootCheckout:       rootInfo,
+		Trustworthy:        rootInfo.Exists && rootInfo.IsCanonical && rootInfo.Clean && rootInfo.Branch == cfg.Repo.ProtectedBranch,
+		CanAdoptRoot:       canAdopt,
+		RecommendedActions: recommended,
+		Warnings:           warnings,
+	}
+}
+
+func canAdoptRootCheckout(cfg policy.File, rootInfo rootCheckoutInfo) bool {
+	return rootInfo.Exists && !rootInfo.IsCanonical && rootInfo.Clean && rootInfo.Branch == cfg.Repo.ProtectedBranch
+}
+
+func recommendedRootActions(repoRoot string, cfg policy.File, rootInfo rootCheckoutInfo) []string {
+	var actions []string
+	if rootInfo.Path == "" {
+		return actions
+	}
+	if !rootInfo.Exists {
+		actions = append(actions, fmt.Sprintf("restore the repository root checkout at %s before trusting local docs or wrappers", rootInfo.Path))
+		return actions
+	}
+	if rootInfo.Branch != "" && rootInfo.Branch != cfg.Repo.ProtectedBranch {
+		actions = append(actions, fmt.Sprintf("checkout %s in %s", cfg.Repo.ProtectedBranch, rootInfo.Path))
+	}
+	if !rootInfo.Clean {
+		actions = append(actions, fmt.Sprintf("commit, stash, or discard local changes in %s so the root checkout matches shipped main", rootInfo.Path))
+	}
+	if canAdoptRootCheckout(cfg, rootInfo) {
+		actions = append(actions, fmt.Sprintf("run `mq repo root --repo %s --adopt-root` to make the repository root the canonical protected main", repoRoot))
+	}
+	if rootInfo.IsCanonical && rootInfo.Clean && rootInfo.Branch == cfg.Repo.ProtectedBranch {
+		actions = append(actions, "no action needed; the repository root checkout is trustworthy")
+	}
+	return actions
 }
 
 func runRepoAudit(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -724,15 +901,16 @@ func inspectCanonicalRootCheckout(cfg policy.File, layout git.RepositoryLayout) 
 		return rootCheckoutInfo{}, nil
 	}
 
-	rootPath := filepath.Clean(layout.RepositoryRoot)
+	rootPath := canonicalRegistryPath(layout.RepositoryRoot)
+	mainWorktreePath := canonicalRegistryPath(cfg.Repo.MainWorktree)
 	info := rootCheckoutInfo{
 		Path:        rootPath,
 		Exists:      true,
-		IsCanonical: filepath.Clean(cfg.Repo.MainWorktree) == rootPath,
+		IsCanonical: mainWorktreePath == rootPath,
 	}
 	var warnings []string
 	if !info.IsCanonical {
-		warnings = append(warnings, fmt.Sprintf("configured main worktree %s differs from repository root %s; keep the root checkout as the canonical protected main", filepath.Clean(cfg.Repo.MainWorktree), rootPath))
+		warnings = append(warnings, fmt.Sprintf("configured main worktree %s differs from repository root %s; keep the root checkout as the canonical protected main", mainWorktreePath, rootPath))
 	}
 
 	rootEngine := git.NewEngine(rootPath)

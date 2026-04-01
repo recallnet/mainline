@@ -722,8 +722,8 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "publish logs watch events doctor completion version config") {
 		t.Fatalf("expected completion script to include config surface, got %q", output)
 	}
-	if !strings.Contains(output, "compgen -W \"init show audit\"") {
-		t.Fatalf("expected repo audit completion to be present, got %q", output)
+	if !strings.Contains(output, "compgen -W \"init show audit root\"") {
+		t.Fatalf("expected repo root completion to be present, got %q", output)
 	}
 	if strings.Contains(output, "run-once|publish|doctor") {
 		t.Fatalf("expected split completion cases for real command flags, got %q", output)
@@ -733,6 +733,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	}
 	if !strings.Contains(output, "doctor)\n      COMPREPLY=( $(compgen -W \"--repo --json --fix\" -- \"$cur\") )") {
 		t.Fatalf("expected doctor completion to include --fix, got %q", output)
+	}
+	if !strings.Contains(output, "root)\n          COMPREPLY=( $(compgen -W \"--repo --json --adopt-root\" -- \"$cur\") )") {
+		t.Fatalf("expected repo root completion to include --adopt-root, got %q", output)
 	}
 	if !strings.Contains(output, "wait)\n      COMPREPLY=( $(compgen -W \"--repo --submission --for --json --timeout --poll-interval\" -- \"$cur\") )") {
 		t.Fatalf("expected wait completion to include submission-id flags, got %q", output)
@@ -802,8 +805,11 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "__fish_seen_subcommand_from config edit\" -l editor") {
 		t.Fatalf("expected fish completion to include config edit flags, got %q", output)
 	}
-	if !strings.Contains(output, "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit") {
-		t.Fatalf("expected fish completion to include repo audit subcommand, got %q", output)
+	if !strings.Contains(output, "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit root") {
+		t.Fatalf("expected fish completion to include repo root subcommand, got %q", output)
+	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from repo root\" -l adopt-root") {
+		t.Fatalf("expected fish completion to include repo root adopt flag, got %q", output)
 	}
 }
 
