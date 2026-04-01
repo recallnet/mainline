@@ -18,7 +18,7 @@ Use a topic worktree, then land it:
 git worktree add ../feature-login -b feature/login main
 cd ../feature-login
 # edit, test, commit
-mq submit --repo .
+mq submit
 mq status --repo . --json
 mq run-once --repo /path/to/protected-worktree
 mq publish --repo /path/to/protected-worktree
@@ -41,7 +41,8 @@ mq status --repo /path/to/main
 Submit from any linked worktree in the same repo:
 
 ```bash
-mq submit --repo /path/to/topic-worktree
+cd /path/to/topic-worktree
+mq submit
 ```
 
 ## Agent-Heavy Repo
@@ -50,7 +51,8 @@ Run the daemon in the protected worktree and let agents only submit:
 
 ```bash
 mainlined --repo /path/to/main --interval 2s --json
-mq submit --repo /path/to/agent-worktree
+cd /path/to/agent-worktree
+mq submit
 mq status --repo /path/to/main --json
 mq confidence --repo /path/to/main
 mq watch --repo /path/to/main
@@ -80,7 +82,8 @@ mq events --repo /path/to/main --follow
 For agent wrappers that only need to know whether their branch landed cleanly, prefer:
 
 ```bash
-mq submit --repo /path/to/topic-worktree --wait --timeout 10m --json
+cd /path/to/topic-worktree
+mq submit --wait --timeout 10m --json
 ```
 
 Exit codes:
@@ -92,7 +95,8 @@ Exit codes:
 For cheap preflight before expensive local gates, use:
 
 ```bash
-mq submit --repo /path/to/topic-worktree --check-only --json
+cd /path/to/topic-worktree
+mq submit --check-only --json
 ```
 
 That dry run verifies the branch is clean, includes the current protected tip, and is not already active in the queue at the same branch SHA.

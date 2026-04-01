@@ -63,7 +63,8 @@ You do your normal work in a feature worktree. You commit there. Then you hand t
 
 ```bash
 mq repo init --repo .
-mq land --repo /path/to/topic-worktree
+cd /path/to/topic-worktree
+mq land
 mq watch --repo /path/to/main
 ```
 
@@ -155,12 +156,13 @@ mq repo show --repo /path/to/main --json
 Queue work:
 
 ```bash
-mq submit --repo /path/to/topic-worktree --check --json
-mq submit --repo /path/to/topic-worktree --check-only --json
-mq submit --repo /path/to/topic-worktree --json
-mq submit --repo /path/to/topic-worktree --wait --timeout 10m
-mq land --repo /path/to/topic-worktree --json --timeout 30m
-mq submit --repo /path/to/topic-worktree
+cd /path/to/topic-worktree
+mq submit --check --json
+mq submit --check-only --json
+mq submit --json
+mq submit --wait --timeout 10m
+mq land --json --timeout 30m
+mq submit
 mq run-once --repo /path/to/main
 mq publish --repo /path/to/main
 ```

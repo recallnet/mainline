@@ -102,7 +102,7 @@ branch unless there is an explicit reason to rewrite history.
 When the branch is ready to land, submit it from the feature worktree:
 
 ```bash
-mq submit --repo .
+mq submit
 ```
 
 If needed, be explicit:

@@ -67,6 +67,56 @@ func TestSubmitQueuesCleanFeatureBranch(t *testing.T) {
 	}
 }
 
+func TestSubmitAutoDetectsRepoFromCurrentWorktree(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-autodetect")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/autodetect", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWD); chdirErr != nil {
+			t.Fatalf("restore cwd: %v", chdirErr)
+		}
+	}()
+	if err := os.Chdir(featurePath); err != nil {
+		t.Fatalf("Chdir(featurePath): %v", err)
+	}
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit(nil, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(featurePath)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if len(submissions) != 1 || submissions[0].BranchName != "feature/autodetect" {
+		t.Fatalf("expected autodetected submission for feature/autodetect, got %+v", submissions)
+	}
+}
+
 func TestSubmitRejectsProtectedBranch(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 
