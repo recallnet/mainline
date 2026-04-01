@@ -2,13 +2,18 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
+	"github.com/recallnet/mainline/internal/state"
 )
 
 func TestRepoInitAndShow(t *testing.T) {
@@ -283,6 +288,182 @@ func TestDoctorAcceptsSymlinkedPolicyPrefix(t *testing.T) {
 	output := doctorOut.String()
 	if !strings.Contains(output, "Warnings: 0") {
 		t.Fatalf("expected no warnings, got %q", output)
+	}
+}
+
+func TestDoctorFixClearsStaleLockAndRecoversRunningSubmission(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-running")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/running", featurePath)
+	writeFileAndCommit(t, featurePath, "running.txt", "running\n", "feature running")
+	submitBranch(t, featurePath)
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if _, err := store.UpdateIntegrationSubmissionStatus(context.Background(), submissions[0].ID, "running", ""); err != nil {
+		t.Fatalf("UpdateIntegrationSubmissionStatus: %v", err)
+	}
+
+	lockDir := filepath.Join(layout.GitDir, "mainline", "locks")
+	if err := os.MkdirAll(lockDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	payload, err := json.Marshal(state.LeaseMetadata{
+		Domain:    state.IntegrationLock,
+		RepoRoot:  layout.RepositoryRoot,
+		Owner:     "crashed-worker",
+		CreatedAt: time.Now().UTC().Add(-2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(lockDir, state.IntegrationLock+".lock.json"), payload, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	var result doctorResult
+	if err := json.Unmarshal(doctorOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if len(result.StaleLocks) != 0 {
+		t.Fatalf("expected stale locks cleared, got %+v", result.StaleLocks)
+	}
+	updated, err := store.GetIntegrationSubmission(context.Background(), submissions[0].ID)
+	if err != nil {
+		t.Fatalf("GetIntegrationSubmission: %v", err)
+	}
+	if updated.Status != "queued" {
+		t.Fatalf("expected recovered submission to be queued, got %+v", updated)
+	}
+}
+
+func TestDoctorFixFailsQueuedSubmissionWithMissingBranch(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-missing")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/missing", featurePath)
+	writeFileAndCommit(t, featurePath, "missing.txt", "missing\n", "feature missing")
+	submitBranch(t, featurePath)
+	runTestCommand(t, repoRoot, "git", "worktree", "remove", "--force", featurePath)
+	runTestCommand(t, repoRoot, "git", "branch", "-D", "feature/missing")
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if submissions[0].Status != "failed" || !strings.Contains(submissions[0].LastError, "no longer exists") {
+		t.Fatalf("expected missing branch submission to fail, got %+v", submissions[0])
+	}
+}
+
+func TestDoctorFixAbortsProtectedMergeState(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	topicPath := filepath.Join(t.TempDir(), "topic")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "topic", topicPath)
+	replaceFileAndCommit(t, topicPath, "README.md", "# topic\n", "topic change")
+	replaceFileAndCommit(t, repoRoot, "README.md", "# main\n", "main change")
+	mergeCmd := exec.Command("git", "merge", "topic")
+	mergeCmd.Dir = repoRoot
+	if err := mergeCmd.Run(); err == nil {
+		t.Fatalf("expected merge conflict to leave protected worktree dirty")
+	}
+
+	engine := git.NewEngine(repoRoot)
+	op, err := engine.InProgressOperation(repoRoot)
+	if err != nil {
+		t.Fatalf("InProgressOperation: %v", err)
+	}
+	if op != "merge" {
+		t.Fatalf("expected merge state, got %q", op)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix"}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	op, err = engine.InProgressOperation(repoRoot)
+	if err != nil {
+		t.Fatalf("InProgressOperation after doctor: %v", err)
+	}
+	if op != "" {
+		t.Fatalf("expected merge state cleared, got %q", op)
+	}
+	clean, err := engine.WorktreeIsClean(repoRoot)
+	if err != nil {
+		t.Fatalf("WorktreeIsClean: %v", err)
+	}
+	if !clean {
+		t.Fatalf("expected protected worktree clean after abort")
+	}
+}
+
+func TestDoctorFixQueuesPublishForProtectedTipAheadOfUpstream(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	writeFileAndCommit(t, repoRoot, "ahead.txt", "ahead\n", "main ahead")
+	head := strings.TrimSpace(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) != 1 || requests[0].Status != "queued" || requests[0].TargetSHA != head {
+		t.Fatalf("expected queued publish for protected tip %q, got %+v", head, requests)
 	}
 }
 

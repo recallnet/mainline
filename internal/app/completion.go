@@ -99,7 +99,7 @@ _mainline_completions()
       COMPREPLY=( $(compgen -W "--repo" -- "$cur") )
       ;;
     doctor)
-      COMPREPLY=( $(compgen -W "--repo --json" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --json --fix" -- "$cur") )
       ;;
     config)
       case "${words[2]}" in
@@ -209,7 +209,7 @@ _mainline() {
       return
       ;;
     doctor)
-      _arguments '--repo[repository path]:path:_files -/' '--json[json output]'
+      _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--fix[apply safe automatic fixes]'
       return
       ;;
     config)
@@ -239,6 +239,8 @@ complete -c mainline -l repo
 complete -c mq -l repo
 complete -c mainline -n "__fish_seen_subcommand_from status doctor repo show" -l json
 complete -c mq -n "__fish_seen_subcommand_from status doctor repo show" -l json
+complete -c mainline -n "__fish_seen_subcommand_from doctor" -l fix
+complete -c mq -n "__fish_seen_subcommand_from doctor" -l fix
 complete -c mainline -n "__fish_seen_subcommand_from logs events" -l json
 complete -c mq -n "__fish_seen_subcommand_from logs events" -l json
 complete -c mainline -n "__fish_seen_subcommand_from logs events" -l lifecycle

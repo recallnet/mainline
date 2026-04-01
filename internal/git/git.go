@@ -321,6 +321,55 @@ func (e Engine) WorktreeHeadSHA(path string) (string, error) {
 	return head.Hash().String(), nil
 }
 
+// InProgressOperation returns the active in-progress Git operation for a worktree, if any.
+func (e Engine) InProgressOperation(path string) (string, error) {
+	checks := []struct {
+		label string
+		arg   string
+	}{
+		{label: "rebase", arg: "rebase-merge"},
+		{label: "rebase", arg: "rebase-apply"},
+		{label: "merge", arg: "MERGE_HEAD"},
+		{label: "cherry-pick", arg: "CHERRY_PICK_HEAD"},
+	}
+	for _, check := range checks {
+		targetPath, err := e.gitPath(path, check.arg)
+		if err != nil {
+			return "", err
+		}
+		if _, err := os.Stat(targetPath); err == nil {
+			return check.label, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+	}
+	return "", nil
+}
+
+// AbortInProgressOperation aborts the current rebase/merge/cherry-pick on a worktree.
+func (e Engine) AbortInProgressOperation(path string) (string, error) {
+	operation, err := e.InProgressOperation(path)
+	if err != nil {
+		return "", err
+	}
+	switch operation {
+	case "":
+		return "", nil
+	case "rebase":
+		_, err = e.runGit(path, "rebase", "--abort")
+	case "merge":
+		_, err = e.runGit(path, "merge", "--abort")
+	case "cherry-pick":
+		_, err = e.runGit(path, "cherry-pick", "--abort")
+	default:
+		return "", fmt.Errorf("unknown git operation %q", operation)
+	}
+	if err != nil {
+		return operation, err
+	}
+	return operation, nil
+}
+
 // ResolveWorktree finds a known worktree by path.
 func (e Engine) ResolveWorktree(path string) (Worktree, error) {
 	worktrees, err := e.ListWorktrees()
@@ -658,6 +707,18 @@ func (e Engine) runGit(worktreePath string, args ...string) (string, error) {
 		return string(output), fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
 	}
 	return string(output), nil
+}
+
+func (e Engine) gitPath(worktreePath string, pathspec string) (string, error) {
+	output, err := e.runGit(worktreePath, "rev-parse", "--git-path", pathspec)
+	if err != nil {
+		return "", err
+	}
+	resolved := strings.TrimSpace(output)
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(filepath.Clean(worktreePath), resolved)
+	}
+	return filepath.Clean(resolved), nil
 }
 
 func openRepository(path string) (*gogit.Repository, error) {

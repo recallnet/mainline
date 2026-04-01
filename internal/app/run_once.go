@@ -93,7 +93,7 @@ func runOneCycle(repoPath string) (string, error) {
 		return "", err
 	}
 
-	if err := recoverInterruptedIntegrationSubmissions(ctx, store, repoRecord.ID); err != nil {
+	if _, err := recoverInterruptedIntegrationSubmissions(ctx, store, repoRecord.ID); err != nil {
 		lease.Release()
 		return "", err
 	}
@@ -138,7 +138,7 @@ func runOneCycle(repoPath string) (string, error) {
 	}
 	defer publishLease.Release()
 
-	if err := recoverInterruptedPublishRequests(ctx, store, repoRecord.ID); err != nil {
+	if _, err := recoverInterruptedPublishRequests(ctx, store, repoRecord.ID); err != nil {
 		return "", err
 	}
 
@@ -814,14 +814,15 @@ func lowerFirst(s string) string {
 	return strings.ToLower(s[:1]) + s[1:]
 }
 
-func recoverInterruptedIntegrationSubmissions(ctx context.Context, store state.Store, repoID int64) error {
+func recoverInterruptedIntegrationSubmissions(ctx context.Context, store state.Store, repoID int64) (int, error) {
 	running, err := store.ListIntegrationSubmissionsByStatus(ctx, repoID, "running")
 	if err != nil {
-		return err
+		return 0, err
 	}
+	recovered := 0
 	for _, submission := range running {
 		if _, err := store.UpdateIntegrationSubmissionStatus(ctx, submission.ID, "queued", ""); err != nil {
-			return err
+			return recovered, err
 		}
 		if err := appendSubmissionEvent(ctx, store, repoID, submission.ID, "integration.recovered", map[string]string{
 			"branch":     submissionDisplayRef(submission),
@@ -829,20 +830,22 @@ func recoverInterruptedIntegrationSubmissions(ctx context.Context, store state.S
 			"ref_kind":   submission.RefKind,
 			"reason":     "worker_restarted_without_active_lock",
 		}); err != nil {
-			return err
+			return recovered, err
 		}
+		recovered++
 	}
-	return nil
+	return recovered, nil
 }
 
-func recoverInterruptedPublishRequests(ctx context.Context, store state.Store, repoID int64) error {
+func recoverInterruptedPublishRequests(ctx context.Context, store state.Store, repoID int64) (int, error) {
 	running, err := store.ListPublishRequestsByStatus(ctx, repoID, "running")
 	if err != nil {
-		return err
+		return 0, err
 	}
+	recovered := 0
 	for _, request := range running {
 		if _, err := store.UpdatePublishRequestStatus(ctx, request.ID, "queued", request.SupersededBy); err != nil {
-			return err
+			return recovered, err
 		}
 		if err := appendStateEvent(ctx, store, state.EventRecord{
 			RepoID:    repoID,
@@ -854,10 +857,11 @@ func recoverInterruptedPublishRequests(ctx context.Context, store state.Store, r
 				"reason":     "worker_restarted_without_active_lock",
 			}),
 		}); err != nil {
-			return err
+			return recovered, err
 		}
+		recovered++
 	}
-	return nil
+	return recovered, nil
 }
 
 func mustJSON(payload any) json.RawMessage {

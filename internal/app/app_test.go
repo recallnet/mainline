@@ -299,6 +299,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if strings.Contains(output, "run-once|publish)\n      COMPREPLY=( $(compgen -W \"--repo --json\" -- \"$cur\") )") {
 		t.Fatalf("expected bash completion to avoid generic unsupported json flag suggestions, got %q", output)
 	}
+	if !strings.Contains(output, "doctor)\n      COMPREPLY=( $(compgen -W \"--repo --json --fix\" -- \"$cur\") )") {
+		t.Fatalf("expected doctor completion to include --fix, got %q", output)
+	}
 
 	stdout.Reset()
 	stderr.Reset()
@@ -318,6 +321,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from confidence\" -l cert-report") {
 		t.Fatalf("expected fish completion to include confidence flags, got %q", output)
+	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from doctor\" -l fix") {
+		t.Fatalf("expected fish completion to include doctor --fix, got %q", output)
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from land\" -l timeout") {
 		t.Fatalf("expected fish completion to include land flags, got %q", output)

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -279,9 +280,11 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	var repoPath string
 	var asJSON bool
+	var fix bool
 
 	fs.StringVar(&repoPath, "repo", ".", "repository path")
 	fs.BoolVar(&asJSON, "json", false, "output json")
+	fs.BoolVar(&fix, "fix", false, "apply safe automatic fixes")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -302,7 +305,8 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 		cfg.Repo.MainWorktree = layout.WorktreeRoot
 	}
 
-	report, err := git.NewEngine(layout.WorktreeRoot).InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
+	engine := git.NewEngine(layout.WorktreeRoot)
+	report, err := engine.InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
 	if err != nil {
 		return err
 	}
@@ -335,8 +339,12 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	store := state.NewStore(state.DefaultPath(layout.GitDir))
 	ctx := context.Background()
+	var repoRecord state.RepositoryRecord
+	var hasRepoRecord bool
 	if store.Exists() {
 		if record, err := store.GetRepositoryByPath(ctx, repoRoot); err == nil {
+			repoRecord = record
+			hasRepoRecord = true
 			count, err := store.CountUnfinishedItems(ctx, record.ID)
 			if err != nil {
 				return err
@@ -346,45 +354,226 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	lockManager := state.NewLockManager(repoRoot, layout.GitDir)
+	result := doctorResult{HealthReport: report}
+	if fix {
+		applied, skipped, err := runDoctorFix(ctx, engine, cfg, lockManager, store, repoRecord, hasRepoRecord)
+		if err != nil {
+			return err
+		}
+		result.FixesApplied = applied
+		result.FixesSkipped = skipped
+		report, err = engine.InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
+		if err != nil {
+			return err
+		}
+		result.HealthReport = report
+		if store.Exists() && hasRepoRecord {
+			count, err := store.CountUnfinishedItems(ctx, repoRecord.ID)
+			if err != nil {
+				return err
+			}
+			result.UnfinishedQueueItems = make([]string, count)
+		}
+	}
 	staleLocks, err := lockManager.InspectStale(time.Hour)
 	if err != nil {
 		return err
 	}
+	result.StaleLocks = result.StaleLocks[:0]
 	for _, stale := range staleLocks {
-		report.StaleLocks = append(report.StaleLocks, stale.Domain+":"+stale.Owner)
+		result.StaleLocks = append(result.StaleLocks, stale.Domain+":"+stale.Owner)
 	}
 
 	if asJSON {
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
-		return encoder.Encode(report)
+		return encoder.Encode(result)
 	}
 
-	fmt.Fprintf(stdout, "Repository root: %s\n", report.RepositoryRoot)
-	fmt.Fprintf(stdout, "Protected branch: %s\n", report.ProtectedBranch)
-	fmt.Fprintf(stdout, "Main worktree: %s\n", report.MainWorktreePath)
-	fmt.Fprintf(stdout, "Git repository: %s\n", yesNo(report.IsGitRepository))
-	fmt.Fprintf(stdout, "Protected branch exists: %s\n", yesNo(report.ProtectedBranchExists))
-	fmt.Fprintf(stdout, "Main worktree exists: %s\n", yesNo(report.MainWorktreeExists))
-	fmt.Fprintf(stdout, "Protected branch clean: %s\n", yesNo(report.ProtectedBranchClean))
-	if report.HasUpstream {
-		fmt.Fprintf(stdout, "Upstream: %s\n", report.UpstreamRef)
-		fmt.Fprintf(stdout, "Behind upstream: %s\n", yesNo(report.IsBehindUpstream))
-		fmt.Fprintf(stdout, "Ahead of upstream: %s\n", yesNo(report.IsAheadOfUpstream))
-		fmt.Fprintf(stdout, "Diverged from upstream: %s\n", yesNo(report.HasDivergedUpstream))
+	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
+	fmt.Fprintf(stdout, "Protected branch: %s\n", result.ProtectedBranch)
+	fmt.Fprintf(stdout, "Main worktree: %s\n", result.MainWorktreePath)
+	fmt.Fprintf(stdout, "Git repository: %s\n", yesNo(result.IsGitRepository))
+	fmt.Fprintf(stdout, "Protected branch exists: %s\n", yesNo(result.ProtectedBranchExists))
+	fmt.Fprintf(stdout, "Main worktree exists: %s\n", yesNo(result.MainWorktreeExists))
+	fmt.Fprintf(stdout, "Protected branch clean: %s\n", yesNo(result.ProtectedBranchClean))
+	if result.HasUpstream {
+		fmt.Fprintf(stdout, "Upstream: %s\n", result.UpstreamRef)
+		fmt.Fprintf(stdout, "Behind upstream: %s\n", yesNo(result.IsBehindUpstream))
+		fmt.Fprintf(stdout, "Ahead of upstream: %s\n", yesNo(result.IsAheadOfUpstream))
+		fmt.Fprintf(stdout, "Diverged from upstream: %s\n", yesNo(result.HasDivergedUpstream))
 	} else {
 		fmt.Fprintln(stdout, "Upstream: none")
 	}
-	fmt.Fprintf(stdout, "Stale locks: %d\n", len(report.StaleLocks))
-	for _, stale := range report.StaleLocks {
+	fmt.Fprintf(stdout, "Stale locks: %d\n", len(result.StaleLocks))
+	for _, stale := range result.StaleLocks {
 		fmt.Fprintf(stdout, "Stale lock: %s\n", stale)
 	}
-	fmt.Fprintf(stdout, "Unfinished queue items: %d\n", len(report.UnfinishedQueueItems))
-	fmt.Fprintf(stdout, "Warnings: %d\n", len(report.Warnings))
-	for _, warning := range report.Warnings {
+	fmt.Fprintf(stdout, "Unfinished queue items: %d\n", len(result.UnfinishedQueueItems))
+	fmt.Fprintf(stdout, "Warnings: %d\n", len(result.Warnings))
+	for _, warning := range result.Warnings {
 		fmt.Fprintf(stdout, "Warning: %s\n", warning)
 	}
+	if fix {
+		fmt.Fprintf(stdout, "Fixes applied: %d\n", len(result.FixesApplied))
+		for _, applied := range result.FixesApplied {
+			fmt.Fprintf(stdout, "Fixed: %s\n", applied)
+		}
+		fmt.Fprintf(stdout, "Fixes skipped: %d\n", len(result.FixesSkipped))
+		for _, skipped := range result.FixesSkipped {
+			fmt.Fprintf(stdout, "Skipped: %s\n", skipped)
+		}
+	}
 	return nil
+}
+
+type doctorResult struct {
+	git.HealthReport
+	FixesApplied []string `json:"fixes_applied,omitempty"`
+	FixesSkipped []string `json:"fixes_skipped,omitempty"`
+}
+
+func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockManager state.LockManager, store state.Store, repoRecord state.RepositoryRecord, hasRepoRecord bool) ([]string, []string, error) {
+	var applied []string
+	var skipped []string
+
+	staleLocks, err := lockManager.InspectStale(time.Hour)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, stale := range staleLocks {
+		lease, err := lockManager.Acquire(stale.Domain, "doctor-fix")
+		if err == nil {
+			if releaseErr := lease.Release(); releaseErr != nil {
+				return nil, nil, releaseErr
+			}
+			applied = append(applied, fmt.Sprintf("cleared stale %s lock metadata", stale.Domain))
+			continue
+		}
+		if errors.Is(err, state.ErrLockHeld) {
+			skipped = append(skipped, fmt.Sprintf("left %s lock in place because it is still actively held", stale.Domain))
+			continue
+		}
+		return nil, nil, err
+	}
+
+	if !hasRepoRecord {
+		return applied, skipped, nil
+	}
+
+	integrationLease, err := lockManager.Acquire(state.IntegrationLock, "doctor-fix")
+	if err == nil {
+		recovered, recoverErr := recoverInterruptedIntegrationSubmissions(ctx, store, repoRecord.ID)
+		releaseErr := integrationLease.Release()
+		if recoverErr != nil {
+			return nil, nil, recoverErr
+		}
+		if releaseErr != nil {
+			return nil, nil, releaseErr
+		}
+		if recovered > 0 {
+			applied = append(applied, fmt.Sprintf("recovered %d interrupted integration submissions", recovered))
+		}
+	} else if !errors.Is(err, state.ErrLockHeld) {
+		return nil, nil, err
+	}
+
+	publishLease, err := lockManager.Acquire(state.PublishLock, "doctor-fix")
+	if err == nil {
+		recovered, recoverErr := recoverInterruptedPublishRequests(ctx, store, repoRecord.ID)
+		releaseErr := publishLease.Release()
+		if recoverErr != nil {
+			return nil, nil, recoverErr
+		}
+		if releaseErr != nil {
+			return nil, nil, releaseErr
+		}
+		if recovered > 0 {
+			applied = append(applied, fmt.Sprintf("recovered %d interrupted publish requests", recovered))
+		}
+	} else if !errors.Is(err, state.ErrLockHeld) {
+		return nil, nil, err
+	}
+
+	queued, err := store.ListIntegrationSubmissionsByStatus(ctx, repoRecord.ID, "queued")
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, submission := range queued {
+		if submission.RefKind != submissionRefKindBranch {
+			continue
+		}
+		if engine.BranchExists(submission.SourceRef) {
+			continue
+		}
+		if _, err := store.UpdateIntegrationSubmissionStatus(ctx, submission.ID, "failed", fmt.Sprintf("source branch %q no longer exists; resubmit from a live worktree", submission.SourceRef)); err != nil {
+			return nil, nil, err
+		}
+		if err := appendSubmissionEvent(ctx, store, repoRecord.ID, submission.ID, "integration.failed", map[string]string{
+			"branch":          submissionDisplayRef(submission),
+			"source_ref":      submission.SourceRef,
+			"ref_kind":        submission.RefKind,
+			"source_sha":      submission.SourceSHA,
+			"source_worktree": submission.SourceWorktree,
+			"error":           fmt.Sprintf("source branch %q no longer exists; resubmit from a live worktree", submission.SourceRef),
+			"reason":          "source_branch_missing",
+		}); err != nil {
+			return nil, nil, err
+		}
+		applied = append(applied, fmt.Sprintf("failed queued submission %d because branch %q no longer exists", submission.ID, submission.SourceRef))
+	}
+
+	if cfg.Repo.MainWorktree != "" && engine.BranchExists(cfg.Repo.ProtectedBranch) {
+		if _, err := os.Stat(cfg.Repo.MainWorktree); err == nil {
+			operation, err := engine.InProgressOperation(cfg.Repo.MainWorktree)
+			if err != nil {
+				return nil, nil, err
+			}
+			if operation != "" {
+				aborted, err := engine.AbortInProgressOperation(cfg.Repo.MainWorktree)
+				if err != nil {
+					skipped = append(skipped, fmt.Sprintf("could not abort %s on protected branch worktree: %v", operation, err))
+				} else if aborted != "" {
+					applied = append(applied, fmt.Sprintf("aborted %s on protected branch worktree", aborted))
+				}
+			} else {
+				clean, err := engine.WorktreeIsClean(cfg.Repo.MainWorktree)
+				if err != nil {
+					return nil, nil, err
+				}
+				if !clean {
+					skipped = append(skipped, "left protected branch worktree dirty because no safe auto-fix was available")
+				}
+			}
+		}
+	}
+
+	if cfg.Repo.RemoteName != "" && cfg.Repo.MainWorktree != "" {
+		if _, err := os.Stat(cfg.Repo.MainWorktree); err == nil {
+			if err := engine.FetchRemote(cfg.Repo.MainWorktree, cfg.Repo.RemoteName); err != nil {
+				skipped = append(skipped, fmt.Sprintf("could not refresh upstream state: %v", err))
+			} else {
+				branchStatus, err := engine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
+				if err != nil {
+					return nil, nil, err
+				}
+				if branchStatus.HasUpstream && branchStatus.AheadCount > 0 && branchStatus.BehindCount == 0 {
+					protectedSHA, err := engine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+					if err != nil {
+						return nil, nil, err
+					}
+					request, created, err := ensureLatestPublishRequestRecord(ctx, store, repoRecord.ID, protectedSHA)
+					if err != nil {
+						return nil, nil, err
+					}
+					if created {
+						applied = append(applied, fmt.Sprintf("queued publish request %d for protected tip %s", request.ID, protectedSHA))
+					}
+				}
+			}
+		}
+	}
+	return applied, skipped, nil
 }
 
 func yesNo(v bool) string {
