@@ -451,6 +451,18 @@ func TestRunOnceReportsProtectedBranchSyncBeforeConflictBlock(t *testing.T) {
 	}
 }
 
+func TestCreateTestRepoWithRemoteCloneChecksOutMain(t *testing.T) {
+	_, remoteDir := createTestRepoWithRemote(t)
+
+	upstreamClone := filepath.Join(t.TempDir(), "upstream-clone")
+	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
+
+	branch := strings.TrimSpace(runTestCommand(t, upstreamClone, "git", "branch", "--show-current"))
+	if branch != "main" {
+		t.Fatalf("expected clone to check out main, got %q", branch)
+	}
+}
+
 func TestRunOncePreIntegrateChecksBlockBeforeProtectedBranchMutation(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)

@@ -74,6 +74,7 @@ func createTestRepoWithRemote(t *testing.T) (string, string) {
 	runTestCommand(t, repoRoot, "git", "commit", "-m", "initial")
 	runTestCommand(t, repoRoot, "git", "remote", "add", "origin", remoteDir)
 	runTestCommand(t, repoRoot, "git", "push", "-u", "origin", "main")
+	runTestCommand(t, remoteDir, "git", "symbolic-ref", "HEAD", "refs/heads/main")
 
 	return repoRoot, remoteDir
 }
