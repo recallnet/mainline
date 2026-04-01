@@ -509,6 +509,23 @@ func TestDoctorWarnsWhenRootCheckoutIsDirtyAndNonCanonical(t *testing.T) {
 	}
 }
 
+func TestStatusJSONWorksWhenCanonicalRootIsDirty(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "dirty-root.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile dirty-root.txt: %v", err)
+	}
+
+	result, err := collectStatus(repoRoot, 3)
+	if err != nil {
+		t.Fatalf("collectStatus returned error: %v", err)
+	}
+	if result.RepositoryRoot == "" || result.ProtectedBranch != "main" {
+		t.Fatalf("unexpected status result: %+v", result)
+	}
+}
+
 func TestRepoAuditListsUnmergedWorktreeBranches(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 

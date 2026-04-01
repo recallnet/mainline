@@ -74,6 +74,25 @@ func TestRunOnceIntegratesQueuedBranchesInOrder(t *testing.T) {
 	}
 }
 
+func TestRunOnceRejectsDirtyCanonicalRootCheckout(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "DIRTY.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(DIRTY.txt): %v", err)
+	}
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr)
+	if err == nil {
+		t.Fatalf("expected run-once to fail when canonical root is dirty")
+	}
+	if !strings.Contains(err.Error(), "protected branch worktree") || !strings.Contains(err.Error(), "dirty") {
+		t.Fatalf("expected dirty protected worktree error, got %v", err)
+	}
+}
+
 func TestRunOnceIntegratesHigherPriorityBranchesFirst(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)

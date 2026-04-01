@@ -639,6 +639,76 @@ func TestGlobalDaemonProcessesRegisteredRepos(t *testing.T) {
 	}
 }
 
+func TestGlobalDaemonSkipsDirtyRootRepoAndDrainsHealthyRepo(t *testing.T) {
+	registryPath := filepath.Join(t.TempDir(), "registry.json")
+	t.Setenv("MAINLINE_REGISTRY_PATH", registryPath)
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
+	dirtyRepo, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, dirtyRepo)
+	updatePublishMode(t, dirtyRepo, "auto")
+	if err := os.WriteFile(filepath.Join(dirtyRepo, "DIRTY.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(DIRTY.txt): %v", err)
+	}
+
+	healthyRepo, healthyRemote := createTestRepoWithRemote(t)
+	initRepoForWorker(t, healthyRepo)
+	updatePublishMode(t, healthyRepo, "auto")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-global-daemon-healthy")
+	runTestCommand(t, healthyRepo, "git", "worktree", "add", "-b", "feature/global-daemon-healthy", featurePath)
+	writeFileAndCommit(t, featurePath, "global-healthy.txt", "global healthy\n", "feature global daemon healthy")
+	submitBranch(t, featurePath)
+
+	var stdout bytes.Buffer
+	opts := daemonOptions{
+		allRepos:     true,
+		registryPath: registryPath,
+		interval:     time.Millisecond,
+		maxCycles:    1,
+		jsonLogs:     true,
+	}
+	if err := runDaemonLoop(context.Background(), opts, &stdout); err != nil {
+		t.Fatalf("runDaemonLoop returned error: %v", err)
+	}
+
+	healthyLocalHead := trimNewline(runTestCommand(t, healthyRepo, "git", "rev-parse", "HEAD"))
+	healthyRemoteHead := trimNewline(runTestCommand(t, healthyRemote, "git", "rev-parse", "refs/heads/main"))
+	if healthyRemoteHead != healthyLocalHead {
+		t.Fatalf("expected healthy remote head %q, got %q", healthyLocalHead, healthyRemoteHead)
+	}
+
+	dirtyRemoteHead := trimNewline(runTestCommand(t, dirtyRepo, "git", "rev-parse", "HEAD"))
+	if strings.Contains(stdout.String(), dirtyRemoteHead) {
+		t.Fatalf("unexpected dirty repo head leakage in daemon output: %q", stdout.String())
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	var sawDirtyFailure bool
+	var sawHealthyWork bool
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var record daemonLog
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if record.Repo == canonicalRegistryPath(dirtyRepo) && record.Event == "cycle.failed" && strings.Contains(record.Message, "dirty") {
+			sawDirtyFailure = true
+		}
+		if record.Repo == canonicalRegistryPath(healthyRepo) && record.Event == "cycle.completed" && strings.Contains(record.Message, "Published request") {
+			sawHealthyWork = true
+		}
+	}
+	if !sawDirtyFailure {
+		t.Fatalf("expected dirty repo failure log, got %q", stdout.String())
+	}
+	if !sawHealthyWork {
+		t.Fatalf("expected healthy repo publish log, got %q", stdout.String())
+	}
+}
+
 func TestDaemonIdleExitEmitsJSONLog(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

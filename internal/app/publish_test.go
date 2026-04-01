@@ -53,6 +53,25 @@ func TestPublishQueuesCurrentProtectedTip(t *testing.T) {
 	}
 }
 
+func TestPublishRejectsDirtyCanonicalRootCheckout(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "DIRTY.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(DIRTY.txt): %v", err)
+	}
+
+	var publishOut bytes.Buffer
+	var publishErr bytes.Buffer
+	err := runPublish([]string{"--repo", repoRoot, "--json"}, &publishOut, &publishErr)
+	if err == nil {
+		t.Fatalf("expected publish to fail when canonical root is dirty")
+	}
+	if !strings.Contains(err.Error(), "protected branch worktree") || !strings.Contains(err.Error(), "dirty") {
+		t.Fatalf("expected dirty protected worktree error, got %v", err)
+	}
+}
+
 func TestRunOncePublishesLatestQueuedTipAndSupersedesOlderRequests(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
