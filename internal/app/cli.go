@@ -120,12 +120,14 @@ Turbo paths:
     %s submit --check-only --json
     %s submit --wait --timeout 15m --json
     # submit --wait stops at integrated; use land or wait --for landed for remote publish
-    # use submit --queue-only when you want the daemon, not submit, to do the drain
+    # plain submit now tries to become the drainer and stays alive until the repo is quiet
+    # use submit --queue-only only when you explicitly want a different process to do the drain
 
-  Controller or factory daemon:
+  Controller or factory caller:
     %s land --json --timeout 30m
     %s wait --submission 42 --for landed --json --timeout 30m
     %s events --follow --json --lifecycle --repo /path/to/repo-root
+    # optional machine-wide helper:
     mainlined --all --json --interval 2s
 
   Operator:

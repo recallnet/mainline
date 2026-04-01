@@ -13,6 +13,7 @@ import (
 )
 
 func TestRetrySubmissionRequeuesBlockedWork(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "1")
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)
 
@@ -66,6 +67,7 @@ func TestRetrySubmissionRequeuesBlockedWork(t *testing.T) {
 }
 
 func TestCancelSubmissionMarksQueuedWorkCancelled(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "1")
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)
 
@@ -121,6 +123,7 @@ func TestCancelSubmissionMarksQueuedWorkCancelled(t *testing.T) {
 }
 
 func TestCancelAndRetryPublishRequest(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "1")
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
 	queuePublish(t, repoRoot)
@@ -162,6 +165,7 @@ func TestCancelAndRetryPublishRequest(t *testing.T) {
 }
 
 func TestRetrySubmissionSupportsJSONOutput(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "1")
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)
 
@@ -209,6 +213,7 @@ func TestRetrySubmissionSupportsJSONOutput(t *testing.T) {
 }
 
 func TestCancelPublishSupportsJSONOutput(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "1")
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
 	queuePublish(t, repoRoot)

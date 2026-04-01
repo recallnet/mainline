@@ -57,22 +57,24 @@ Flags:
 	ctx := context.Background()
 
 	if submissionID != 0 {
-		return controlSubmission(ctx, action, store, repoRecord.ID, submissionID, stdout, asJSON)
+		return controlSubmission(ctx, action, repoRecord.MainWorktree, store, repoRecord.ID, submissionID, stdout, asJSON)
 	}
-	return controlPublish(ctx, action, store, repoRecord.ID, publishID, stdout, asJSON)
+	return controlPublish(ctx, action, repoRecord.MainWorktree, store, repoRecord.ID, publishID, stdout, asJSON)
 }
 
 type controlResult struct {
-	OK        bool   `json:"ok"`
-	Action    string `json:"action"`
-	ItemType  string `json:"item_type"`
-	ID        int64  `json:"id"`
-	Branch    string `json:"branch,omitempty"`
-	TargetSHA string `json:"target_sha,omitempty"`
-	Status    string `json:"status"`
+	OK             bool   `json:"ok"`
+	Action         string `json:"action"`
+	ItemType       string `json:"item_type"`
+	ID             int64  `json:"id"`
+	Branch         string `json:"branch,omitempty"`
+	TargetSHA      string `json:"target_sha,omitempty"`
+	Status         string `json:"status"`
+	DrainAttempted bool   `json:"drain_attempted,omitempty"`
+	DrainResult    string `json:"drain_result,omitempty"`
 }
 
-func controlSubmission(ctx context.Context, action string, store state.Store, repoID int64, submissionID int64, stdout io.Writer, asJSON bool) error {
+func controlSubmission(ctx context.Context, action string, repoPath string, store state.Store, repoID int64, submissionID int64, stdout io.Writer, asJSON bool) error {
 	submission, err := store.GetIntegrationSubmission(ctx, submissionID)
 	if err != nil {
 		return err
@@ -98,19 +100,36 @@ func controlSubmission(ctx context.Context, action string, store state.Store, re
 		}); err != nil {
 			return err
 		}
+		result := controlResult{
+			OK:       true,
+			Action:   action,
+			ItemType: "submission",
+			ID:       updated.ID,
+			Branch:   submissionDisplayRef(updated),
+			Status:   updated.Status,
+		}
+		if shouldTryDrainAfterMutation() {
+			result.DrainAttempted = true
+			drainResult, drainErr := drainRepoUntilSettled(repoPath)
+			if drainResult != "" {
+				result.DrainResult = drainResult
+			}
+			if drainErr != nil {
+				return drainErr
+			}
+			if refreshed, loadErr := store.GetIntegrationSubmission(ctx, submissionID); loadErr == nil {
+				result.Status = refreshed.Status
+			}
+		}
 		if asJSON {
-			return json.NewEncoder(stdout).Encode(controlResult{
-				OK:       true,
-				Action:   action,
-				ItemType: "submission",
-				ID:       updated.ID,
-				Branch:   submissionDisplayRef(updated),
-				Status:   updated.Status,
-			})
+			return json.NewEncoder(stdout).Encode(result)
 		}
 		fmt.Fprintf(stdout, "Retried submission %d\n", updated.ID)
 		fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(updated))
-		fmt.Fprintf(stdout, "Status: %s\n", updated.Status)
+		fmt.Fprintf(stdout, "Status: %s\n", result.Status)
+		if result.DrainResult != "" {
+			fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+		}
 		return nil
 	case "cancel":
 		if submission.Status != "queued" && submission.Status != "blocked" && submission.Status != "failed" {
@@ -128,26 +147,43 @@ func controlSubmission(ctx context.Context, action string, store state.Store, re
 		}); err != nil {
 			return err
 		}
+		result := controlResult{
+			OK:       true,
+			Action:   action,
+			ItemType: "submission",
+			ID:       updated.ID,
+			Branch:   submissionDisplayRef(updated),
+			Status:   updated.Status,
+		}
+		if shouldTryDrainAfterMutation() {
+			result.DrainAttempted = true
+			drainResult, drainErr := drainRepoUntilSettled(repoPath)
+			if drainResult != "" {
+				result.DrainResult = drainResult
+			}
+			if drainErr != nil {
+				return drainErr
+			}
+			if refreshed, loadErr := store.GetIntegrationSubmission(ctx, submissionID); loadErr == nil {
+				result.Status = refreshed.Status
+			}
+		}
 		if asJSON {
-			return json.NewEncoder(stdout).Encode(controlResult{
-				OK:       true,
-				Action:   action,
-				ItemType: "submission",
-				ID:       updated.ID,
-				Branch:   submissionDisplayRef(updated),
-				Status:   updated.Status,
-			})
+			return json.NewEncoder(stdout).Encode(result)
 		}
 		fmt.Fprintf(stdout, "Cancelled submission %d\n", updated.ID)
 		fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(updated))
-		fmt.Fprintf(stdout, "Status: %s\n", updated.Status)
+		fmt.Fprintf(stdout, "Status: %s\n", result.Status)
+		if result.DrainResult != "" {
+			fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+		}
 		return nil
 	default:
 		return fmt.Errorf("unknown action %q", action)
 	}
 }
 
-func controlPublish(ctx context.Context, action string, store state.Store, repoID int64, publishID int64, stdout io.Writer, asJSON bool) error {
+func controlPublish(ctx context.Context, action string, repoPath string, store state.Store, repoID int64, publishID int64, stdout io.Writer, asJSON bool) error {
 	request, err := store.GetPublishRequest(ctx, publishID)
 	if err != nil {
 		return err
@@ -177,19 +213,36 @@ func controlPublish(ctx context.Context, action string, store state.Store, repoI
 		}); err != nil {
 			return err
 		}
+		result := controlResult{
+			OK:        true,
+			Action:    action,
+			ItemType:  "publish_request",
+			ID:        updated.ID,
+			TargetSHA: updated.TargetSHA,
+			Status:    updated.Status,
+		}
+		if shouldTryDrainAfterMutation() {
+			result.DrainAttempted = true
+			drainResult, drainErr := drainRepoUntilSettled(repoPath)
+			if drainResult != "" {
+				result.DrainResult = drainResult
+			}
+			if drainErr != nil {
+				return drainErr
+			}
+			if refreshed, loadErr := store.GetPublishRequest(ctx, publishID); loadErr == nil {
+				result.Status = refreshed.Status
+			}
+		}
 		if asJSON {
-			return json.NewEncoder(stdout).Encode(controlResult{
-				OK:        true,
-				Action:    action,
-				ItemType:  "publish_request",
-				ID:        updated.ID,
-				TargetSHA: updated.TargetSHA,
-				Status:    updated.Status,
-			})
+			return json.NewEncoder(stdout).Encode(result)
 		}
 		fmt.Fprintf(stdout, "Retried publish request %d\n", updated.ID)
 		fmt.Fprintf(stdout, "Target SHA: %s\n", updated.TargetSHA)
-		fmt.Fprintf(stdout, "Status: %s\n", updated.Status)
+		fmt.Fprintf(stdout, "Status: %s\n", result.Status)
+		if result.DrainResult != "" {
+			fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+		}
 		return nil
 	case "cancel":
 		if request.Status != "queued" && request.Status != "failed" {
@@ -211,19 +264,36 @@ func controlPublish(ctx context.Context, action string, store state.Store, repoI
 		}); err != nil {
 			return err
 		}
+		result := controlResult{
+			OK:        true,
+			Action:    action,
+			ItemType:  "publish_request",
+			ID:        updated.ID,
+			TargetSHA: updated.TargetSHA,
+			Status:    updated.Status,
+		}
+		if shouldTryDrainAfterMutation() {
+			result.DrainAttempted = true
+			drainResult, drainErr := drainRepoUntilSettled(repoPath)
+			if drainResult != "" {
+				result.DrainResult = drainResult
+			}
+			if drainErr != nil {
+				return drainErr
+			}
+			if refreshed, loadErr := store.GetPublishRequest(ctx, publishID); loadErr == nil {
+				result.Status = refreshed.Status
+			}
+		}
 		if asJSON {
-			return json.NewEncoder(stdout).Encode(controlResult{
-				OK:        true,
-				Action:    action,
-				ItemType:  "publish_request",
-				ID:        updated.ID,
-				TargetSHA: updated.TargetSHA,
-				Status:    updated.Status,
-			})
+			return json.NewEncoder(stdout).Encode(result)
 		}
 		fmt.Fprintf(stdout, "Cancelled publish request %d\n", updated.ID)
 		fmt.Fprintf(stdout, "Target SHA: %s\n", updated.TargetSHA)
-		fmt.Fprintf(stdout, "Status: %s\n", updated.Status)
+		fmt.Fprintf(stdout, "Status: %s\n", result.Status)
+		if result.DrainResult != "" {
+			fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+		}
 		return nil
 	default:
 		return fmt.Errorf("unknown action %q", action)

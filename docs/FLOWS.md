@@ -67,7 +67,7 @@ mq submit
 
 ## Agent-Heavy Repo
 
-Run the daemon in the protected worktree and let agents only submit:
+Use the optional machine-wide daemon and let agents only submit:
 
 ```bash
 mainlined --all --interval 2s --json
@@ -112,7 +112,7 @@ mq submit --json
 mq wait --submission 42 --for landed --json --timeout 30m
 ```
 
-If you want to prove daemon-only handling for a specific submission, queue
+If you want to prove that some other process handled a specific submission, queue
 without opportunistic drain:
 
 ```bash
@@ -201,7 +201,7 @@ mq retry --repo /path/to/main --publish 4
 submissions through `publish_request_id`, `publish_status`, and `outcome`, so a
 factory can answer “did this submission fully land?” from one status surface.
 
-For multi-repo machines, prefer one registered-repo daemon:
+For multi-repo machines, one registered-repo daemon is optional:
 
 ```bash
 mainlined --all --json

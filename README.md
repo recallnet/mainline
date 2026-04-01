@@ -97,7 +97,7 @@ mq land --json --timeout 30m
 For agent-heavy and factory-style repos, set `[publish].Mode = 'auto'` in
 `mainline.toml` unless there is a real operator reason to keep publish manual.
 
-If you want to prove that the daemon, not `submit`, handled a specific change:
+If you want to prove that some other process, not `submit`, handled a specific change:
 
 ```bash
 mq submit --queue-only --json
@@ -110,7 +110,7 @@ The controller path should feel like this:
 mq land --json --timeout 30m
 ```
 
-The daemon path should feel like this:
+The optional machine-wide helper path should feel like this:
 
 ```bash
 mainlined --all --interval 2s --json
@@ -166,7 +166,7 @@ path.
 - opportunistic submit-side draining when no worker already holds the lock
 - `wait --submission <id> --for integrated|landed`
 - `status`, `watch`, `logs`, `events`, `doctor`, and `confidence`
-- daemon mode through `mainlined`
+- optional machine-wide draining through `mainlined`
 - retry and cancel as real operator controls
 - policy checks, hook coordination, and repo-managed hooks
 - Homebrew, Nix, GitHub release archives, checksums, and release manifests
@@ -227,8 +227,9 @@ git commit -m "Initialize mainline repo policy"
 
 That init commit matters. It turns the repo’s queue policy into versioned,
 reviewable state instead of one more local convention that agents have to infer.
-`mq repo init` also registers the repo for `mainlined --all`, so one machine
-daemon can drain many repos without one idle process per repo.
+`mq repo init` also registers the repo for optional `mainlined --all` mode, so
+one machine process can drain many repos if you want background progress across
+repos. The core queue flow does not require that daemon to exist.
 For normal repos, the root checkout should be the canonical protected `main`.
 Keep it clean and boring. Humans inspect that path, and the machine wrapper
 builds `mq` and `mainlined` from it. If it is dirty, the wrapper should refuse
@@ -273,9 +274,11 @@ mq retry --repo /path/to/repo-root --submission 17
 mq cancel --repo /path/to/repo-root --publish 4
 ```
 
-`mainlined --all` is supported, but not installed automatically. If you want it
-as a login service on macOS, run `./scripts/install-launch-agent.sh` and verify
-the exact label with:
+`mainlined --all` is optional and not installed automatically. The default
+model is queue-first commands that try to become the drainer themselves and
+stay alive until the repo is quiescent, including sleeping through scheduled
+publish retries. If you still want a login service on macOS, run
+`./scripts/install-launch-agent.sh` and verify the exact label with:
 
 ```bash
 launchctl print gui/$(id -u)/com.recallnet.mainline.global

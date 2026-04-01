@@ -23,7 +23,7 @@ Default commands to optimize for:
 - `mq submit --wait --timeout 15m --json`
 - `mq wait --submission <id> --for landed --json --timeout 30m`
 - `mq land --json --timeout 30m`
-- `mainlined --all --json`
+- `mainlined --all --json` for the optional machine-global helper
 - `mq events --follow --json --lifecycle`
 
 If you want the machine-global daemon on macOS, install and verify the exact
@@ -156,8 +156,9 @@ mq submit --wait --timeout 15m --json
 Treat `mq submit --wait` as an integration answer, not a remote-publish answer.
 If the repo keeps `[publish].Mode = 'manual'`, use `mq land` or
 `mq wait --for landed` when the job is not done until remote `main` moves.
-Use `mq submit --queue-only --json` when the point is to prove the daemon
-handled the queued submission instead of opportunistic submit-side drain.
+Use `mq submit --queue-only --json` only when the point is to prove some other
+process handled the queued submission instead of opportunistic submit-side
+drain.
 
 That gives the agent:
 
@@ -221,7 +222,7 @@ When publish behavior is part of the dogfood target:
 mq publish --repo ~/Projects/recallnet/mainline
 ```
 
-For machine-wide steady state, prefer one global daemon instead of one daemon
+For machine-wide steady state, an optional global daemon can replace one daemon
 per repo:
 
 ```bash

@@ -25,14 +25,14 @@ instructions.
   - `mq submit --wait --timeout 15m --json`
   - treat `submit --wait` as `integrated`, not remote-published
   - capture `submission_id` from JSON when a wrapper needs durable tracking
-  - use `mq submit --queue-only --json` when the point is to let the daemon, not submit, own the drain
+  - use `mq submit --queue-only --json` only when the point is to let some other process, not submit, own the drain
   - `mq wait --submission <id> --for landed --json --timeout 30m` when the
     wrapper needs integrate-plus-publish confirmation by id
   - or `mq land --json --timeout 30m` when remote landing is the actual end of the job
   - `mq repo audit --repo /Users/devrel/Projects/recallnet/mainline --json`
-- Controllers and factory-style daemons should prefer:
+- Controllers and factory-style callers should prefer:
   - `mq land --json --timeout 30m`
-  - or one machine-global `mainlined --all --json`
+  - or an optional machine-global `mainlined --all --json` when one helper process should cover many repos
   - on macOS, `./scripts/install-launch-agent.sh` installs the global service
     label `com.recallnet.mainline.global`
   - verify it with

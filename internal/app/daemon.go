@@ -107,7 +107,7 @@ func runDaemonLoop(ctx context.Context, opts daemonOptions, stdout io.Writer) er
 	defer ticker.Stop()
 
 	for cycle := 1; ; cycle++ {
-		result, err := runOneCycle(opts.repoPath)
+		result, err := drainRepoUntilSettledContext(ctx, opts.repoPath)
 		if err != nil {
 			logDaemon(stdout, opts, "error", "cycle.failed", cycle, err.Error())
 			return err
@@ -214,13 +214,17 @@ func printDaemonHelp(w io.Writer, programName string) {
 }
 
 func daemonHelpText(programName string) string {
-	return fmt.Sprintf(`%s runs the background worker loop for mainline.
+	return fmt.Sprintf(`%s runs the optional background worker loop for mainline.
 
 Usage:
   %s [flags]
 
-Recommended machine-wide mode:
+Recommended optional machine-wide mode:
   mainlined --all --json --interval 2s
+
+Most repos do not require a standing daemon. Mutating commands such as submit,
+publish, retry, and cancel now try to become the drainer themselves and keep
+running until the repo is quiescent.
 
 Flags:
   -h, --help            show help

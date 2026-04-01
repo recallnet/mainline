@@ -73,7 +73,7 @@ func TestDaemonHelp(t *testing.T) {
 		t.Fatalf("runDaemon returned error: %v", err)
 	}
 
-	if !strings.Contains(stdout.String(), "mainlined runs the background worker loop") {
+	if !strings.Contains(stdout.String(), "mainlined runs the optional background worker loop") {
 		t.Fatalf("expected daemon help output, got %q", stdout.String())
 	}
 }
@@ -158,7 +158,10 @@ func TestGlobalJSONForwardsToRunOnceAndPublish(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &publish); err != nil {
 		t.Fatalf("Unmarshal publish: %v", err)
 	}
-	if !publish.OK || publish.PublishRequestID == 0 || publish.Status != "queued" {
+	if !publish.OK || publish.PublishRequestID == 0 {
+		t.Fatalf("unexpected publish json: %+v", publish)
+	}
+	if publish.Status != "queued" && publish.Status != "succeeded" {
 		t.Fatalf("unexpected publish json: %+v", publish)
 	}
 

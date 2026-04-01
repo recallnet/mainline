@@ -68,7 +68,7 @@ mq repo root --repo . --json
 HEAD. For ordinary repos, run it from local branch `main`. If you really intend
 to protect a different branch, pass `--protected-branch` explicitly.
 
-`mq repo init` automatically registers the repo for the machine-global daemon
+`mq repo init` automatically registers the repo for the optional machine-global
 registry used by `mainlined --all`.
 For ordinary repos, treat that root checkout as the canonical protected `main`.
 Keep it clean and on `main`, because humans inspect it and the machine wrappers
@@ -168,8 +168,10 @@ GitHub will not show any Releases until the first `v*` tag has been pushed.
 
 ## Machine-Global Daemon
 
-For a machine running many repos, prefer one `mainlined --all` process instead
-of one idle daemon per repo.
+For a machine running many repos, you can run one optional
+`mainlined --all` process instead of one idle daemon per repo.
+The core queue flow does not require it: mutating commands try to become the
+drainer themselves and stay alive until the repo is quiescent.
 
 Register each repo once:
 

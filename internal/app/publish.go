@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
@@ -20,6 +21,8 @@ type publishResult struct {
 	StatePath        string `json:"state_path"`
 	TargetSHA        string `json:"target_sha"`
 	Status           string `json:"status"`
+	DrainAttempted   bool   `json:"drain_attempted,omitempty"`
+	DrainResult      string `json:"drain_result,omitempty"`
 }
 
 func runPublish(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -101,23 +104,46 @@ Flags:
 		return err
 	}
 
+	result := publishResult{
+		OK:               true,
+		PublishRequestID: request.ID,
+		RepositoryRoot:   repoRoot,
+		StatePath:        state.DefaultPath(layout.GitDir),
+		TargetSHA:        targetSHA,
+		Status:           request.Status,
+	}
+
+	if shouldTryDrainAfterMutation() {
+		result.DrainAttempted = true
+		drainResult, drainErr := drainRepoUntilSettled(cfg.Repo.MainWorktree)
+		if drainResult != "" {
+			result.DrainResult = drainResult
+		}
+		if drainErr != nil {
+			return drainErr
+		}
+		if updated, loadErr := store.GetPublishRequest(ctx, request.ID); loadErr == nil {
+			result.Status = updated.Status
+		}
+	}
+
 	if asJSON {
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
-		return encoder.Encode(publishResult{
-			OK:               true,
-			PublishRequestID: request.ID,
-			RepositoryRoot:   repoRoot,
-			StatePath:        state.DefaultPath(layout.GitDir),
-			TargetSHA:        targetSHA,
-			Status:           request.Status,
-		})
+		return encoder.Encode(result)
 	}
 
 	fmt.Fprintf(stdout, "Queued publish request %d\n", request.ID)
 	fmt.Fprintf(stdout, "Target SHA: %s\n", targetSHA)
 	fmt.Fprintf(stdout, "State path: %s\n", state.DefaultPath(layout.GitDir))
+	if result.DrainResult != "" {
+		fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+	}
 	return nil
+}
+
+func shouldTryDrainAfterMutation() bool {
+	return os.Getenv("MAINLINE_DISABLE_MUTATION_DRAIN") == ""
 }
 
 func loadRepoContext(repoPath string) (git.RepositoryLayout, string, policy.File, state.RepositoryRecord, state.Store, error) {

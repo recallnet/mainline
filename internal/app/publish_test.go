@@ -20,6 +20,7 @@ import (
 func TestPublishQueuesCurrentProtectedTip(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "1")
 
 	protectedHead := runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD")
 
@@ -69,6 +70,28 @@ func TestPublishRejectsDirtyCanonicalRootCheckout(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "protected branch worktree") || !strings.Contains(err.Error(), "dirty") {
 		t.Fatalf("expected dirty protected worktree error, got %v", err)
+	}
+}
+
+func TestPublishDrainsAndPublishesWithoutDaemon(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	writeFileAndCommit(t, repoRoot, "publish-now.txt", "publish now\n", "main change publish now")
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+
+	var publishOut bytes.Buffer
+	var publishErr bytes.Buffer
+	if err := runPublish([]string{"--repo", repoRoot}, &publishOut, &publishErr); err != nil {
+		t.Fatalf("runPublish returned error: %v", err)
+	}
+	if !strings.Contains(publishOut.String(), "Published request") {
+		t.Fatalf("expected publish drain output, got %q", publishOut.String())
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
 	}
 }
 
@@ -177,6 +200,7 @@ func TestRunOnceWithNoQueueReportsNoPublishWork(t *testing.T) {
 
 func queuePublish(t *testing.T, repoRoot string) {
 	t.Helper()
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "1")
 
 	var publishOut bytes.Buffer
 	var publishErr bytes.Buffer
@@ -421,6 +445,46 @@ func TestRunOnceReportsDelayedPublishRetryWhenNothingIsReady(t *testing.T) {
 	}
 	if !strings.Contains(result, "No ready publish requests. Next retry for request") {
 		t.Fatalf("expected delayed retry output, got %q", result)
+	}
+}
+
+func TestDrainRepoUntilSettledSleepsThroughDelayedPublishRetry(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "1")
+
+	writeFileAndCommit(t, repoRoot, "drain-retry.txt", "drain retry\n", "main change drain retry")
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+
+	restoreBackoff := setPublishRetryBackoffsForTest([]time.Duration{0, 0, 0})
+	defer restoreBackoff()
+
+	attempts := 0
+	restoreFaults := setAppTestFaultHooks(testFaultHooks{
+		before: func(point string) error {
+			if point == "publish.push" {
+				attempts++
+				if attempts == 1 {
+					return errors.New("remote: HTTP 502 bad gateway")
+				}
+			}
+			return nil
+		},
+	})
+	defer restoreFaults()
+
+	result, err := drainRepoUntilSettled(repoRoot)
+	if err != nil {
+		t.Fatalf("drainRepoUntilSettled returned error: %v", err)
+	}
+	if !strings.Contains(result, "Published request") {
+		t.Fatalf("expected publish success output, got %q", result)
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
 	}
 }
 
