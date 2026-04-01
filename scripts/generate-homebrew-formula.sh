@@ -41,8 +41,25 @@ sha_for() {
   awk -v bare="${name}" -v dotted="./${name}" '$2 == bare || $2 == dotted { print $1; exit }' "${checksums}"
 }
 
-darwin_amd64_archive="mainline_${version}_darwin_amd64.tar.gz"
-darwin_arm64_archive="mainline_${version}_darwin_arm64.tar.gz"
+resolve_archive_name() {
+  local goos="$1"
+  local goarch="$2"
+  local ext="$3"
+  local with_tag="mainline_${version}_${goos}_${goarch}.${ext}"
+  local stripped="mainline_${version#v}_${goos}_${goarch}.${ext}"
+  if [[ -n "$(sha_for "${with_tag}")" ]]; then
+    printf '%s\n' "${with_tag}"
+    return
+  fi
+  if [[ -n "$(sha_for "${stripped}")" ]]; then
+    printf '%s\n' "${stripped}"
+    return
+  fi
+  printf '%s\n' "${with_tag}"
+}
+
+darwin_amd64_archive="$(resolve_archive_name darwin amd64 tar.gz)"
+darwin_arm64_archive="$(resolve_archive_name darwin arm64 tar.gz)"
 darwin_amd64_sha="$(sha_for "${darwin_amd64_archive}")"
 darwin_arm64_sha="$(sha_for "${darwin_arm64_archive}")"
 

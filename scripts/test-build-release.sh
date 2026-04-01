@@ -34,6 +34,27 @@ sed 's# \./# #g' "${output_dir}/SHA256SUMS" > "${bare_checksums}"
 ruby -c "${output_dir}/mainline.rb" >/dev/null
 grep -q '"name": "mainline_v0.0.0-test_darwin_amd64.tar.gz"' "${output_dir}/release-manifest.json"
 
+goreleaser_checksums="${output_dir}/SHA256SUMS.goreleaser"
+cp "${output_dir}/mainline_v0.0.0-test_darwin_amd64.tar.gz" "${output_dir}/mainline_0.0.0-test_darwin_amd64.tar.gz"
+cp "${output_dir}/mainline_v0.0.0-test_darwin_arm64.tar.gz" "${output_dir}/mainline_0.0.0-test_darwin_arm64.tar.gz"
+cp "${output_dir}/mainline_v0.0.0-test_linux_amd64.tar.gz" "${output_dir}/mainline_0.0.0-test_linux_amd64.tar.gz"
+cp "${output_dir}/mainline_v0.0.0-test_linux_arm64.tar.gz" "${output_dir}/mainline_0.0.0-test_linux_arm64.tar.gz"
+cp "${output_dir}/mainline_v0.0.0-test_windows_amd64.zip" "${output_dir}/mainline_0.0.0-test_windows_amd64.zip"
+cp "${output_dir}/mainline_v0.0.0-test_windows_arm64.zip" "${output_dir}/mainline_0.0.0-test_windows_arm64.zip"
+cat > "${goreleaser_checksums}" <<EOF
+$(shasum -a 256 "${output_dir}/mainline_0.0.0-test_darwin_amd64.tar.gz" | sed "s#${output_dir}/##")
+$(shasum -a 256 "${output_dir}/mainline_0.0.0-test_darwin_arm64.tar.gz" | sed "s#${output_dir}/##")
+$(shasum -a 256 "${output_dir}/mainline_0.0.0-test_linux_amd64.tar.gz" | sed "s#${output_dir}/##")
+$(shasum -a 256 "${output_dir}/mainline_0.0.0-test_linux_arm64.tar.gz" | sed "s#${output_dir}/##")
+$(shasum -a 256 "${output_dir}/mainline_0.0.0-test_windows_amd64.zip" | sed "s#${output_dir}/##")
+$(shasum -a 256 "${output_dir}/mainline_0.0.0-test_windows_arm64.zip" | sed "s#${output_dir}/##")
+EOF
+"${repo_root}/scripts/generate-homebrew-formula.sh" --version v0.0.0-test --checksums "${goreleaser_checksums}" --output "${output_dir}/mainline-goreleaser.rb"
+"${repo_root}/scripts/generate-release-manifest.sh" --version v0.0.0-test --checksums "${goreleaser_checksums}" --output "${output_dir}/release-manifest-goreleaser.json"
+ruby -c "${output_dir}/mainline-goreleaser.rb" >/dev/null
+grep -q 'mainline_0.0.0-test_darwin_amd64.tar.gz' "${output_dir}/mainline-goreleaser.rb"
+grep -q '"name": "mainline_0.0.0-test_darwin_amd64.tar.gz"' "${output_dir}/release-manifest-goreleaser.json"
+
 host_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 host_arch="$(uname -m)"
 case "${host_arch}" in

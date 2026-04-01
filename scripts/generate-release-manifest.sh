@@ -63,6 +63,23 @@ sha_for() {
   awk -v bare="${name}" -v dotted="./${name}" '$2 == bare || $2 == dotted { print $1; exit }' "${checksums}"
 }
 
+resolve_archive_name() {
+  local goos="$1"
+  local goarch="$2"
+  local ext="$3"
+  local with_tag="mainline_${version}_${goos}_${goarch}.${ext}"
+  local stripped="mainline_${version#v}_${goos}_${goarch}.${ext}"
+  if [[ -n "$(sha_for "${with_tag}")" ]]; then
+    printf '%s\n' "${with_tag}"
+    return
+  fi
+  if [[ -n "$(sha_for "${stripped}")" ]]; then
+    printf '%s\n' "${stripped}"
+    return
+  fi
+  printf '%s\n' "${with_tag}"
+}
+
 {
   printf '{\n'
   printf '  "version": %s,\n' "$(json_escape "${version}")"
@@ -81,9 +98,9 @@ sha_for() {
     set -- ${target}
     goos="$1"
     goarch="$2"
-    name="mainline_${version}_${goos}_${goarch}.tar.gz"
+    name="$(resolve_archive_name "${goos}" "${goarch}" "tar.gz")"
     if [[ "${goos}" = "windows" ]]; then
-      name="mainline_${version}_${goos}_${goarch}.zip"
+      name="$(resolve_archive_name "${goos}" "${goarch}" "zip")"
     fi
     sha="$(sha_for "${name}")"
     if [[ -z "${sha}" ]]; then
