@@ -28,6 +28,11 @@ Default commands to optimize for:
 Do not use this skill to bypass `mq`. It exists to dogfood the workflow that
 `mainline` is building for other repos.
 
+Treat [PLAN.md](/Users/devrel/Projects/recallnet/mainline/PLAN.md) as the
+forward product plan and [SPEC.md](/Users/devrel/Projects/recallnet/mainline/SPEC.md)
+as the current product contract. If a change alters the supported operator
+model or product boundary, those docs need to move with the code.
+
 Supported agent clients may also enforce this with hooks. If a hook blocks a
 native `git` mutation on the protected `main` worktree, that is not a false
 positive to work around. Move to a feature worktree and continue there.

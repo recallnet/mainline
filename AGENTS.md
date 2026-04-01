@@ -71,6 +71,10 @@ project is built to enforce.
 - If you change command behavior, update the README, flow docs, skills, and
   [docs/JSON_CONTRACTS.md](/Users/devrel/Projects/recallnet/mainline/docs/JSON_CONTRACTS.md)
   in the same slice.
+- Treat [PLAN.md](/Users/devrel/Projects/recallnet/mainline/PLAN.md) as the
+  forward product plan and [SPEC.md](/Users/devrel/Projects/recallnet/mainline/SPEC.md)
+  as the current product contract. Update them when the supported operator
+  model, product boundary, or public integration surface changes.
 - Keep docs concrete. Do not leave milestone sludge, vague marketing, or
   undocumented machine-readable output changes behind.
 - Follow `remark-ai` style governance: product claims must match shipped
