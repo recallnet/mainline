@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -512,6 +514,168 @@ func TestRunOncePreIntegrateChecksBlockBeforeProtectedBranchMutation(t *testing.
 	}
 	if len(submissions) != 1 || submissions[0].Status != "blocked" {
 		t.Fatalf("expected blocked submission, got %+v", submissions)
+	}
+}
+
+func TestRunOnceFailsWhenSubmittedSourceWorktreeIsDeleted(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-deleted")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/deleted", featurePath)
+	writeFileAndCommit(t, featurePath, "deleted.txt", "deleted\n", "deleted feature")
+	submitBranch(t, featurePath)
+
+	if err := os.RemoveAll(featurePath); err != nil {
+		t.Fatalf("RemoveAll(featurePath): %v", err)
+	}
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if !strings.Contains(runOut.String(), "source worktree is unavailable") {
+		t.Fatalf("expected missing worktree failure, got %q", runOut.String())
+	}
+
+	status := readStatusJSON(t, repoRoot)
+	if status.LatestSubmission == nil || status.LatestSubmission.Status != "failed" {
+		t.Fatalf("expected failed latest submission, got %+v", status.LatestSubmission)
+	}
+	if !strings.Contains(status.LatestSubmission.LastError, "source worktree is unavailable") {
+		t.Fatalf("expected missing worktree error, got %+v", status.LatestSubmission)
+	}
+}
+
+func TestRunOnceFailsWhenSubmittedSourceWorktreeMovesAfterSubmit(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-moved")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/moved", featurePath)
+	writeFileAndCommit(t, featurePath, "moved.txt", "moved\n", "moved feature")
+	submitBranch(t, featurePath)
+
+	movedPath := filepath.Join(t.TempDir(), "feature-moved-new")
+	if err := os.Rename(featurePath, movedPath); err != nil {
+		t.Fatalf("Rename(featurePath): %v", err)
+	}
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if !strings.Contains(runOut.String(), "source worktree is unavailable") {
+		t.Fatalf("expected moved worktree failure, got %q", runOut.String())
+	}
+
+	status := readStatusJSON(t, repoRoot)
+	if status.LatestSubmission == nil || status.LatestSubmission.Status != "failed" {
+		t.Fatalf("expected failed latest submission, got %+v", status.LatestSubmission)
+	}
+}
+
+func TestRunOnceFailsWhenSubmittedSourceWorktreeTurnsDirtyAfterSubmit(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-dirty-later")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/dirty-later", featurePath)
+	writeFileAndCommit(t, featurePath, "clean.txt", "clean\n", "clean feature")
+	submitBranch(t, featurePath)
+
+	if err := os.WriteFile(filepath.Join(featurePath, "dirty.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(dirty.txt): %v", err)
+	}
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if !strings.Contains(runOut.String(), "is dirty; clean it and resubmit") {
+		t.Fatalf("expected dirty source failure, got %q", runOut.String())
+	}
+
+	status := readStatusJSON(t, repoRoot)
+	if status.LatestSubmission == nil || status.LatestSubmission.Status != "failed" {
+		t.Fatalf("expected failed latest submission, got %+v", status.LatestSubmission)
+	}
+}
+
+func TestRunOnceSyncsExternalProtectedAdvanceBeforeNextQueuedSubmission(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+
+	featureOne := filepath.Join(t.TempDir(), "feature-one")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/one", featureOne)
+	writeFileAndCommit(t, featureOne, "one.txt", "feature one\n", "feature one")
+	submitBranch(t, featureOne)
+
+	featureTwo := filepath.Join(t.TempDir(), "feature-two")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/two", featureTwo)
+	writeFileAndCommit(t, featureTwo, "two.txt", "feature two\n", "feature two")
+	queuedOriginalSHA := trimNewline(runTestCommand(t, featureTwo, "git", "rev-parse", "HEAD"))
+
+	runOnce(t, repoRoot)
+	queuePublish(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	upstreamClone := filepath.Join(t.TempDir(), "upstream-clone")
+	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
+	runTestCommand(t, upstreamClone, "git", "config", "user.name", "Test User")
+	runTestCommand(t, upstreamClone, "git", "config", "user.email", "test@example.com")
+	runTestCommand(t, upstreamClone, "git", "config", "core.hooksPath", ".git/hooks")
+	writeFileAndCommit(t, upstreamClone, "upstream.txt", "upstream\n", "upstream advance")
+	upstreamHead := trimNewline(runTestCommand(t, upstreamClone, "git", "rev-parse", "HEAD"))
+	runTestCommand(t, upstreamClone, "git", "push", "origin", "main")
+
+	submitBranch(t, featureTwo)
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if !strings.Contains(runOut.String(), "Synced main from origin/main and integrated submission") {
+		t.Fatalf("expected sync-aware output, got %q", runOut.String())
+	}
+
+	logLines := strings.Split(strings.TrimSpace(runTestCommand(t, repoRoot, "git", "log", "--format=%H:%s", "-3")), "\n")
+	if len(logLines) != 3 {
+		t.Fatalf("expected 3 log lines, got %q", logLines)
+	}
+	gotOrder := make([]string, 0, 3)
+	for _, line := range logLines {
+		parts := strings.SplitN(line, ":", 2)
+		gotOrder = append(gotOrder, parts[1])
+	}
+	if strings.Join(gotOrder, "\n") != "feature two\nupstream advance\nfeature one" {
+		t.Fatalf("expected feature two atop upstream advance atop feature one, got %v", gotOrder)
+	}
+	if trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD^")) != upstreamHead {
+		t.Fatalf("expected feature two parent to be upstream head %q", upstreamHead)
+	}
+
+	status := readStatusJSON(t, repoRoot)
+	if status.LatestSubmission == nil || status.LatestSubmission.Status != "succeeded" {
+		t.Fatalf("expected succeeded latest submission, got %+v", status.LatestSubmission)
+	}
+	if status.LatestSubmission.SourceSHA != queuedOriginalSHA {
+		t.Fatalf("expected durable source sha to remain original queued sha %q, got %+v", queuedOriginalSHA, status.LatestSubmission)
+	}
+
+	events := readRecentEvents(t, repoRoot, 20)
+	eventTypes := make([]string, 0, len(events))
+	for _, event := range events {
+		eventTypes = append(eventTypes, event.EventType)
+	}
+	sort.Strings(eventTypes)
+	if !slices.Contains(eventTypes, "protected.synced_from_upstream") {
+		t.Fatalf("expected protected.synced_from_upstream event, got %+v", events)
 	}
 }
 

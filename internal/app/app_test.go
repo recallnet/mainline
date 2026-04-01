@@ -165,6 +165,159 @@ func TestGlobalJSONForwardsToRunOnceAndPublish(t *testing.T) {
 	}
 }
 
+func TestStatusJSONContractContainsStableTopLevelFields(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	required := []string{
+		"repository_root",
+		"state_path",
+		"current_worktree",
+		"current_branch",
+		"protected_branch",
+		"protected_branch_sha",
+		"protected_upstream",
+		"counts",
+		"recent_events",
+	}
+	for _, key := range required {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("expected status json key %q in %+v", key, payload)
+		}
+	}
+}
+
+func TestEventsLifecycleJSONContractContainsStableFields(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-events-contract")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/events-contract", featurePath)
+	writeFileAndCommit(t, featurePath, "events.txt", "events\n", "events feature")
+	submitBranch(t, featurePath)
+	runOnce(t, repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "20"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) == 0 {
+		t.Fatalf("expected lifecycle json lines")
+	}
+
+	foundIntegrated := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(line), &payload); err != nil {
+			t.Fatalf("Unmarshal line %q: %v", line, err)
+		}
+		for _, key := range []string{"event", "repository_root", "timestamp"} {
+			if _, ok := payload[key]; !ok {
+				t.Fatalf("expected lifecycle key %q in %+v", key, payload)
+			}
+		}
+		if payload["event"] == "integrated" {
+			foundIntegrated = true
+			for _, key := range []string{"branch", "sha", "submission_id"} {
+				if _, ok := payload[key]; !ok {
+					t.Fatalf("expected integrated lifecycle key %q in %+v", key, payload)
+				}
+			}
+		}
+	}
+	if !foundIntegrated {
+		t.Fatalf("expected integrated lifecycle event in %q", stdout.String())
+	}
+}
+
+func TestDaemonJSONLogContractContainsStableFields(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	var stdout bytes.Buffer
+	opts := daemonOptions{
+		repoPath: repoRoot,
+		interval: time.Millisecond,
+		jsonLogs: true,
+		idleExit: true,
+	}
+	if err := runDaemonLoop(context.Background(), opts, &stdout); err != nil {
+		t.Fatalf("runDaemonLoop returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected daemon json log lines, got %q", stdout.String())
+	}
+	for _, line := range lines {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(line), &payload); err != nil {
+			t.Fatalf("Unmarshal line %q: %v", line, err)
+		}
+		for _, key := range []string{"level", "event", "repo", "timestamp"} {
+			if _, ok := payload[key]; !ok {
+				t.Fatalf("expected daemon log key %q in %+v", key, payload)
+			}
+		}
+	}
+}
+
+func TestDaemonProcessesWorkFromBareCloneLinkedWorktree(t *testing.T) {
+	bareDir, worktreePath := createBareCloneWorktree(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", worktreePath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+	featurePath := filepath.Join(t.TempDir(), "bare-feature")
+	runTestCommand(t, worktreePath, "git", "worktree", "add", "-b", "feature/bare-daemon", featurePath)
+	writeFileAndCommit(t, featurePath, "bare.txt", "bare\n", "bare feature")
+	submitBranch(t, featurePath)
+
+	var stdout bytes.Buffer
+	opts := daemonOptions{
+		repoPath:  worktreePath,
+		interval:  time.Millisecond,
+		maxCycles: 1,
+	}
+	if err := runDaemonLoop(context.Background(), opts, &stdout); err != nil {
+		t.Fatalf("runDaemonLoop returned error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(worktreePath, "bare.txt")); err != nil {
+		t.Fatalf("expected bare.txt after daemon integration: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(worktreePath)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	wantBareDir, err := filepath.EvalSymlinks(bareDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(bareDir): %v", err)
+	}
+	if layout.RepositoryRoot != wantBareDir {
+		t.Fatalf("expected bare repository root %q, got %q", wantBareDir, layout.RepositoryRoot)
+	}
+}
+
 func TestDaemonProcessesIntegrationAndPublishWork(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

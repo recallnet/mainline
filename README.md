@@ -141,6 +141,15 @@ path.
 - policy checks, hook coordination, and repo-managed hooks
 - Homebrew, Nix, GitHub release archives, checksums, and release manifests
 
+Recent hardening coverage now explicitly exercises the adoption-critical paths:
+
+- concurrent multi-worktree submit, integrate, and publish flows
+- deleted, moved, relinked, and dirtied source worktrees after submit
+- external protected-branch advancement while queued work waits
+- inherited `pre-push` hook success and failure-plus-retry publish paths
+- JSON contract tests for `status`, lifecycle `events`, and daemon logs
+- bare-repo plus linked-worktree daemon runs
+
 This repo dogfoods that workflow. The repo-local worktree instructions live in
 [.agents/skills/worktree/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/worktree/SKILL.md),
 and the repo-specific guardrails live in

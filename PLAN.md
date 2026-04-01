@@ -914,6 +914,11 @@ Must-have scenarios:
 - branch blocks on conflict and leaves protected branch unchanged
 - upstream advances before integration and queue syncs correctly
 - protected branch advances twice before publish and only latest matters
+- concurrent multi-worktree actors preserve queue ordering
+- deleted, moved, relinked, or dirtied source worktrees fail safely after submit
+- inherited pre-push hooks fire on publish success and failure-plus-retry flows
+- `status --json`, lifecycle `events --json`, and daemon JSON logs keep a pinned contract
+- bare-repo plus linked-worktree daemon cycles still operate after temp-dir relocation
 
 ### Soak Tests
 

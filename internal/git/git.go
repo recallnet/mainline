@@ -232,6 +232,13 @@ func (e Engine) ListWorktrees() ([]Worktree, error) {
 
 	worktrees := make([]Worktree, 0, len(worktreePaths))
 	for _, wtPath := range worktreePaths {
+		if _, err := os.Stat(wtPath); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return nil, err
+		}
+
 		repo, err := openRepository(wtPath)
 		if err != nil {
 			return nil, err

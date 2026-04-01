@@ -443,6 +443,117 @@ func TestPublishRespectsHookPolicyBypassingPrePushHook(t *testing.T) {
 	}
 }
 
+func TestRunOncePublishesWithInheritedPrePushHook(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	hookMarker := filepath.Join(t.TempDir(), "pre-push-ran")
+	hookPath := filepath.Join(hooksDirForRepo(t, repoRoot), "pre-push")
+	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\necho hook > "+hookMarker+"\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	if cfg.Repo.HookPolicy != "inherit" {
+		t.Fatalf("expected default hook policy inherit, got %+v", cfg.Repo.HookPolicy)
+	}
+
+	writeFileAndCommit(t, repoRoot, "inherit.txt", "inherit\n", "main change inherit")
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	if payload, err := os.ReadFile(hookMarker); err != nil || strings.TrimSpace(string(payload)) != "hook" {
+		t.Fatalf("expected inherited pre-push hook marker, got %q err=%v", string(payload), err)
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+}
+
+func TestPublishHookFailureThenManualRetrySucceeds(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	gateFlag := filepath.Join(t.TempDir(), "allow-push")
+	hookPath := filepath.Join(hooksDirForRepo(t, repoRoot), "pre-push")
+	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nif [ ! -f "+gateFlag+" ]; then\n  echo gate failed >&2\n  exit 9\nfi\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	if cfg.Repo.HookPolicy != "inherit" {
+		t.Fatalf("expected default hook policy inherit, got %+v", cfg.Repo.HookPolicy)
+	}
+
+	writeFileAndCommit(t, repoRoot, "retry-hook.txt", "retry hook\n", "main change retry hook")
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+
+	result, err := runOneCycle(repoRoot)
+	if err != nil {
+		t.Fatalf("first runOneCycle returned error: %v", err)
+	}
+	if !strings.Contains(result, "Failed publish request") {
+		t.Fatalf("expected failed publish output, got %q", result)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) != 1 || requests[0].Status != "failed" {
+		t.Fatalf("expected failed publish request, got %+v", requests)
+	}
+
+	if err := os.WriteFile(gateFlag, []byte("ok\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(gateFlag): %v", err)
+	}
+
+	var retryOut bytes.Buffer
+	var retryErr bytes.Buffer
+	if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requests[0].ID, 10)}, &retryOut, &retryErr); err != nil {
+		t.Fatalf("runRetry returned error: %v", err)
+	}
+
+	result, err = runOneCycle(repoRoot)
+	if err != nil {
+		t.Fatalf("second runOneCycle returned error: %v", err)
+	}
+	if !strings.Contains(result, "Published request") {
+		t.Fatalf("expected publish success output after retry, got %q", result)
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+	requests, err = store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if requests[0].Status != "succeeded" {
+		t.Fatalf("expected retried publish request to succeed, got %+v", requests[0])
+	}
+}
+
 func TestRunOnceCanPreemptInFlightPublishForNewerTarget(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
