@@ -40,6 +40,7 @@ type lifecycleEvent struct {
 	SourceWorktree  string   `json:"source_worktree,omitempty"`
 	Status          string   `json:"status,omitempty"`
 	Error           string   `json:"error,omitempty"`
+	BlockedReason   string   `json:"blocked_reason,omitempty"`
 	ConflictFiles   []string `json:"conflict_files,omitempty"`
 	ProtectedTipSHA string   `json:"protected_tip_sha,omitempty"`
 	RetryHint       string   `json:"retry_hint,omitempty"`
@@ -261,6 +262,7 @@ func (e *lifecycleEmitter) project(event state.EventRecord) (lifecycleEvent, boo
 		record.Event = "blocked"
 		record.Status = "blocked"
 		record.Error = getString("error")
+		record.BlockedReason = getString("blocked_reason")
 		record.Branch = getRef()
 		record.SourceWorktree = getString("source_worktree")
 		record.ConflictFiles = getStringSlice("conflict_files")

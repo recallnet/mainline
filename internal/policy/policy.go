@@ -65,7 +65,7 @@ func DefaultConfig() Config {
 		Checks: ChecksConfig{
 			PreIntegrate:   []string{},
 			PrePublish:     []string{},
-			CommandTimeout: "30s",
+			CommandTimeout: "5m",
 		},
 	}
 }

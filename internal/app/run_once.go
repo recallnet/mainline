@@ -219,8 +219,30 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 			return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, fmt.Errorf("detached worktree %s moved from submitted SHA %s to %s; resubmit the commit", submission.SourceWorktree, submission.SourceSHA, headSHA))
 		}
 	}
+	protectedTipSHA, err := mainEngine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+	if err != nil {
+		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, err)
+	}
 
 	if err := runConfiguredChecks(cfg.Checks.PreIntegrate, submission.SourceWorktree, cfg.Checks.CommandTimeout); err != nil {
+		if timeoutErr, ok := isCheckTimeoutError(err); ok {
+			return blockIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult,
+				fmt.Errorf("check_timeout: pre-integrate check timed out: %w", timeoutErr),
+				map[string]any{
+					"branch":             submissionDisplayRef(submission),
+					"source_ref":         submission.SourceRef,
+					"ref_kind":           submission.RefKind,
+					"blocked_reason":     "check_timeout",
+					"protected_tip_sha":  protectedTipSHA,
+					"retry_hint":         "rerun-after-fixing-hanging-check",
+					"retry_recommended":  false,
+					"source_worktree":    submission.SourceWorktree,
+					"protected_branch":   cfg.Repo.ProtectedBranch,
+					"protected_upstream": syncResult.Upstream,
+					"timeout":            timeoutErr.EffectiveTimeout.String(),
+				},
+			)
+		}
 		return blockIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, fmt.Errorf("pre-integrate checks failed: %w", err))
 	}
 
@@ -229,10 +251,6 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 	}
 	if err := sourceEngine.RebaseCurrentBranch(submission.SourceWorktree, cfg.Repo.ProtectedBranch); err != nil {
 		if errors.Is(err, git.ErrRebaseConflict) {
-			protectedTipSHA, shaErr := mainEngine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
-			if shaErr != nil {
-				return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, shaErr)
-			}
 			conflictFiles, conflictErr := sourceEngine.ConflictedFiles(submission.SourceWorktree)
 			if conflictErr != nil {
 				return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, conflictErr)

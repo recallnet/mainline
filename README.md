@@ -182,6 +182,8 @@ If `origin/main` advances before your branch reaches the front of the queue, tha
 
 If a repo sets `[integration].MaxQueueDepth`, `mq submit` will reject new queued work once that many submissions are already waiting. Use `mq submit --check-only --json` when an agent wants a cheap preflight without consuming queue capacity.
 
+`[checks].CommandTimeout` is per-repo and now defaults to `5m`, which is a better fit for real pre-integrate gates. `mainline` still enforces a hard ceiling of `15m`, and a hung pre-integrate check blocks the submission with `blocked_reason = "check_timeout"` instead of letting one branch freeze the queue forever.
+
 Observe and control:
 
 ```bash

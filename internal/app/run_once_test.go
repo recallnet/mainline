@@ -515,6 +515,68 @@ func TestRunOncePreIntegrateChecksBlockBeforeProtectedBranchMutation(t *testing.
 	}
 }
 
+func TestRunOncePreIntegrateTimeoutBlocksWithCheckTimeoutReason(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Checks.PreIntegrate = []string{"sleep 1"}
+	cfg.Checks.CommandTimeout = "100ms"
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "configure pre integrate timeout")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-timeout")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/check-timeout", featurePath)
+	writeFileAndCommit(t, featurePath, "timeout.txt", "timeout\n", "timeout feature")
+	submitBranch(t, featurePath)
+
+	protectedBefore := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	output := runOut.String()
+	if !strings.Contains(output, "check_timeout") {
+		t.Fatalf("expected check_timeout output, got %q", output)
+	}
+
+	protectedAfter := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	if protectedBefore != protectedAfter {
+		t.Fatalf("expected protected branch unchanged, got %q then %q", protectedBefore, protectedAfter)
+	}
+
+	report, err := collectStatus(repoRoot, 10)
+	if err != nil {
+		t.Fatalf("collectStatus: %v", err)
+	}
+	if report.LatestSubmission == nil {
+		t.Fatalf("expected latest submission")
+	}
+	if report.LatestSubmission.Status != "blocked" {
+		t.Fatalf("expected blocked submission, got %+v", report.LatestSubmission)
+	}
+	if report.LatestSubmission.BlockedReason != "check_timeout" {
+		t.Fatalf("expected blocked reason check_timeout, got %+v", report.LatestSubmission)
+	}
+	if report.LatestSubmission.RetryHint != "rerun-after-fixing-hanging-check" {
+		t.Fatalf("expected timeout retry hint, got %+v", report.LatestSubmission)
+	}
+	if report.LatestSubmission.ProtectedTipSHA != protectedBefore {
+		t.Fatalf("expected protected tip %q, got %+v", protectedBefore, report.LatestSubmission)
+	}
+	if !strings.Contains(report.LatestSubmission.LastError, "check_timeout") {
+		t.Fatalf("expected timeout last error, got %+v", report.LatestSubmission)
+	}
+}
+
 func initRepoForWorker(t *testing.T, repoRoot string) {
 	t.Helper()
 

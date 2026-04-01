@@ -44,6 +44,7 @@ type statusResult struct {
 
 type statusSubmission struct {
 	state.IntegrationSubmission
+	BlockedReason   string   `json:"blocked_reason,omitempty"`
 	ConflictFiles   []string `json:"conflict_files,omitempty"`
 	ProtectedTipSHA string   `json:"protected_tip_sha,omitempty"`
 	RetryHint       string   `json:"retry_hint,omitempty"`
@@ -267,6 +268,7 @@ func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int6
 			if err != nil {
 				return nil, err
 			}
+			item.BlockedReason = details.BlockedReason
 			item.ConflictFiles = details.ConflictFiles
 			item.ProtectedTipSHA = details.ProtectedTipSHA
 			item.RetryHint = details.RetryHint
