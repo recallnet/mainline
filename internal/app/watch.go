@@ -31,8 +31,8 @@ func runWatch(args []string, stdout io.Writer, stderr io.Writer) error {
 Continuously refresh protected-branch and queue state.
 
 Examples:
-  mq watch --repo /path/to/protected-main
-  mq watch --repo /path/to/protected-main --json --interval 1s
+  mq watch --repo /path/to/repo-root
+  mq watch --repo /path/to/repo-root --json --interval 1s
 
 Flags:
 `, currentCLIProgramName()))

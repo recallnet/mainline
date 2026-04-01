@@ -270,7 +270,7 @@ func runRepoShow(args []string, stdout io.Writer, stderr io.Writer) error {
 Show the stored repo config, protected-branch status, and discovered worktrees.
 
 Examples:
-  mq repo show --repo /path/to/protected-main
+  mq repo show --repo /path/to/repo-root
   mq repo show --json
 
 Flags:
@@ -556,7 +556,7 @@ func runRepoAudit(args []string, stdout io.Writer, stderr io.Writer) error {
 List local branches and worktree refs not yet merged into the protected branch.
 
 Examples:
-  mq repo audit --repo /path/to/protected-main
+  mq repo audit --repo /path/to/repo-root
   mq repo audit --json
 
 Flags:
@@ -715,8 +715,8 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 Inspect repo health and optionally apply safe automatic recovery steps.
 
 Examples:
-  mq doctor --repo /path/to/protected-main
-  mq doctor --repo /path/to/protected-main --fix --json
+  mq doctor --repo /path/to/repo-root
+  mq doctor --repo /path/to/repo-root --fix --json
 
 Flags:
 `, currentCLIProgramName()))

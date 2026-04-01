@@ -23,7 +23,7 @@ func runConfigEdit(args []string, stdout io.Writer, stderr io.Writer) error {
 Open the shared repo config, even when invoked from a linked worktree.
 
 Examples:
-  mq config edit --repo /path/to/protected-main
+  mq config edit --repo /path/to/repo-root
   mq config edit --print-path
 
 Flags:

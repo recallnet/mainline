@@ -55,7 +55,7 @@ mainlined --version
 Recommended first-time repo setup after install:
 
 ```bash
-cd /path/to/protected-main
+cd /path/to/repo-root
 mq repo init --repo . --main-worktree .
 git add mainline.toml
 git commit -m "Initialize mainline repo policy"
@@ -166,7 +166,7 @@ of one idle daemon per repo.
 Register each repo once:
 
 ```bash
-cd /path/to/protected-main
+cd /path/to/repo-root
 mq repo init --repo . --main-worktree .
 ```
 

@@ -27,8 +27,8 @@ func runControlAction(action string, args []string, stdout io.Writer, stderr io.
 Operate on exactly one queue item.
 
 Examples:
-  mq %s --repo /path/to/protected-main --submission 17
-  mq %s --repo /path/to/protected-main --publish 4 --json
+  mq %s --repo /path/to/repo-root --submission 17
+  mq %s --repo /path/to/repo-root --publish 4 --json
 
 Flags:
 `, currentCLIProgramName(), action, action, action))

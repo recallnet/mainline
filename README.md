@@ -94,7 +94,7 @@ The daemon path should feel like this:
 
 ```bash
 mainlined --all --interval 2s --json
-mq events --repo /path/to/protected-main --follow --json --lifecycle
+mq events --repo /path/to/repo-root --follow --json --lifecycle
 ```
 
 That is the product: one machine, one protected branch, many worktrees, one
@@ -197,7 +197,7 @@ Homebrew and Nix details are in
 Recommended first-time repo setup after install:
 
 ```bash
-cd /path/to/protected-main
+cd /path/to/repo-root
 mq repo init --repo . --main-worktree .
 git add mainline.toml
 git commit -m "Initialize mainline repo policy"
@@ -222,11 +222,11 @@ checkout is already clean and on the protected branch.
 Setup:
 
 ```bash
-mq repo init --repo /path/to/protected-main --main-worktree /path/to/protected-main
-mq repo root --repo /path/to/protected-main --json
-mq repo audit --repo /path/to/protected-main --json
-mq config edit --repo /path/to/protected-main
-mq doctor --repo /path/to/protected-main --fix --json
+mq repo init --repo /path/to/repo-root --main-worktree /path/to/repo-root
+mq repo root --repo /path/to/repo-root --json
+mq repo audit --repo /path/to/repo-root --json
+mq config edit --repo /path/to/repo-root
+mq doctor --repo /path/to/repo-root --fix --json
 ```
 
 Submit and land:
@@ -244,13 +244,13 @@ mq land --json --timeout 30m
 Operate and observe:
 
 ```bash
-mq status --repo /path/to/protected-main --json
-mq repo audit --repo /path/to/protected-main --json
-mq watch --repo /path/to/protected-main
-mq events --repo /path/to/protected-main --follow --json --lifecycle
+mq status --repo /path/to/repo-root --json
+mq repo audit --repo /path/to/repo-root --json
+mq watch --repo /path/to/repo-root
+mq events --repo /path/to/repo-root --follow --json --lifecycle
 mainlined --all --json
-mq retry --repo /path/to/protected-main --submission 17
-mq cancel --repo /path/to/protected-main --publish 4
+mq retry --repo /path/to/repo-root --submission 17
+mq cancel --repo /path/to/repo-root --publish 4
 ```
 
 ## Repository Layouts

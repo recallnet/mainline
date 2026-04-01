@@ -7,8 +7,6 @@ instructions.
 
 - Treat `/Users/devrel/Projects/recallnet/mainline` as the canonical protected
   `main` checkout for this repo.
-- Treat `/Users/devrel/Projects/_wt/recallnet/mainline/protected-main` as a
-  protected mirror, not as the human-facing source of truth.
 - The root checkout must stay clean and on branch `main`. Humans inspect it,
   wrappers build from it, and docs refer to it.
 - Do not use native mutating `git` commands from that worktree while on branch
@@ -28,7 +26,7 @@ instructions.
   - capture `submission_id` from JSON when a wrapper needs durable tracking
   - `mq wait --submission <id> --for landed --json --timeout 30m` when the
     wrapper needs integrate-plus-publish confirmation by id
-  - `mq repo audit --repo /Users/devrel/Projects/_wt/recallnet/mainline/protected-main --json`
+  - `mq repo audit --repo /Users/devrel/Projects/recallnet/mainline --json`
 - Controllers and factory-style daemons should prefer:
   - `mq land --json --timeout 30m`
   - or one machine-global `mainlined --all --json`
@@ -50,7 +48,7 @@ instructions.
   documented contracts in
   [docs/JSON_CONTRACTS.md](/Users/devrel/Projects/recallnet/mainline/docs/JSON_CONTRACTS.md).
 - If a branch is claimed to be landed, verify it with
-  `mq repo audit --repo /Users/devrel/Projects/_wt/recallnet/mainline/protected-main --json`.
+  `mq repo audit --repo /Users/devrel/Projects/recallnet/mainline --json`.
   An empty `unmerged` list is the source of truth.
 
 ## Intent

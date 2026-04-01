@@ -123,16 +123,16 @@ Turbo paths:
   Controller or factory daemon:
     %s land --json --timeout 30m
     %s wait --submission 42 --for landed --json --timeout 30m
-    %s events --follow --json --lifecycle --repo /path/to/protected-main
+    %s events --follow --json --lifecycle --repo /path/to/repo-root
     mainlined --all --json --interval 2s
 
   Operator:
-    %s status --repo /path/to/protected-main --json
-    %s doctor --fix --repo /path/to/protected-main --json
+    %s status --repo /path/to/repo-root --json
+    %s doctor --fix --repo /path/to/repo-root --json
 
 Initialize once per repo:
-  %s repo init --repo /path/to/protected-main --main-worktree /path/to/protected-main
-  %s repo root --repo /path/to/protected-main --json
+  %s repo init --repo /path/to/repo-root --main-worktree /path/to/repo-root
+  %s repo root --repo /path/to/repo-root --json
   git add mainline.toml && git commit -m "Initialize mainline repo policy"
   ./scripts/install-hooks.sh
 

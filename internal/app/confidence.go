@@ -86,7 +86,7 @@ Summarize live repo health, evidence files, and promotion gates for the current
 build.
 
 Examples:
-  mq confidence --repo /path/to/protected-main --json
+  mq confidence --repo /path/to/repo-root --json
   mq confidence --soak-summary artifacts/soak/latest/summary.json --json
 
 Flags:

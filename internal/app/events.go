@@ -64,8 +64,8 @@ Replay or follow durable queue events. Add --lifecycle for stable branch-level
 records that long-lived agents and daemons can consume directly.
 
 Examples:
-  mq events --repo /path/to/protected-main --follow --json --lifecycle
-  mq logs --repo /path/to/protected-main --limit 50
+  mq events --repo /path/to/repo-root --follow --json --lifecycle
+  mq logs --repo /path/to/repo-root --limit 50
 
 Flags:
 `, commandName))

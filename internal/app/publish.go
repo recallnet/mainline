@@ -31,8 +31,8 @@ func runPublish(args []string, stdout io.Writer, stderr io.Writer) error {
 Queue publish of the current protected-branch tip.
 
 Examples:
-  mq publish --repo /path/to/protected-main
-  mq publish --repo /path/to/protected-main --json
+  mq publish --repo /path/to/repo-root
+  mq publish --repo /path/to/repo-root --json
 
 Flags:
 `, currentCLIProgramName()))

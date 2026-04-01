@@ -192,13 +192,13 @@ Submission expectations:
 Use `mq` instead of manual merge:
 
 ```bash
-mq run-once --repo ~/Projects/_wt/recallnet/mainline/protected-main
+mq run-once --repo ~/Projects/recallnet/mainline
 ```
 
 When publish behavior is part of the dogfood target:
 
 ```bash
-mq publish --repo ~/Projects/_wt/recallnet/mainline/protected-main
+mq publish --repo ~/Projects/recallnet/mainline
 ```
 
 For machine-wide steady state, prefer one global daemon instead of one daemon
@@ -211,9 +211,9 @@ mainlined --all --json
 Recommended verification loop:
 
 ```bash
-mq status --repo ~/Projects/_wt/recallnet/mainline/protected-main --json
-mq repo audit --repo ~/Projects/_wt/recallnet/mainline/protected-main --json
-mq events --repo ~/Projects/_wt/recallnet/mainline/protected-main --follow --json --lifecycle
+mq status --repo ~/Projects/recallnet/mainline --json
+mq repo audit --repo ~/Projects/recallnet/mainline --json
+mq events --repo ~/Projects/recallnet/mainline --follow --json --lifecycle
 ```
 
 Expected:

@@ -75,7 +75,7 @@ events.
 
 Examples:
   mq status --json
-  mq status --repo /path/to/protected-main --json --events 10
+  mq status --repo /path/to/repo-root --json --events 10
 
 Flags:
 `, currentCLIProgramName()))
