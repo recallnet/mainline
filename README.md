@@ -145,7 +145,7 @@ path.
 Recent hardening coverage now explicitly exercises the adoption-critical paths:
 
 - concurrent multi-worktree submit, integrate, and publish flows
-- deleted, moved, relinked, and dirtied source worktrees after submit
+- deleted, moved, and dirtied source worktrees after submit
 - queued branch head drift after submit
 - external protected-branch advancement while queued work waits
 - inherited `pre-push` hook success and failure-plus-retry publish paths
