@@ -393,6 +393,51 @@ func TestSubmitStoresRequestedPriority(t *testing.T) {
 	}
 }
 
+func TestSubmitStoresAllowNewerHead(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-allow-newer")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/allow-newer", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--allow-newer-head"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.AllowNewerHead {
+		t.Fatalf("expected allow_newer_head in json output, got %+v", result)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(featurePath)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if len(submissions) != 1 || !submissions[0].AllowNewerHead {
+		t.Fatalf("expected persisted allow_newer_head, got %+v", submissions)
+	}
+}
+
 func TestSubmitRejectsUnknownPriority(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	featurePath := filepath.Join(t.TempDir(), "feature-bad-priority")

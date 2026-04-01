@@ -20,6 +20,7 @@ type landResult struct {
 	RefKind          string `json:"ref_kind,omitempty"`
 	SourceWorktree   string `json:"source_worktree"`
 	SourceSHA        string `json:"source_sha"`
+	AllowNewerHead   bool   `json:"allow_newer_head,omitempty"`
 	Priority         string `json:"priority,omitempty"`
 	RepositoryRoot   string `json:"repository_root"`
 	MainWorktree     string `json:"main_worktree"`
@@ -46,6 +47,7 @@ final outcome out.
 
 Examples:
   mq land --json --timeout 30m
+  mq land --allow-newer-head --json --timeout 30m
   mq land --repo /path/to/topic-worktree --json
 
 Flags:
@@ -60,6 +62,7 @@ Flags:
 	var asJSON bool
 	var timeout time.Duration
 	var pollInterval time.Duration
+	var allowNewerHead bool
 
 	fs.StringVar(&repoPath, "repo", ".", "source worktree path")
 	fs.StringVar(&branch, "branch", "", "branch to submit")
@@ -67,6 +70,7 @@ Flags:
 	fs.StringVar(&worktreePath, "worktree", "", "source worktree path override")
 	fs.StringVar(&requestedBy, "requested-by", "", "submitter identity")
 	fs.StringVar(&priority, "priority", submissionPriorityNormal, "submission priority: high, normal, or low")
+	fs.BoolVar(&allowNewerHead, "allow-newer-head", false, "allow a queued branch head to advance before integration if it remains a descendant of the submitted sha")
 	fs.BoolVar(&asJSON, "json", false, "output json")
 	fs.DurationVar(&timeout, "timeout", 30*time.Minute, "maximum time to wait for integrate+publish")
 	fs.DurationVar(&pollInterval, "poll-interval", 500*time.Millisecond, "wait interval between worker checks")
@@ -95,6 +99,7 @@ Flags:
 		worktreePath: worktreePath,
 		requestedBy:  requestedBy,
 		priority:     priority,
+		allowNewer:   allowNewerHead,
 	})
 	if err != nil {
 		return err
@@ -177,6 +182,7 @@ func waitForLandedPublish(queued queuedSubmission, timeout time.Duration, pollIn
 		RefKind:          queued.Submission.RefKind,
 		SourceWorktree:   queued.Submission.SourceWorktree,
 		SourceSHA:        queued.Submission.SourceSHA,
+		AllowNewerHead:   queued.Submission.AllowNewerHead,
 		Priority:         queued.Submission.Priority,
 		RepositoryRoot:   queued.RepoRoot,
 		MainWorktree:     queued.Config.Repo.MainWorktree,

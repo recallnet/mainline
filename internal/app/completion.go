@@ -83,10 +83,10 @@ _mainline_completions()
 
   case "${words[1]}" in
     land)
-      COMPREPLY=( $(compgen -W "--repo --branch --sha --worktree --requested-by --priority --json --timeout --poll-interval" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --timeout --poll-interval" -- "$cur") )
       ;;
     submit)
-      COMPREPLY=( $(compgen -W "--repo --branch --sha --worktree --requested-by --priority --json --check --check-only --wait --timeout --poll-interval" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --check --check-only --wait --timeout --poll-interval" -- "$cur") )
       ;;
     status)
       COMPREPLY=( $(compgen -W "--repo --json --events" -- "$cur") )
@@ -187,11 +187,11 @@ _mainline() {
       return
       ;;
     land)
-      _arguments '--repo[source worktree path]:path:_files -/' '--branch[branch to submit]:branch:' '--sha[detached commit to submit]:sha:' '--worktree[source worktree override]:path:_files -/' '--requested-by[submitter identity]:identity:' '--priority[submission priority]:priority:(high normal low)' '--json[json output]' '--timeout[maximum wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
+      _arguments '--repo[source worktree path]:path:_files -/' '--branch[branch to submit]:branch:' '--sha[detached commit to submit]:sha:' '--worktree[source worktree override]:path:_files -/' '--requested-by[submitter identity]:identity:' '--priority[submission priority]:priority:(high normal low)' '--allow-newer-head[allow the queued branch tip to advance before integration if it stays descended from the submitted sha]' '--json[json output]' '--timeout[maximum wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
       return
       ;;
     submit)
-      _arguments '--repo[repository path]:path:_files -/' '--branch[branch name]:branch:' '--sha[detached commit to submit]:sha:' '--worktree[source worktree]:path:_files -/' '--requested-by[submitter identity]:identity:' '--priority[submission priority]:priority:(high normal low)' '--json[json output]' '--check[validate submission without queueing]' '--check-only[validate submission without queueing]' '--wait[wait for the submission to integrate]' '--timeout[maximum integration wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
+      _arguments '--repo[repository path]:path:_files -/' '--branch[branch name]:branch:' '--sha[detached commit to submit]:sha:' '--worktree[source worktree]:path:_files -/' '--requested-by[submitter identity]:identity:' '--priority[submission priority]:priority:(high normal low)' '--allow-newer-head[allow the queued branch tip to advance before integration if it stays descended from the submitted sha]' '--json[json output]' '--check[validate submission without queueing]' '--check-only[validate submission without queueing]' '--wait[wait for the submission to integrate]' '--timeout[maximum integration wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
       return
       ;;
     status)
@@ -307,6 +307,8 @@ complete -c mainline -n "__fish_seen_subcommand_from land" -l requested-by
 complete -c mq -n "__fish_seen_subcommand_from land" -l requested-by
 complete -c mainline -n "__fish_seen_subcommand_from land" -l priority
 complete -c mq -n "__fish_seen_subcommand_from land" -l priority
+complete -c mainline -n "__fish_seen_subcommand_from land" -l allow-newer-head
+complete -c mq -n "__fish_seen_subcommand_from land" -l allow-newer-head
 complete -c mainline -n "__fish_seen_subcommand_from land" -l json
 complete -c mq -n "__fish_seen_subcommand_from land" -l json
 complete -c mainline -n "__fish_seen_subcommand_from land" -l timeout
@@ -323,6 +325,8 @@ complete -c mainline -n "__fish_seen_subcommand_from submit" -l requested-by
 complete -c mq -n "__fish_seen_subcommand_from submit" -l requested-by
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l priority
 complete -c mq -n "__fish_seen_subcommand_from submit" -l priority
+complete -c mainline -n "__fish_seen_subcommand_from submit" -l allow-newer-head
+complete -c mq -n "__fish_seen_subcommand_from submit" -l allow-newer-head
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l json
 complete -c mq -n "__fish_seen_subcommand_from submit" -l json
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l check

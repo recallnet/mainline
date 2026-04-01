@@ -298,7 +298,9 @@ MVP checks:
 - worktree clean
 - protected branch worktree clean
 - branch not already integrated
-- branch HEAD still matches submitted SHA unless `--allow-newer-head` is set
+- branch HEAD still matches submitted SHA unless `--allow-newer-head` is set;
+  when that flag is set, newer queued branch heads are allowed only if the new
+  tip is still a descendant of the submitted SHA
 
 Phase 2 checks:
 

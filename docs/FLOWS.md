@@ -98,6 +98,17 @@ cd /path/to/topic-worktree
 mq submit --wait --timeout 10m --json
 ```
 
+If a factory keeps appending commits to the same queued branch and wants the
+newest descendant tip instead of a hard failure on head drift, submit with:
+
+```bash
+cd /path/to/topic-worktree
+mq submit --allow-newer-head --wait --timeout 10m --json
+```
+
+That only permits forward movement. If the queued branch rewinds or moves to a
+non-descendant tip, `mq` still fails the submission and asks for a resubmit.
+
 Exit codes:
 
 - `0`: integrated

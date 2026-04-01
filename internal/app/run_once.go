@@ -222,7 +222,16 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 			return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, fmt.Errorf("resolve branch head for %q: %w", submission.SourceRef, err))
 		}
 		if headSHA != submission.SourceSHA {
-			return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, fmt.Errorf("branch %q moved from submitted SHA %s to %s; resubmit the branch", submission.SourceRef, submission.SourceSHA, headSHA))
+			if !submission.AllowNewerHead {
+				return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, fmt.Errorf("branch %q moved from submitted SHA %s to %s; resubmit the branch or submit with --allow-newer-head", submission.SourceRef, submission.SourceSHA, headSHA))
+			}
+			descends, descendsErr := sourceEngine.IsAncestor(submission.SourceSHA, headSHA)
+			if descendsErr != nil {
+				return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, descendsErr)
+			}
+			if !descends {
+				return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, fmt.Errorf("branch %q moved from submitted SHA %s to non-descendant SHA %s; resubmit the branch", submission.SourceRef, submission.SourceSHA, headSHA))
+			}
 		}
 	} else {
 		headSHA = worktree.HeadSHA

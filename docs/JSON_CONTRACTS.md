@@ -40,6 +40,8 @@ Optional top-level keys:
 - `latest_publish`
 - `active_submissions`
 - `active_publishes`
+- `integration_worker`
+- `publish_worker`
 
 `protected_upstream` is a `git.BranchStatus` object with:
 
@@ -57,10 +59,21 @@ upstream ref, not boolean-like drift flags.
 `latest_submission` and entries in `active_submissions` extend the durable
 submission record with optional blocked-state diagnostics:
 
+- `allow_newer_head`
 - `blocked_reason`
 - `conflict_files`
 - `protected_tip_sha`
 - `retry_hint`
+
+`integration_worker` and `publish_worker` mirror the active lock metadata when a
+worker is currently holding that lease:
+
+- `domain`
+- `repo_root`
+- `owner`
+- `request_id`
+- `pid`
+- `created_at`
 
 ## `mq events --json`
 

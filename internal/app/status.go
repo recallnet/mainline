@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -39,6 +40,8 @@ type statusResult struct {
 	LatestPublish      *state.PublishRequest  `json:"latest_publish,omitempty"`
 	ActiveSubmissions  []statusSubmission     `json:"active_submissions,omitempty"`
 	ActivePublishes    []state.PublishRequest `json:"active_publishes,omitempty"`
+	IntegrationWorker  *state.LeaseMetadata   `json:"integration_worker,omitempty"`
+	PublishWorker      *state.LeaseMetadata   `json:"publish_worker,omitempty"`
 	RecentEvents       []state.EventRecord    `json:"recent_events"`
 }
 
@@ -163,6 +166,13 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		ActivePublishes:    activePublishes(requests),
 		RecentEvents:       events,
 	}
+	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
+	if metadata, ok := readActiveLease(lockManager, state.IntegrationLock); ok {
+		result.IntegrationWorker = &metadata
+	}
+	if metadata, ok := readActiveLease(lockManager, state.PublishLock); ok {
+		result.PublishWorker = &metadata
+	}
 	if len(enrichedSubmissions) > 0 {
 		latest := enrichedSubmissions[len(enrichedSubmissions)-1]
 		result.LatestSubmission = &latest
@@ -231,6 +241,22 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 	} else {
 		fmt.Fprintln(stdout, "Latest publish: none")
 	}
+	if result.IntegrationWorker != nil {
+		fmt.Fprintf(stdout, "Integration worker: owner=%s request=%d pid=%d started=%s\n",
+			result.IntegrationWorker.Owner,
+			result.IntegrationWorker.RequestID,
+			result.IntegrationWorker.PID,
+			result.IntegrationWorker.CreatedAt.UTC().Format(time.RFC3339),
+		)
+	}
+	if result.PublishWorker != nil {
+		fmt.Fprintf(stdout, "Publish worker: owner=%s request=%d pid=%d started=%s\n",
+			result.PublishWorker.Owner,
+			result.PublishWorker.RequestID,
+			result.PublishWorker.PID,
+			result.PublishWorker.CreatedAt.UTC().Format(time.RFC3339),
+		)
+	}
 	if len(result.ActiveSubmissions) > 0 {
 		fmt.Fprintln(stdout, "Active submissions:")
 		for _, submission := range result.ActiveSubmissions {
@@ -258,6 +284,17 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 	}
 
 	return nil
+}
+
+func readActiveLease(lockManager state.LockManager, domain string) (state.LeaseMetadata, bool) {
+	metadata, err := lockManager.Metadata(domain)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return state.LeaseMetadata{}, false
+		}
+		return state.LeaseMetadata{}, false
+	}
+	return metadata, true
 }
 
 func activeSubmissions(submissions []statusSubmission) []statusSubmission {

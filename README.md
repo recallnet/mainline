@@ -159,6 +159,7 @@ and the repo-specific guardrails live in
 [AGENTS.md](/Users/devrel/Projects/recallnet/mainline/AGENTS.md).
 Machine-readable JSON contracts and their compatibility policy are documented in
 [JSON_CONTRACTS.md](/Users/devrel/Projects/recallnet/mainline/docs/JSON_CONTRACTS.md).
+That document, not the internal Go structs, is the public automation contract.
 
 ## Install
 
@@ -212,6 +213,7 @@ Submit and land:
 ```bash
 cd /path/to/topic-worktree
 mq submit --check-only --json
+mq submit --allow-newer-head --wait --timeout 15m --json
 mq submit --wait --timeout 15m --json
 mq land --json --timeout 30m
 ```

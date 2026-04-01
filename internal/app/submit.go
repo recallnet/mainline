@@ -39,6 +39,7 @@ type submitOptions struct {
 	requestedBy  string
 	priority     string
 	checkOnly    bool
+	allowNewer   bool
 }
 
 type preparedSubmission struct {
@@ -51,6 +52,7 @@ type preparedSubmission struct {
 	RefKind      string
 	WorktreePath string
 	SourceSHA    string
+	AllowNewer   bool
 	RequestedBy  string
 	Priority     string
 	Duplicate    *state.IntegrationSubmission
@@ -76,6 +78,7 @@ type submitResult struct {
 	RefKind          string `json:"ref_kind,omitempty"`
 	SourceWorktree   string `json:"source_worktree,omitempty"`
 	SourceSHA        string `json:"source_sha,omitempty"`
+	AllowNewerHead   bool   `json:"allow_newer_head,omitempty"`
 	RepositoryRoot   string `json:"repository_root,omitempty"`
 	RequestedBy      string `json:"requested_by,omitempty"`
 	Priority         string `json:"priority,omitempty"`
@@ -105,6 +108,7 @@ Turbo agent flow:
 
 Examples:
   mq submit
+  mq submit --allow-newer-head --wait --timeout 15m --json
   mq submit --wait --timeout 15m --json
   mq submit --sha <commit> --json
 
@@ -123,6 +127,7 @@ Flags:
 	var waitForResult bool
 	var timeout time.Duration
 	var pollInterval time.Duration
+	var allowNewerHead bool
 
 	fs.StringVar(&repoPath, "repo", ".", "repository path")
 	fs.StringVar(&branch, "branch", "", "branch to submit")
@@ -133,6 +138,7 @@ Flags:
 	fs.BoolVar(&asJSON, "json", false, "output json")
 	fs.BoolVar(&checkOnly, "check", false, "validate submission without queueing it")
 	fs.BoolVar(&checkOnlyAlias, "check-only", false, "validate submission without queueing it")
+	fs.BoolVar(&allowNewerHead, "allow-newer-head", false, "allow a queued branch head to advance before integration if it remains a descendant of the submitted sha")
 	fs.BoolVar(&waitForResult, "wait", false, "wait for the submission to integrate")
 	fs.DurationVar(&timeout, "timeout", 10*time.Minute, "maximum time to wait for integration")
 	fs.DurationVar(&pollInterval, "poll-interval", 500*time.Millisecond, "wait interval between worker checks")
@@ -158,19 +164,21 @@ Flags:
 		requestedBy:  requestedBy,
 		priority:     priority,
 		checkOnly:    checkOnly,
+		allowNewer:   allowNewerHead,
 	}
 	prepared, err := prepareSubmission(opts)
 	if err != nil {
 		if asJSON {
 			return writeSubmitJSON(stdout, submitResult{
-				OK:        false,
-				Checked:   true,
-				Queued:    false,
-				Branch:    preparedSubmissionDisplayRef(prepared),
-				SourceRef: prepared.SourceRef,
-				RefKind:   prepared.RefKind,
-				ErrorCode: submitErrorCode(err),
-				Error:     err.Error(),
+				OK:             false,
+				Checked:        true,
+				Queued:         false,
+				Branch:         preparedSubmissionDisplayRef(prepared),
+				SourceRef:      prepared.SourceRef,
+				RefKind:        prepared.RefKind,
+				AllowNewerHead: prepared.AllowNewer,
+				ErrorCode:      submitErrorCode(err),
+				Error:          err.Error(),
 			}, err)
 		}
 		return err
@@ -186,6 +194,7 @@ Flags:
 			RefKind:        prepared.RefKind,
 			SourceWorktree: prepared.WorktreePath,
 			SourceSHA:      prepared.SourceSHA,
+			AllowNewerHead: prepared.AllowNewer,
 			RepositoryRoot: prepared.RepoRoot,
 			RequestedBy:    prepared.RequestedBy,
 			Priority:       prepared.Priority,
@@ -212,6 +221,7 @@ Flags:
 				RefKind:        prepared.RefKind,
 				SourceWorktree: prepared.WorktreePath,
 				SourceSHA:      prepared.SourceSHA,
+				AllowNewerHead: prepared.AllowNewer,
 				RepositoryRoot: prepared.RepoRoot,
 				RequestedBy:    prepared.RequestedBy,
 				Priority:       prepared.Priority,
@@ -233,6 +243,7 @@ Flags:
 		RefKind:          queued.Submission.RefKind,
 		SourceWorktree:   queued.Submission.SourceWorktree,
 		SourceSHA:        queued.Submission.SourceSHA,
+		AllowNewerHead:   queued.Submission.AllowNewerHead,
 		RepositoryRoot:   queued.RepoRoot,
 		RequestedBy:      queued.Submission.RequestedBy,
 		Priority:         queued.Submission.Priority,
@@ -522,6 +533,7 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 					RefKind:      refKind,
 					WorktreePath: worktree.Path,
 					SourceSHA:    headSHA,
+					AllowNewer:   opts.allowNewer,
 					RequestedBy:  requestedBy,
 					Priority:     opts.priority,
 					Duplicate:    &dup,
@@ -579,6 +591,7 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		RefKind:      refKind,
 		WorktreePath: worktree.Path,
 		SourceSHA:    headSHA,
+		AllowNewer:   opts.allowNewer,
 		RequestedBy:  requestedBy,
 		Priority:     opts.priority,
 	}, nil
@@ -641,6 +654,7 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 			"ref_kind":          prepared.RefKind,
 			"source_worktree":   prepared.WorktreePath,
 			"source_sha":        prepared.SourceSHA,
+			"allow_newer_head":  fmt.Sprintf("%t", prepared.AllowNewer),
 			"requested_by":      prepared.RequestedBy,
 			"previous_priority": prepared.Duplicate.Priority,
 			"updated_priority":  prepared.Priority,
@@ -675,6 +689,7 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 		RefKind:        prepared.RefKind,
 		SourceWorktree: prepared.WorktreePath,
 		SourceSHA:      prepared.SourceSHA,
+		AllowNewerHead: prepared.AllowNewer,
 		RequestedBy:    prepared.RequestedBy,
 		Priority:       prepared.Priority,
 		Status:         "queued",
@@ -684,13 +699,14 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 	}
 
 	payload, err := json.Marshal(map[string]string{
-		"branch":          prepared.Branch,
-		"source_ref":      prepared.SourceRef,
-		"ref_kind":        prepared.RefKind,
-		"source_worktree": prepared.WorktreePath,
-		"source_sha":      prepared.SourceSHA,
-		"requested_by":    prepared.RequestedBy,
-		"priority":        prepared.Priority,
+		"branch":           prepared.Branch,
+		"source_ref":       prepared.SourceRef,
+		"ref_kind":         prepared.RefKind,
+		"source_worktree":  prepared.WorktreePath,
+		"source_sha":       prepared.SourceSHA,
+		"allow_newer_head": fmt.Sprintf("%t", prepared.AllowNewer),
+		"requested_by":     prepared.RequestedBy,
+		"priority":         prepared.Priority,
 	})
 	if err != nil {
 		return queuedSubmission{}, err
