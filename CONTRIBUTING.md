@@ -24,6 +24,8 @@ When the command surface changes, update:
 - `README.md`
 - `PLAN.md` or `SPEC.md` if the operating model changed
 - flow or install docs under `docs/` if operator behavior changed
+- `AGENTS.md` and repo-local skills if agent workflow changed
+- `docs/JSON_CONTRACTS.md` plus contract tests if machine-readable output changed
 
 ## Testing
 

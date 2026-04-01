@@ -62,7 +62,7 @@ _mainline_completions()
   _init_completion || return
 
   if [[ ${cword} -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "land submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo" -- "$cur") )
+    COMPREPLY=( $(compgen -W "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo" -- "$cur") )
     return
   fi
 
@@ -93,6 +93,9 @@ _mainline_completions()
       ;;
     confidence)
       COMPREPLY=( $(compgen -W "--repo --json --events --soak-summary --cert-report" -- "$cur") )
+      ;;
+    wait)
+      COMPREPLY=( $(compgen -W "--repo --submission --for --json --timeout --poll-interval" -- "$cur") )
       ;;
     retry|cancel)
       COMPREPLY=( $(compgen -W "--repo --submission --publish" -- "$cur") )
@@ -148,6 +151,7 @@ _mainline() {
   commands=(
     'submit:queue a source worktree'
     'land:submit and wait for integrate plus publish'
+    'wait:wait on a durable submission id'
     'status:show queue and publish status'
     'confidence:show promotion confidence and evidence'
     'run-once:run one integration or publish cycle'
@@ -202,6 +206,10 @@ _mainline() {
       _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--events[number of recent events]:count:' '--soak-summary[path to soak summary json]:path:_files' '--cert-report[path to certification report json]:path:_files'
       return
       ;;
+    wait)
+      _arguments '--repo[repository path]:path:_files -/' '--submission[submission id]:id:' '--for[wait target]:target:(integrated landed)' '--json[json output]' '--timeout[maximum wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
+      return
+      ;;
     retry|cancel)
       _arguments '--repo[repository path]:path:_files -/' '--submission[integration submission id]:id:' '--publish[publish request id]:id:'
       return
@@ -250,8 +258,8 @@ _mainline "$@"
 }
 
 func fishCompletionScript() string {
-	return `complete -c mainline -f -n "__fish_use_subcommand" -a "land submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo"
-complete -c mq -f -n "__fish_use_subcommand" -a "land submit status confidence run-once retry cancel publish logs watch events doctor completion version config repo"
+	return `complete -c mainline -f -n "__fish_use_subcommand" -a "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo"
+complete -c mq -f -n "__fish_use_subcommand" -a "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo"
 
 complete -c mainline -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit" -a "init show audit"
 complete -c mq -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit" -a "init show audit"
@@ -339,6 +347,16 @@ complete -c mainline -n "__fish_seen_subcommand_from submit" -l timeout
 complete -c mq -n "__fish_seen_subcommand_from submit" -l timeout
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l poll-interval
 complete -c mq -n "__fish_seen_subcommand_from submit" -l poll-interval
+complete -c mainline -n "__fish_seen_subcommand_from wait" -l submission
+complete -c mq -n "__fish_seen_subcommand_from wait" -l submission
+complete -c mainline -n "__fish_seen_subcommand_from wait" -l for
+complete -c mq -n "__fish_seen_subcommand_from wait" -l for
+complete -c mainline -n "__fish_seen_subcommand_from wait" -l json
+complete -c mq -n "__fish_seen_subcommand_from wait" -l json
+complete -c mainline -n "__fish_seen_subcommand_from wait" -l timeout
+complete -c mq -n "__fish_seen_subcommand_from wait" -l timeout
+complete -c mainline -n "__fish_seen_subcommand_from wait" -l poll-interval
+complete -c mq -n "__fish_seen_subcommand_from wait" -l poll-interval
 complete -c mainline -n "__fish_seen_subcommand_from retry cancel" -l submission
 complete -c mq -n "__fish_seen_subcommand_from retry cancel" -l submission
 complete -c mainline -n "__fish_seen_subcommand_from retry cancel" -l publish

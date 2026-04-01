@@ -91,12 +91,25 @@ mq watch --repo /path/to/main
 mq events --repo /path/to/main --follow --json --lifecycle
 ```
 
+For wrappers and factories, prefer a durable submission-id flow:
+
+```bash
+cd /path/to/topic-worktree
+mq submit --json
+mq wait --submission 42 --for landed --json --timeout 30m
+```
+
+That avoids branch-name polling and gives one stable handle per queued change.
+
 For agent wrappers that only need to know whether their branch landed cleanly, prefer:
 
 ```bash
 cd /path/to/topic-worktree
 mq submit --wait --timeout 10m --json
 ```
+
+If the wrapper needs to integrate first and publish later, wait for
+`integrated`. If it needs the full landed outcome, wait for `landed`.
 
 If a factory keeps appending commits to the same queued branch and wants the
 newest descendant tip instead of a hard failure on head drift, submit with:
@@ -142,3 +155,7 @@ mq retry --repo /path/to/main --submission 17
 mq cancel --repo /path/to/main --publish 4
 mq retry --repo /path/to/main --publish 4
 ```
+
+`mq status --json` now projects publish correlation back onto succeeded
+submissions through `publish_request_id`, `publish_status`, and `outcome`, so a
+factory can answer “did this submission fully land?” from one status surface.

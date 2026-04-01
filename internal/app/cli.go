@@ -17,6 +17,7 @@ var cliCommands = []string{
 	"status",
 	"confidence",
 	"run-once",
+	"wait",
 	"retry",
 	"cancel",
 	"publish",
@@ -120,6 +121,7 @@ Turbo paths:
 
   Controller or factory daemon:
     %s land --json --timeout 30m
+    %s wait --submission 42 --for landed --json --timeout 30m
     %s events --follow --json --lifecycle --repo /path/to/protected-main
 
   Operator:
@@ -137,6 +139,7 @@ Commands:
   status        show queue and protected-branch state
   confidence    summarize evidence and promotion gates
   run-once      run one integration or publish cycle
+  wait          wait on a submission id for integration or landed outcome
   retry         requeue a blocked, failed, or cancelled item
   cancel        cancel a queued, blocked, or failed item
   publish       queue publish of the protected tip
@@ -152,7 +155,7 @@ Commands:
   repo show     inspect repo config and worktrees
 
 Use "%s <command> --help" for command-specific examples.
-`, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName)
+`, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName)
 }
 
 func isKnownCLICommand(command string) bool {

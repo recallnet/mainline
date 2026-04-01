@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -42,6 +43,9 @@ func TestCLIHelp(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "submit --check-only --json") {
 		t.Fatalf("expected turbo submit guidance in help, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "wait --submission 42 --for landed --json --timeout 30m") {
+		t.Fatalf("expected wait guidance in help, got %q", stdout.String())
 	}
 }
 
@@ -206,6 +210,107 @@ func TestStatusJSONContractContainsStableTopLevelFields(t *testing.T) {
 		if !slices.Contains(gotKeys, key) {
 			t.Fatalf("expected status json to contain key %q, got %v", key, gotKeys)
 		}
+	}
+}
+
+func TestWaitBySubmissionIDReturnsIntegratedOutcome(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-wait-integrated")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/wait-integrated", featurePath)
+	writeFileAndCommit(t, featurePath, "wait.txt", "wait\n", "wait feature")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+	var submit submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &submit); err != nil {
+		t.Fatalf("Unmarshal submit: %v", err)
+	}
+
+	var waitOut bytes.Buffer
+	var waitErr bytes.Buffer
+	if err := runCLI([]string{"wait", "--repo", repoRoot, "--submission", strconv.FormatInt(submit.SubmissionID, 10), "--for", "integrated", "--json"}, &waitOut, &waitErr); err != nil {
+		t.Fatalf("runCLI wait returned error: %v", err)
+	}
+
+	var result submissionWaitResult
+	if err := json.Unmarshal(waitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal wait: %v", err)
+	}
+	if result.Outcome != waitOutcome("integrated") || result.SubmissionStatus != "succeeded" {
+		t.Fatalf("expected integrated wait outcome, got %+v", result)
+	}
+	if result.PublishRequestID != 0 || result.PublishStatus != "" {
+		t.Fatalf("expected no publish correlation for integrated-only wait, got %+v", result)
+	}
+}
+
+func TestWaitBySubmissionIDReturnsLandedOutcome(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishMode(t, repoRoot, "auto")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-wait-landed")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/wait-landed", featurePath)
+	writeFileAndCommit(t, featurePath, "wait.txt", "wait\n", "wait feature")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+	var submit submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &submit); err != nil {
+		t.Fatalf("Unmarshal submit: %v", err)
+	}
+
+	var waitOut bytes.Buffer
+	var waitErr bytes.Buffer
+	if err := runCLI([]string{"wait", "--repo", repoRoot, "--submission", strconv.FormatInt(submit.SubmissionID, 10), "--for", "landed", "--json"}, &waitOut, &waitErr); err != nil {
+		t.Fatalf("runCLI wait returned error: %v", err)
+	}
+
+	var result submissionWaitResult
+	if err := json.Unmarshal(waitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal wait: %v", err)
+	}
+	if result.Outcome != waitOutcome("landed") || result.SubmissionStatus != "succeeded" || result.PublishStatus != "succeeded" || result.PublishRequestID == 0 {
+		t.Fatalf("expected landed wait outcome with publish correlation, got %+v", result)
+	}
+}
+
+func TestStatusJSONCorrelatesSubmissionToPublish(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishMode(t, repoRoot, "auto")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-status-landed")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/status-landed", featurePath)
+	writeFileAndCommit(t, featurePath, "status.txt", "status\n", "status feature")
+	submitBranch(t, featurePath)
+
+	runOnce(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var result statusResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.LatestSubmission == nil {
+		t.Fatalf("expected latest submission, got %+v", result)
+	}
+	if result.LatestSubmission.PublishRequestID == 0 || result.LatestSubmission.PublishStatus != "succeeded" || result.LatestSubmission.Outcome != submissionOutcomeLanded {
+		t.Fatalf("expected landed submission correlation, got %+v", result.LatestSubmission)
 	}
 }
 
@@ -505,8 +610,8 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "complete -F _mainline_completions mainline") {
 		t.Fatalf("expected completion script output, got %q", output)
 	}
-	if !strings.Contains(output, "land submit status confidence run-once retry cancel publish") {
-		t.Fatalf("expected completion script to include land and confidence, got %q", output)
+	if !strings.Contains(output, "land submit status confidence run-once wait retry cancel publish") {
+		t.Fatalf("expected completion script to include wait and confidence, got %q", output)
 	}
 	if !strings.Contains(output, "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --check --check-only --wait --timeout --poll-interval") {
 		t.Fatalf("expected submit completion flags, got %q", output)
@@ -528,6 +633,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	}
 	if !strings.Contains(output, "doctor)\n      COMPREPLY=( $(compgen -W \"--repo --json --fix\" -- \"$cur\") )") {
 		t.Fatalf("expected doctor completion to include --fix, got %q", output)
+	}
+	if !strings.Contains(output, "wait)\n      COMPREPLY=( $(compgen -W \"--repo --submission --for --json --timeout --poll-interval\" -- \"$cur\") )") {
+		t.Fatalf("expected wait completion to include submission-id flags, got %q", output)
 	}
 
 	stdout.Reset()
@@ -560,6 +668,15 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from land\" -l allow-newer-head") {
 		t.Fatalf("expected fish completion to include land allow-newer-head flag, got %q", output)
+	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from wait\" -l submission") {
+		t.Fatalf("expected fish completion to include wait submission flag, got %q", output)
+	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from wait\" -l for") {
+		t.Fatalf("expected fish completion to include wait target flag, got %q", output)
+	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from wait\" -l timeout") {
+		t.Fatalf("expected fish completion to include wait timeout flag, got %q", output)
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from submit\" -l sha") {
 		t.Fatalf("expected fish completion to include submit sha flag, got %q", output)

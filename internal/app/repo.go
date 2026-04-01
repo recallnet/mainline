@@ -55,6 +55,8 @@ func handleCommand(command string, args []string, stdout io.Writer, stderr io.Wr
 		return runConfidence(args, stdout, stderr)
 	case "run-once":
 		return runRunOnce(args, stdout, stderr)
+	case "wait":
+		return runWait(args, stdout, stderr)
 	case "retry":
 		return runRetry(args, stdout, stderr)
 	case "cancel":

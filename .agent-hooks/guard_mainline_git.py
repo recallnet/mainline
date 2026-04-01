@@ -95,8 +95,9 @@ def main():
     sys.stderr.write(
         "Blocked native git mutation on the protected main worktree for this repo.\n"
         "Create or move to a feature worktree under ~/Projects/_wt/recallnet/mainline/, "
-        "make commits there, then use `mq submit --check-only --json` followed by "
-        "`mq submit --wait --timeout 15m --json`.\n"
+        "make commits there, then use `mq submit --check-only --json` and either "
+        "`mq submit --wait --timeout 15m --json` or `mq submit --json` followed by "
+        "`mq wait --submission <id> --for landed --json --timeout 30m`.\n"
         "If you are the controller agent, use `mq land --json --timeout 30m` or let "
         "`mainlined` own the protected worktree.\n"
         "Allowed on main: read-only inspection and worktree creation. "

@@ -19,6 +19,7 @@ Default commands to optimize for:
 
 - `mq submit --check-only --json`
 - `mq submit --wait --timeout 15m --json`
+- `mq wait --submission <id> --for landed --json --timeout 30m`
 - `mq land --json --timeout 30m`
 - `mq events --follow --json --lifecycle`
 
@@ -122,6 +123,16 @@ That gives the agent:
 - a blocking integrated-or-blocked answer without inventing a poll loop
 - stable JSON for wrappers and daemon orchestration
 
+If the wrapper needs a durable handle instead of waiting inline:
+
+```bash
+mq submit --json
+mq wait --submission <id> --for landed --json --timeout 30m
+```
+
+Use that pattern when the caller wants to track a specific queued submission by
+id instead of polling by branch name.
+
 If the branch is ready to hand off asynchronously instead:
 
 ```bash
@@ -177,6 +188,8 @@ Expected:
 - submission is visible in durable queue state
 - integration result is visible after `mq run-once`
 - publish result is visible after `mq publish` or daemon-driven publish
+- `status --json` can correlate a succeeded submission to `publish_request_id`,
+  `publish_status`, and `outcome`
 - `unmerged` is empty once the branch is truly reachable from protected `main`
 
 ## Review and fix loop

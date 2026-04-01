@@ -60,10 +60,22 @@ upstream ref, not boolean-like drift flags.
 submission record with optional blocked-state diagnostics:
 
 - `allow_newer_head`
+- `publish_request_id`
+- `publish_status`
+- `outcome`
 - `blocked_reason`
 - `conflict_files`
 - `protected_tip_sha`
 - `retry_hint`
+
+For succeeded submissions:
+
+- `publish_request_id` is the correlated publish request id when `mainline` can
+  associate the landed protected SHA with a publish request
+- `publish_status` is the correlated publish request status
+- `outcome` is:
+  - `integrated` when the submission succeeded but publish is absent or not yet succeeded
+  - `landed` when the correlated publish request succeeded
 
 `integration_worker` and `publish_worker` mirror the active lock metadata when a
 worker is currently holding that lease:
@@ -141,6 +153,49 @@ Returns newline-delimited JSON snapshots. Each line is one watch frame with:
 - `status`
 
 `status` is the exact `mq status --json` object shape documented above.
+
+## `mq wait --json`
+
+Returns one JSON object keyed by durable `submission_id`.
+
+Stable fields:
+
+- `submission_id`
+- `branch`
+- `source_worktree`
+- `source_sha`
+- `repository_root`
+- `protected_branch`
+- `submission_status`
+- `outcome`
+- `duration_ms`
+
+Optional fields:
+
+- `source_ref`
+- `ref_kind`
+- `protected_sha`
+- `publish_request_id`
+- `publish_status`
+- `last_worker_result`
+- `error`
+
+`mq wait --for integrated` uses:
+
+- `outcome = "integrated"` when the submission succeeded and the landed SHA is
+  verified reachable from protected `main`
+
+`mq wait --for landed` uses:
+
+- `outcome = "landed"` when the submission succeeded and the correlated publish
+  request also succeeded
+
+Failure outcomes are:
+
+- `blocked`
+- `failed`
+- `cancelled`
+- `timed_out`
 
 ## `mainlined --json`
 

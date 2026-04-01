@@ -47,10 +47,13 @@ type statusResult struct {
 
 type statusSubmission struct {
 	state.IntegrationSubmission
-	BlockedReason   string   `json:"blocked_reason,omitempty"`
-	ConflictFiles   []string `json:"conflict_files,omitempty"`
-	ProtectedTipSHA string   `json:"protected_tip_sha,omitempty"`
-	RetryHint       string   `json:"retry_hint,omitempty"`
+	PublishRequestID int64    `json:"publish_request_id,omitempty"`
+	PublishStatus    string   `json:"publish_status,omitempty"`
+	Outcome          string   `json:"outcome,omitempty"`
+	BlockedReason    string   `json:"blocked_reason,omitempty"`
+	ConflictFiles    []string `json:"conflict_files,omitempty"`
+	ProtectedTipSHA  string   `json:"protected_tip_sha,omitempty"`
+	RetryHint        string   `json:"retry_hint,omitempty"`
 }
 
 type blockedSubmissionDetails struct {
@@ -321,6 +324,16 @@ func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int6
 			item.ConflictFiles = details.ConflictFiles
 			item.ProtectedTipSHA = details.ProtectedTipSHA
 			item.RetryHint = details.RetryHint
+		}
+		if submission.Status == "succeeded" {
+			info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission)
+			if err != nil {
+				return nil, err
+			}
+			item.ProtectedTipSHA = info.ProtectedSHA
+			item.PublishRequestID = info.PublishRequestID
+			item.PublishStatus = info.PublishStatus
+			item.Outcome = info.Outcome
 		}
 		enriched = append(enriched, item)
 	}

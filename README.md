@@ -76,6 +76,13 @@ mq submit --check-only --json
 mq submit --wait --timeout 15m --json
 ```
 
+Or, when the caller wants a durable machine handle instead of a one-shot wait:
+
+```bash
+mq submit --json
+mq wait --submission 42 --for landed --json --timeout 30m
+```
+
 The controller path should feel like this:
 
 ```bash
@@ -135,6 +142,7 @@ path.
 - serialized integration and publish workers
 - branch submission from topic worktrees and detached SHAs
 - `submit --check-only`, `submit --wait`, and one-shot `land`
+- `wait --submission <id> --for integrated|landed`
 - `status`, `watch`, `logs`, `events`, `doctor`, and `confidence`
 - daemon mode through `mainlined`
 - retry and cancel as real operator controls
@@ -215,6 +223,8 @@ cd /path/to/topic-worktree
 mq submit --check-only --json
 mq submit --allow-newer-head --wait --timeout 15m --json
 mq submit --wait --timeout 15m --json
+mq submit --json
+mq wait --submission 42 --for landed --json --timeout 30m
 mq land --json --timeout 30m
 ```
 
