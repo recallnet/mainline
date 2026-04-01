@@ -49,6 +49,8 @@ func createBareCloneWorktree(t *testing.T) (string, string) {
 
 	worktreePath := filepath.Join(t.TempDir(), "main-worktree")
 	runTestCommand(t, seedRoot, "git", "--git-dir", bareDir, "worktree", "add", worktreePath, "main")
+	runTestCommand(t, worktreePath, "git", "config", "user.name", "Test User")
+	runTestCommand(t, worktreePath, "git", "config", "user.email", "test@example.com")
 
 	return bareDir, worktreePath
 }
