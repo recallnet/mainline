@@ -50,6 +50,8 @@ archives=(
   "darwin arm64"
   "linux amd64"
   "linux arm64"
+  "windows amd64"
+  "windows arm64"
 )
 
 json_escape() {
@@ -75,6 +77,9 @@ json_escape() {
     goos="$1"
     goarch="$2"
     name="mainline_${version}_${goos}_${goarch}.tar.gz"
+    if [[ "${goos}" = "windows" ]]; then
+      name="mainline_${version}_${goos}_${goarch}.zip"
+    fi
     sha="$(awk -v target="./${name}" '$2 == target { print $1 }' "${checksums}")"
     if [[ -z "${sha}" ]]; then
       echo "missing checksum for ${name}" >&2

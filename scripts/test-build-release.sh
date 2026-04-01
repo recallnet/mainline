@@ -16,13 +16,16 @@ for archive in \
   "${output_dir}/mainline_v0.0.0-test_darwin_amd64.tar.gz" \
   "${output_dir}/mainline_v0.0.0-test_darwin_arm64.tar.gz" \
   "${output_dir}/mainline_v0.0.0-test_linux_amd64.tar.gz" \
-  "${output_dir}/mainline_v0.0.0-test_linux_arm64.tar.gz"
+  "${output_dir}/mainline_v0.0.0-test_linux_arm64.tar.gz" \
+  "${output_dir}/mainline_v0.0.0-test_windows_amd64.zip" \
+  "${output_dir}/mainline_v0.0.0-test_windows_arm64.zip"
 do
   test -f "${archive}"
 done
 
 test -f "${output_dir}/SHA256SUMS"
 tar -tzf "${output_dir}/mainline_v0.0.0-test_linux_amd64.tar.gz" | grep -q 'mainline_v0.0.0-test_linux_amd64/mainline$'
+unzip -Z1 "${output_dir}/mainline_v0.0.0-test_windows_amd64.zip" | grep -q '^mainline_v0.0.0-test_windows_amd64/mainline.exe$'
 
 host_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 host_arch="$(uname -m)"

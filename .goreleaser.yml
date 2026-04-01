@@ -1,0 +1,79 @@
+version: 2
+
+project_name: mainline
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: mainline
+    main: ./cmd/mainline
+    binary: mainline
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/recallnet/mainline/internal/app.Version={{ .Version }} -X github.com/recallnet/mainline/internal/app.Commit={{ .ShortCommit }} -X github.com/recallnet/mainline/internal/app.Date={{ .Date }}
+
+  - id: mq
+    main: ./cmd/mq
+    binary: mq
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/recallnet/mainline/internal/app.Version={{ .Version }} -X github.com/recallnet/mainline/internal/app.Commit={{ .ShortCommit }} -X github.com/recallnet/mainline/internal/app.Date={{ .Date }}
+
+  - id: mainlined
+    main: ./cmd/mainlined
+    binary: mainlined
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/recallnet/mainline/internal/app.Version={{ .Version }} -X github.com/recallnet/mainline/internal/app.Commit={{ .ShortCommit }} -X github.com/recallnet/mainline/internal/app.Date={{ .Date }}
+
+archives:
+  - id: bundles
+    ids:
+      - mainline
+      - mq
+      - mainlined
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "mainline_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: SHA256SUMS
+
+snapshot:
+  version_template: "{{ if .Env.RELEASE_VERSION_OVERRIDE }}{{ .Env.RELEASE_VERSION_OVERRIDE }}{{ else }}{{ .Version }}-snapshot{{ end }}"
+
+changelog:
+  disable: true

@@ -140,6 +140,7 @@ path.
 - retry and cancel as real operator controls
 - policy checks, hook coordination, and repo-managed hooks
 - Homebrew, Nix, GitHub release archives, checksums, and release manifests
+- GoReleaser-driven multi-platform binary releases for macOS, Linux, and Windows
 
 Recent hardening coverage now explicitly exercises the adoption-critical paths:
 

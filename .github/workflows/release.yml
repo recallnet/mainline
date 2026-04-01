@@ -5,11 +5,6 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      version:
-        description: Release version for manual runs
-        required: true
-        default: dev
 
 permissions:
   contents: write
@@ -20,24 +15,36 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
+      - name: Set up GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          install-only: true
+
       - name: Resolve release version
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ github.event.inputs.version }}"
+            echo "value=dev-manual" >> "${GITHUB_OUTPUT}"
           else
-            version="${GITHUB_REF_NAME}"
+            echo "value=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
           fi
-          echo "value=${version}" >> "${GITHUB_OUTPUT}"
 
-      - name: Build release archives
-        run: ./scripts/build-release.sh --version "${{ steps.version.outputs.value }}" --output dist
+      - name: Build and publish release archives with GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: ${{ github.event_name == 'workflow_dispatch' && 'release --clean --snapshot' || 'release --clean' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION_OVERRIDE: ${{ steps.version.outputs.value }}
 
       - name: Generate Homebrew formula
         run: |
@@ -55,10 +62,7 @@ jobs:
             --output dist/release-manifest.json
 
       - name: Package versioned release assets
-        run: |
-          ./scripts/package-release-assets.sh \
-            --version "${{ steps.version.outputs.value }}" \
-            --dist dist
+        run: ./scripts/package-release-assets.sh --version "${{ steps.version.outputs.value }}" --dist dist
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
@@ -66,17 +70,15 @@ jobs:
           name: mainline-${{ steps.version.outputs.value }}
           path: dist/*
 
-      - name: Publish GitHub release assets
+      - name: Upload supplemental release assets
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
           name: ${{ steps.version.outputs.value }}
           tag_name: ${{ steps.version.outputs.value }}
           files: |
-            dist/*.tar.gz
-            dist/SHA256SUMS
             dist/mainline.rb
             dist/mainline_*.rb
             dist/release-manifest.json
             dist/release-manifest_*.json
+            dist/mainline_packages_*.tar.gz

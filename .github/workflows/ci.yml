@@ -55,7 +55,7 @@ jobs:
           import json
           data = json.load(open("dist/release-manifest.json"))
           assert data["version"] == "v0.0.0-ci"
-          assert len(data["assets"]) == 4
+          assert len(data["assets"]) == 6
           assert all(item["url"].startswith("https://github.com/recallnet/mainline/releases/download/v0.0.0-ci/") for item in data["assets"])
           assert data["versioned_homebrew_formula_url"].endswith("/mainline_v0.0.0-ci.rb")
           assert data["versioned_manifest_url"].endswith("/release-manifest_v0.0.0-ci.json")
@@ -72,3 +72,6 @@ jobs:
 
       - name: Release build
         run: make release-snapshot VERSION=ci
+
+      - name: GoReleaser config check
+        run: go run github.com/goreleaser/goreleaser/v2 check

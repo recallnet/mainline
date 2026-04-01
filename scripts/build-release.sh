@@ -26,6 +26,8 @@ platforms=(
   "darwin arm64"
   "linux amd64"
   "linux arm64"
+  "windows amd64"
+  "windows arm64"
 )
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -44,22 +46,27 @@ ldflags="-X github.com/recallnet/mainline/internal/app.Version=${version} -X git
 build_archive() {
   local goos="$1"
   local goarch="$2"
-  local stage_dir archive_base archive_path
+  local stage_dir archive_base archive_path ext
 
   archive_base="mainline_${version}_${goos}_${goarch}"
   stage_dir="${release_root}/${archive_base}"
+  ext=""
   archive_path="${release_root}/${archive_base}.tar.gz"
+  if [[ "${goos}" = "windows" ]]; then
+    archive_path="${release_root}/${archive_base}.zip"
+    ext=".exe"
+  fi
 
   mkdir -p "${stage_dir}"
 
   (
     cd "${repo_root}"
     GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
-      go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mainline" ./cmd/mainline
+      go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mainline${ext}" ./cmd/mainline
     GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
-      go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mq" ./cmd/mq
+      go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mq${ext}" ./cmd/mq
     GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
-      go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mainlined" ./cmd/mainlined
+      go build -trimpath -ldflags "${ldflags}" -o "${stage_dir}/mainlined${ext}" ./cmd/mainlined
   )
 
   cp "${repo_root}/README.md" "${stage_dir}/README.md"
@@ -67,7 +74,14 @@ build_archive() {
     cp "${repo_root}/LICENSE" "${stage_dir}/LICENSE"
   fi
 
-  tar -C "${release_root}" -czf "${archive_path}" "${archive_base}"
+  if [[ "${goos}" = "windows" ]]; then
+    (
+      cd "${release_root}"
+      zip -qr "${archive_path}" "${archive_base}"
+    )
+  else
+    tar -C "${release_root}" -czf "${archive_path}" "${archive_base}"
+  fi
   rm -rf "${stage_dir}"
 }
 
@@ -76,4 +90,4 @@ for platform in "${platforms[@]}"; do
   build_archive ${platform}
 done
 
-(cd "${release_root}" && shasum -a 256 ./*.tar.gz > SHA256SUMS)
+(cd "${release_root}" && shasum -a 256 ./*.tar.gz ./*.zip > SHA256SUMS)

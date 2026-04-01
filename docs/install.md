@@ -1,9 +1,10 @@
 # Install
 
 `mainline` now ships source-controlled packaging outputs for Homebrew and Nix.
+GitHub binary releases are built by GoReleaser.
 
-For direct downloads, GitHub releases also publish versioned `.tar.gz` archives
-for macOS and Linux plus a `SHA256SUMS` file and a machine-readable
+For direct downloads, GitHub releases publish versioned archives for macOS,
+Linux, and Windows plus a `SHA256SUMS` file and a machine-readable
 `release-manifest.json`.
 
 ## Direct Download
@@ -33,6 +34,8 @@ Archive naming:
 - `mainline_<version>_darwin_arm64.tar.gz`
 - `mainline_<version>_linux_amd64.tar.gz`
 - `mainline_<version>_linux_arm64.tar.gz`
+- `mainline_<version>_windows_amd64.zip`
+- `mainline_<version>_windows_arm64.zip`
 
 Each archive contains:
 
@@ -118,10 +121,18 @@ Build the full release artifact set locally:
 ```bash
 make release-snapshot VERSION=v0.1.0
 make package-release VERSION=v0.1.0
+make goreleaser-check
 ```
 
 This writes archives, `SHA256SUMS`, versioned package metadata assets, and a
 versioned package bundle under `dist/`.
+
+If you want to dry-run the GitHub archive path locally through the same release
+engine used in CI:
+
+```bash
+make goreleaser-snapshot VERSION=v0.1.0
+```
 
 Push a version tag to publish a GitHub release:
 
@@ -129,6 +140,8 @@ Push a version tag to publish a GitHub release:
 git tag v0.1.0
 git push origin v0.1.0
 ```
+
+GitHub will not show any Releases until the first `v*` tag has been pushed.
 
 ## Completion Install
 
