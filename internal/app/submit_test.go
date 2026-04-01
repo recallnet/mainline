@@ -973,6 +973,46 @@ func TestSubmitWaitIntegratesBranchAndReturnsSucceededOutcome(t *testing.T) {
 	}
 }
 
+func TestSubmitWaitSucceedsAfterQueuedRebaseRewritesBranchSHA(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featureOne := filepath.Join(t.TempDir(), "feature-serial-one")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/serial-one", featureOne)
+	writeFileAndCommit(t, featureOne, "one.txt", "one\n", "feature one")
+
+	featureTwo := filepath.Join(t.TempDir(), "feature-serial-two")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/serial-two", featureTwo)
+	writeFileAndCommit(t, featureTwo, "two.txt", "two\n", "feature two")
+	originalSHA := trimNewline(runTestCommand(t, featureTwo, "git", "rev-parse", "HEAD"))
+
+	if err := runSubmit([]string{"--repo", featureOne}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("first runSubmit returned error: %v", err)
+	}
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featureTwo, "--wait", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("second runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.OK || result.Outcome != "succeeded" || result.SubmissionStatus != "succeeded" {
+		t.Fatalf("expected succeeded wait result, got %+v", result)
+	}
+
+	finalProtectedSHA := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "main"))
+	if finalProtectedSHA == originalSHA {
+		t.Fatalf("expected queued rebase to rewrite final protected sha away from original %s", originalSHA)
+	}
+	if !strings.Contains(result.LastWorkerResult, "Integrated submission") {
+		t.Fatalf("expected worker result, got %+v", result)
+	}
+}
+
 func TestSubmitWaitReturnsBlockedExitCodeForConflict(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
@@ -1072,7 +1112,7 @@ func TestSubmitWaitFailsIfSucceededSubmissionIsNotReachableFromProtectedBranch(t
 	if result.Outcome != waitOutcomeFailed {
 		t.Fatalf("expected failed outcome, got %+v", result)
 	}
-	if !strings.Contains(result.Error, "not reachable from protected branch") {
+	if !strings.Contains(result.Error, "has no integration.succeeded event with protected_sha") {
 		t.Fatalf("expected reachability error, got %+v", result)
 	}
 }

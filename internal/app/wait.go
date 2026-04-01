@@ -72,7 +72,7 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 
 		switch submission.Status {
 		case "succeeded":
-			protectedSHA, err := verifySubmissionReachable(mainEngine, queued.Config, submission)
+			protectedSHA, err := verifySubmissionReachable(ctx, queued.Store, queued.RepoRecord.ID, mainEngine, queued.Config, submission)
 			if err != nil {
 				result.Outcome = waitOutcomeFailed
 				result.DurationMS = time.Since(start).Milliseconds()

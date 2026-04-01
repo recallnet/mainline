@@ -141,10 +141,10 @@ func TestLandFailsIfSucceededSubmissionIsNotReachableFromProtectedBranch(t *test
 	if err == nil {
 		t.Fatalf("expected verification failure")
 	}
-	if !strings.Contains(err.Error(), "not reachable from protected branch") {
+	if !strings.Contains(err.Error(), "has no integration.succeeded event with protected_sha") {
 		t.Fatalf("expected reachability error, got %v", err)
 	}
-	if result.Error == "" || !strings.Contains(result.Error, "not reachable from protected branch") {
+	if result.Error == "" || !strings.Contains(result.Error, "has no integration.succeeded event with protected_sha") {
 		t.Fatalf("expected land result error, got %+v", result)
 	}
 }

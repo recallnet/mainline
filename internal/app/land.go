@@ -203,7 +203,7 @@ func waitForLandedPublish(queued queuedSubmission, timeout time.Duration, pollIn
 			}
 			return result, fmt.Errorf("submission %d %s: %s", submission.ID, submission.Status, submission.LastError)
 		case "succeeded":
-			protectedSHA, err := verifySubmissionReachable(mainEngine, queued.Config, submission)
+			protectedSHA, err := verifySubmissionReachable(ctx, queued.Store, queued.RepoRecord.ID, mainEngine, queued.Config, submission)
 			if err != nil {
 				result.Error = err.Error()
 				return result, err
