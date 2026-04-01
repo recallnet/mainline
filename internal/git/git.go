@@ -607,27 +607,37 @@ func (e Engine) BranchStatus(branch string, protectedBranch string) (BranchStatu
 		return status, nil
 	}
 
-	branchBehind, err := branchCommit.IsAncestor(upstreamCommit)
+	behind, ahead, err := e.symmetricDifferenceCounts(upstreamRefName.String(), branchRef.Name().String())
 	if err != nil {
 		return BranchStatus{}, err
 	}
-	upstreamBehind, err := upstreamCommit.IsAncestor(branchCommit)
-	if err != nil {
-		return BranchStatus{}, err
-	}
-
-	if branchBehind {
-		status.BehindCount = 1
-	}
-	if upstreamBehind {
-		status.AheadCount = 1
-	}
-	if !branchBehind && !upstreamBehind {
-		status.AheadCount = 1
-		status.BehindCount = 1
-	}
+	status.AheadCount = ahead
+	status.BehindCount = behind
 
 	return status, nil
+}
+
+func (e Engine) symmetricDifferenceCounts(leftRef string, rightRef string) (behind int, ahead int, err error) {
+	layout, err := DiscoverRepositoryLayout(e.RepositoryRoot)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	cmd := exec.Command("git", "rev-list", "--left-right", "--count", leftRef+"..."+rightRef)
+	cmd.Dir = layout.WorktreeRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0, 0, fmt.Errorf("count symmetric difference for %s...%s: %w: %s", leftRef, rightRef, err, strings.TrimSpace(string(output)))
+	}
+
+	text := strings.TrimSpace(string(output))
+	if _, err := fmt.Sscanf(text, "%d %d", &behind, &ahead); err == nil {
+		return behind, ahead, nil
+	}
+	if _, err := fmt.Sscanf(text, "%d\t%d", &behind, &ahead); err == nil {
+		return behind, ahead, nil
+	}
+	return 0, 0, fmt.Errorf("parse symmetric difference counts from %q", text)
 }
 
 // InspectHealth reports doctor-level repository health.

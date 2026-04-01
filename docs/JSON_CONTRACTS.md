@@ -51,6 +51,9 @@ Optional top-level keys:
 - `has_upstream`
 - `is_protected_branch`
 
+`ahead_count` and `behind_count` are exact commit counts relative to the
+upstream ref, not boolean-like drift flags.
+
 `latest_submission` and entries in `active_submissions` extend the durable
 submission record with optional blocked-state diagnostics:
 

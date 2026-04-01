@@ -2,6 +2,12 @@
 
 These are the intended operator flows for `mainline` today.
 
+If an agent wrapper, factory daemon, or operator UI parses `--json` output,
+bind only to the documented `v1` machine contract in
+[JSON_CONTRACTS.md](/Users/devrel/Projects/recallnet/mainline/docs/JSON_CONTRACTS.md).
+That document is the compatibility policy. The internal Go structs are not the
+public contract.
+
 ## Solo Developer
 
 Initialize once:
