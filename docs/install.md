@@ -18,6 +18,13 @@ Automation can consume the release manifest directly:
 
 ```bash
 curl -LO https://github.com/recallnet/mainline/releases/download/v0.1.0/release-manifest.json
+curl -LO https://github.com/recallnet/mainline/releases/download/v0.1.0/release-manifest_v0.1.0.json
+```
+
+Tagged releases also publish a versioned package metadata bundle:
+
+```bash
+curl -LO https://github.com/recallnet/mainline/releases/download/v0.1.0/mainline_packages_v0.1.0.tar.gz
 ```
 
 Archive naming:
@@ -59,11 +66,13 @@ go install github.com/recallnet/mainline/cmd/mainlined@latest
 ## Homebrew
 
 Stable tagged releases publish a versioned `mainline.rb` formula asset alongside
-the release archives. Download that formula from the release page and install it:
+the release archives. GitHub releases also attach explicit versioned package
+metadata assets so automation can pin exact filenames. Download the versioned
+formula from the release page and install it:
 
 ```bash
-curl -LO https://github.com/recallnet/mainline/releases/download/v0.1.0/mainline.rb
-brew install ./mainline.rb
+curl -LO https://github.com/recallnet/mainline/releases/download/v0.1.0/mainline_v0.1.0.rb
+brew install ./mainline_v0.1.0.rb
 ```
 
 This installs:
@@ -98,9 +107,11 @@ Build the full release artifact set locally:
 
 ```bash
 make release-snapshot VERSION=v0.1.0
+make package-release VERSION=v0.1.0
 ```
 
-This writes archives and `SHA256SUMS` under `dist/`.
+This writes archives, `SHA256SUMS`, versioned package metadata assets, and a
+versioned package bundle under `dist/`.
 
 Push a version tag to publish a GitHub release:
 

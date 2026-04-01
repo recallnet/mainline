@@ -54,6 +54,12 @@ jobs:
             --checksums dist/SHA256SUMS \
             --output dist/release-manifest.json
 
+      - name: Package versioned release assets
+        run: |
+          ./scripts/package-release-assets.sh \
+            --version "${{ steps.version.outputs.value }}" \
+            --dist dist
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -71,4 +77,6 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS
             dist/mainline.rb
+            dist/mainline_*.rb
             dist/release-manifest.json
+            dist/release-manifest_*.json

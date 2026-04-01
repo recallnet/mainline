@@ -5,7 +5,7 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS ?= -X github.com/recallnet/mainline/internal/app.Version=$(VERSION) -X github.com/recallnet/mainline/internal/app.Commit=$(COMMIT) -X github.com/recallnet/mainline/internal/app.Date=$(DATE)
 
-.PHONY: fmt lint test test-invariants test-stress soak soak-randomized certify-matrix build release-snapshot install-hooks test-hooks
+.PHONY: fmt lint test test-invariants test-stress soak soak-randomized certify-matrix build release-snapshot package-release install-hooks test-hooks
 
 fmt:
 	$(GO) fmt ./...
@@ -39,6 +39,12 @@ build:
 
 release-snapshot:
 	./scripts/build-release.sh --version $(VERSION) --output $(RELEASE_OUT)
+
+package-release:
+	./scripts/build-release.sh --version $(VERSION) --output $(RELEASE_OUT)
+	./scripts/generate-homebrew-formula.sh --version $(VERSION) --checksums $(RELEASE_OUT)/SHA256SUMS --output $(RELEASE_OUT)/mainline.rb
+	./scripts/generate-release-manifest.sh --version $(VERSION) --checksums $(RELEASE_OUT)/SHA256SUMS --output $(RELEASE_OUT)/release-manifest.json
+	./scripts/package-release-assets.sh --version $(VERSION) --dist $(RELEASE_OUT)
 
 install-hooks:
 	./scripts/install-hooks.sh

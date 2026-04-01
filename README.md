@@ -112,6 +112,7 @@ That matters if your machine is running Codex, Claude, factory daemons, humans, 
 - daemon mode through `mainlined`
 - policy checks, hook coordination, and repo-managed hooks
 - release archives, Homebrew assets, Nix packaging, and machine-readable release manifests
+- versioned GitHub release package assets for package-manager automation
 
 This repo also dogfoods the workflow. The committed worktree instructions live in [SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/worktree/SKILL.md), and the repo-specific guardrails live in [AGENTS.md](/Users/devrel/Projects/recallnet/mainline/AGENTS.md).
 

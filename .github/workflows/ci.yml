@@ -57,7 +57,18 @@ jobs:
           assert data["version"] == "v0.0.0-ci"
           assert len(data["assets"]) == 4
           assert all(item["url"].startswith("https://github.com/recallnet/mainline/releases/download/v0.0.0-ci/") for item in data["assets"])
+          assert data["versioned_homebrew_formula_url"].endswith("/mainline_v0.0.0-ci.rb")
+          assert data["versioned_manifest_url"].endswith("/release-manifest_v0.0.0-ci.json")
+          assert data["package_bundle_url"].endswith("/mainline_packages_v0.0.0-ci.tar.gz")
           PY
+
+      - name: Versioned package release asset test
+        run: |
+          ./scripts/package-release-assets.sh --version v0.0.0-ci --dist dist
+          test -f dist/mainline_v0.0.0-ci.rb
+          test -f dist/release-manifest_v0.0.0-ci.json
+          test -f dist/mainline_packages_v0.0.0-ci.tar.gz
+          tar -tzf dist/mainline_packages_v0.0.0-ci.tar.gz | grep -q 'mainline_packages_v0.0.0-ci/mainline_v0.0.0-ci.rb$'
 
       - name: Release build
         run: make release-snapshot VERSION=ci

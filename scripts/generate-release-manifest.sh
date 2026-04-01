@@ -41,6 +41,9 @@ commit="$(git -C "${repo_root}" rev-parse --short HEAD 2>/dev/null || echo unkno
 release_url="https://github.com/${repo}/releases/download/${version}"
 checksums_asset="SHA256SUMS"
 formula_asset="mainline.rb"
+versioned_formula_asset="mainline_${version}.rb"
+versioned_manifest_asset="release-manifest_${version}.json"
+package_bundle_asset="mainline_packages_${version}.tar.gz"
 
 archives=(
   "darwin amd64"
@@ -60,6 +63,9 @@ json_escape() {
   printf '  "repository": %s,\n' "$(json_escape "${repo}")"
   printf '  "checksums_url": %s,\n' "$(json_escape "${release_url}/${checksums_asset}")"
   printf '  "homebrew_formula_url": %s,\n' "$(json_escape "${release_url}/${formula_asset}")"
+  printf '  "versioned_homebrew_formula_url": %s,\n' "$(json_escape "${release_url}/${versioned_formula_asset}")"
+  printf '  "versioned_manifest_url": %s,\n' "$(json_escape "${release_url}/${versioned_manifest_asset}")"
+  printf '  "package_bundle_url": %s,\n' "$(json_escape "${release_url}/${package_bundle_asset}")"
   printf '  "assets": [\n'
 
   first=1

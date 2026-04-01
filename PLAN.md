@@ -1075,3 +1075,11 @@ Mitigation:
 4. design SQLite schema and event model
 5. implement `submit` and `status`
 6. build integration worker before daemon mode
+
+## Additional Packaging Follow-Through
+
+- make GitHub CI publish explicit versioned package metadata alongside binary archives
+- attach a versioned Homebrew formula asset instead of relying only on generic names
+- attach a versioned release manifest asset so automation can pin exact filenames
+- bundle package metadata and checksums into a versioned package archive for downstream consumers
+- verify package asset generation in CI before tags land
