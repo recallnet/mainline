@@ -405,6 +405,13 @@ func TestRunOnceReportsDelayedPublishRetryWhenNothingIsReady(t *testing.T) {
 	}
 }
 
+func TestIsTransientPublishErrorRecognizesGitHTTPStatusShape(t *testing.T) {
+	err := errors.New("fatal: unable to access 'https://github.com/acme/repo.git/': The requested URL returned error: 503")
+	if !isTransientPublishError(err) {
+		t.Fatalf("expected git HTTP 503 shape to be treated as transient")
+	}
+}
+
 func TestPublishRespectsHookPolicyBypassingPrePushHook(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
