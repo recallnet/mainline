@@ -20,6 +20,41 @@ For `v1`:
 
 If you are building automation, bind only to the fields documented here.
 
+## `mq submit --json`
+
+Returns one JSON object for the submission request.
+
+Stable fields:
+
+- `ok`
+- `checked`
+- `queued`
+- `waited`
+- `submission_id`
+- `branch`
+- `source_worktree`
+- `source_sha`
+- `repository_root`
+
+Optional fields:
+
+- `source_ref`
+- `ref_kind`
+- `allow_newer_head`
+- `requested_by`
+- `priority`
+- `submission_status`
+- `outcome`
+- `duration_ms`
+- `drain_attempted`
+- `drain_result`
+- `last_worker_result`
+- `error_code`
+- `error`
+
+For plain `mq submit`, `drain_attempted` and `drain_result` describe the
+opportunistic immediate drain attempt after queueing.
+
 ## `mq status --json`
 
 Returns one JSON object with these stable top-level keys:
@@ -221,3 +256,6 @@ Common daemon events:
 - `daemon.idle_exit`
 - `daemon.max_cycles_reached`
 - `daemon.stopped`
+
+When `mainlined --all` is used, `repo` identifies the registered repo currently
+being drained on per-repo cycle records.

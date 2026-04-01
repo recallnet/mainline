@@ -123,6 +123,7 @@ Turbo paths:
     %s land --json --timeout 30m
     %s wait --submission 42 --for landed --json --timeout 30m
     %s events --follow --json --lifecycle --repo /path/to/protected-main
+    mainlined --all --json --interval 2s
 
   Operator:
     %s status --repo /path/to/protected-main --json

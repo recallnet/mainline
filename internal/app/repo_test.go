@@ -102,6 +102,8 @@ func TestRepoShowRepairsMissingRepositoryRecord(t *testing.T) {
 
 func TestRepoInitSupportsJSONOutput(t *testing.T) {
 	repoRoot, worktreePath := createTestRepo(t)
+	registryPath := filepath.Join(t.TempDir(), "registry.json")
+	t.Setenv("MAINLINE_REGISTRY_PATH", registryPath)
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
@@ -125,9 +127,36 @@ func TestRepoInitSupportsJSONOutput(t *testing.T) {
 	if result["recommended_commit_message"] != "Initialize mainline repo policy" {
 		t.Fatalf("expected recommended commit message, got %#v", result["recommended_commit_message"])
 	}
+	if result["global_registry_path"] != registryPath {
+		t.Fatalf("expected registry path %q, got %#v", registryPath, result["global_registry_path"])
+	}
 	nextSteps, ok := result["next_steps"].([]any)
 	if !ok || len(nextSteps) == 0 {
 		t.Fatalf("expected next steps in json output, got %#v", result["next_steps"])
+	}
+}
+
+func TestRepoInitRegistersRepoForGlobalDaemon(t *testing.T) {
+	registryPath := filepath.Join(t.TempDir(), "registry.json")
+	t.Setenv("MAINLINE_REGISTRY_PATH", registryPath)
+
+	repoRoot, worktreePath := createTestRepo(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	repos, err := loadRegisteredReposFromPath(registryPath)
+	if err != nil {
+		t.Fatalf("loadRegisteredReposFromPath: %v", err)
+	}
+	if len(repos) != 1 {
+		t.Fatalf("expected one registered repo, got %+v", repos)
+	}
+	if repos[0].RepositoryRoot != canonicalRegistryPath(repoRoot) || repos[0].MainWorktree != canonicalRegistryPath(worktreePath) {
+		t.Fatalf("unexpected registered repo entry: %+v", repos[0])
 	}
 }
 

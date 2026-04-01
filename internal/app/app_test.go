@@ -584,6 +584,61 @@ func TestDaemonProcessesIntegrationAndPublishWork(t *testing.T) {
 	}
 }
 
+func TestGlobalDaemonProcessesRegisteredRepos(t *testing.T) {
+	registryPath := filepath.Join(t.TempDir(), "registry.json")
+	t.Setenv("MAINLINE_REGISTRY_PATH", registryPath)
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
+	repoOne, remoteOne := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoOne)
+	updatePublishMode(t, repoOne, "auto")
+
+	repoTwo, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoTwo)
+	updatePublishMode(t, repoTwo, "auto")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-global-daemon")
+	runTestCommand(t, repoOne, "git", "worktree", "add", "-b", "feature/global-daemon", featurePath)
+	writeFileAndCommit(t, featurePath, "global.txt", "global\n", "feature global daemon")
+	submitBranch(t, featurePath)
+
+	var stdout bytes.Buffer
+	opts := daemonOptions{
+		allRepos:     true,
+		registryPath: registryPath,
+		interval:     time.Millisecond,
+		maxCycles:    1,
+		jsonLogs:     true,
+	}
+	if err := runDaemonLoop(context.Background(), opts, &stdout); err != nil {
+		t.Fatalf("runDaemonLoop returned error: %v", err)
+	}
+
+	localHead := trimNewline(runTestCommand(t, repoOne, "git", "rev-parse", "HEAD"))
+	remoteHead := trimNewline(runTestCommand(t, remoteOne, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) == 0 {
+		t.Fatalf("expected daemon logs, got %q", stdout.String())
+	}
+	foundRepoOne := false
+	for _, line := range lines {
+		var record daemonLog
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if record.Repo == canonicalRegistryPath(repoOne) {
+			foundRepoOne = true
+			break
+		}
+	}
+	if !foundRepoOne {
+		t.Fatalf("expected global daemon logs to include repo %q, got %q", repoOne, stdout.String())
+	}
+}
+
 func TestDaemonIdleExitEmitsJSONLog(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
@@ -1155,6 +1210,8 @@ func TestEventsLifecycleReplayKeepsBranchOnPublishWindow(t *testing.T) {
 }
 
 func TestEventsLifecycleFailedDetachedSubmissionKeepsSourceRef(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
 

@@ -835,6 +835,7 @@ func submitBranch(t *testing.T, repoPath string) {
 
 func submitBranchWithArgs(t *testing.T, repoPath string, extraArgs ...string) {
 	t.Helper()
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer

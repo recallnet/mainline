@@ -5,7 +5,7 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS ?= -X github.com/recallnet/mainline/internal/app.Version=$(VERSION) -X github.com/recallnet/mainline/internal/app.Commit=$(COMMIT) -X github.com/recallnet/mainline/internal/app.Date=$(DATE)
 
-.PHONY: fmt lint test test-invariants test-stress soak soak-randomized certify-matrix build release-snapshot package-release goreleaser-check goreleaser-snapshot install-hooks test-hooks
+.PHONY: fmt lint test test-invariants test-stress soak soak-randomized certify-matrix build release-snapshot package-release goreleaser-check goreleaser-snapshot install-hooks install-launch-agent test-hooks
 
 fmt:
 	$(GO) fmt ./...
@@ -54,6 +54,9 @@ goreleaser-snapshot:
 
 install-hooks:
 	./scripts/install-hooks.sh
+
+install-launch-agent:
+	./scripts/install-launch-agent.sh
 
 test-hooks:
 	./scripts/test-hook-checks.sh

@@ -92,7 +92,7 @@ mq land --json --timeout 30m
 The daemon path should feel like this:
 
 ```bash
-mainlined --repo /path/to/protected-main --interval 2s --json
+mainlined --all --interval 2s --json
 mq events --repo /path/to/protected-main --follow --json --lifecycle
 ```
 
@@ -142,6 +142,7 @@ path.
 - serialized integration and publish workers
 - branch submission from topic worktrees and detached SHAs
 - `submit --check-only`, `submit --wait`, and one-shot `land`
+- opportunistic submit-side draining when no worker already holds the lock
 - `wait --submission <id> --for integrated|landed`
 - `status`, `watch`, `logs`, `events`, `doctor`, and `confidence`
 - daemon mode through `mainlined`
@@ -200,10 +201,13 @@ mq repo init --repo . --main-worktree .
 git add mainline.toml
 git commit -m "Initialize mainline repo policy"
 ./scripts/install-hooks.sh
+./scripts/install-launch-agent.sh
 ```
 
 That init commit matters. It turns the repo’s queue policy into versioned,
 reviewable state instead of one more local convention that agents have to infer.
+`mq repo init` also registers the repo for `mainlined --all`, so one machine
+daemon can drain many repos without one idle process per repo.
 
 ## The Core Commands
 
@@ -235,6 +239,7 @@ mq status --repo /path/to/protected-main --json
 mq repo audit --repo /path/to/protected-main --json
 mq watch --repo /path/to/protected-main
 mq events --repo /path/to/protected-main --follow --json --lifecycle
+mainlined --all --json
 mq retry --repo /path/to/protected-main --submission 17
 mq cancel --repo /path/to/protected-main --publish 4
 ```

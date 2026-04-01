@@ -60,7 +60,11 @@ mq repo init --repo . --main-worktree .
 git add mainline.toml
 git commit -m "Initialize mainline repo policy"
 ./scripts/install-hooks.sh
+./scripts/install-launch-agent.sh
 ```
+
+`mq repo init` automatically registers the repo for the machine-global daemon
+registry used by `mainlined --all`.
 
 State compatibility:
 
@@ -142,6 +146,30 @@ git push origin v0.1.0
 ```
 
 GitHub will not show any Releases until the first `v*` tag has been pushed.
+
+## Machine-Global Daemon
+
+For a machine running many repos, prefer one `mainlined --all` process instead
+of one idle daemon per repo.
+
+Register each repo once:
+
+```bash
+cd /path/to/protected-main
+mq repo init --repo . --main-worktree .
+```
+
+Run it directly:
+
+```bash
+mainlined --all --json --interval 2s
+```
+
+Or install the macOS launch agent:
+
+```bash
+./scripts/install-launch-agent.sh
+```
 
 ## Completion Install
 

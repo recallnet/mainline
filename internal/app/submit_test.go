@@ -17,6 +17,8 @@ import (
 )
 
 func TestSubmitQueuesCleanFeatureBranch(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
 	repoRoot, _ := createTestRepo(t)
 	featurePath := filepath.Join(t.TempDir(), "feature-worktree")
 	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/submit", featurePath)
@@ -69,6 +71,8 @@ func TestSubmitQueuesCleanFeatureBranch(t *testing.T) {
 }
 
 func TestSubmitAutoDetectsRepoFromCurrentWorktree(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
 	repoRoot, _ := createTestRepo(t)
 	featurePath := filepath.Join(t.TempDir(), "feature-autodetect")
 	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/autodetect", featurePath)
@@ -118,7 +122,105 @@ func TestSubmitAutoDetectsRepoFromCurrentWorktree(t *testing.T) {
 	}
 }
 
+func TestSubmitOpportunisticallyDrainsQueuedWork(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishMode(t, repoRoot, "auto")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-drain")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/drain", featurePath)
+	writeFileAndCommit(t, featurePath, "drain.txt", "drain\n", "feature drain")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.DrainAttempted {
+		t.Fatalf("expected drain attempt, got %+v", result)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submission, err := store.GetIntegrationSubmission(context.Background(), result.SubmissionID)
+	if err != nil {
+		t.Fatalf("GetIntegrationSubmission: %v", err)
+	}
+	if submission.Status != "succeeded" {
+		t.Fatalf("expected opportunistic drain to succeed submission, got %+v", submission)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) != 1 || requests[0].Status != "succeeded" {
+		t.Fatalf("expected succeeded publish request, got %+v", requests)
+	}
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+}
+
+func TestSubmitQueuesAndExitsWhenAnotherWorkerHoldsLock(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-busy")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/busy", featurePath)
+	writeFileAndCommit(t, featurePath, "busy.txt", "busy\n", "feature busy")
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
+	lease, err := lockManager.Acquire(state.IntegrationLock, "test")
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	defer lease.Release()
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.DrainResult != "Integration worker busy." {
+		t.Fatalf("expected busy drain result, got %+v", result)
+	}
+
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	submission, err := store.GetIntegrationSubmission(context.Background(), result.SubmissionID)
+	if err != nil {
+		t.Fatalf("GetIntegrationSubmission: %v", err)
+	}
+	if submission.Status != "queued" {
+		t.Fatalf("expected queued submission under held lock, got %+v", submission)
+	}
+}
+
 func TestSubmitRejectsProtectedBranch(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
 	repoRoot, _ := createTestRepo(t)
 
 	var initOut bytes.Buffer
@@ -136,6 +238,8 @@ func TestSubmitRejectsProtectedBranch(t *testing.T) {
 }
 
 func TestSubmitRejectsDirtyWorktree(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
 	repoRoot, _ := createTestRepo(t)
 	featurePath := filepath.Join(t.TempDir(), "dirty-feature")
 	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/dirty", featurePath)
@@ -159,6 +263,8 @@ func TestSubmitRejectsDirtyWorktree(t *testing.T) {
 }
 
 func TestSubmitRejectsDetachedHeadWithoutBranch(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
 	repoRoot, _ := createTestRepo(t)
 	detachedPath := filepath.Join(t.TempDir(), "detached")
 	runTestCommand(t, repoRoot, "git", "worktree", "add", "--detach", detachedPath)
@@ -195,6 +301,8 @@ func TestSubmitRejectsDetachedHeadWithoutBranch(t *testing.T) {
 }
 
 func TestSubmitAcceptsExplicitSHAWhenCheckedOut(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
 	repoRoot, _ := createTestRepo(t)
 	featurePath := filepath.Join(t.TempDir(), "feature-sha")
 	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/sha", featurePath)

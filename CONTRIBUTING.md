@@ -13,7 +13,7 @@
 - do feature work in a dedicated topic worktree
 - initialize new clones with `mq repo init`, commit `mainline.toml`, and run `./scripts/install-hooks.sh`
 - most agents should finish from a topic worktree with `mq submit --check-only --json` and `mq submit --wait --timeout 15m --json`
-- controller agents and daemons should prefer `mq land --json --timeout 30m` or `mainlined`
+- controller agents and daemons should prefer `mq land --json --timeout 30m` or one machine-global `mainlined --all --json`
 - land through `mq` instead of manual merge-on-main when possible
 - do not hand-edit SQLite state
 

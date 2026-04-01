@@ -178,6 +178,9 @@ Flags:
 	if err != nil {
 		return err
 	}
+	if err := registerRepo(cfg.Repo.MainWorktree, repoRoot, state.DefaultPath(layout.GitDir)); err != nil {
+		return err
+	}
 
 	payload, err := json.Marshal(map[string]string{
 		"protected_branch": cfg.Repo.ProtectedBranch,
@@ -205,11 +208,13 @@ Flags:
 			"main_worktree":              cfg.Repo.MainWorktree,
 			"state_path":                 state.DefaultPath(layout.GitDir),
 			"repository_root":            repoRoot,
+			"global_registry_path":       mustGlobalRegistryPath(),
 			"recommended_commit_message": "Initialize mainline repo policy",
 			"next_steps": []string{
 				"git add mainline.toml",
 				"git commit -m \"Initialize mainline repo policy\"",
 				"./scripts/install-hooks.sh",
+				"./scripts/install-launch-agent.sh",
 				"mq submit --check-only --json",
 				"mq submit --wait --timeout 15m --json",
 			},
@@ -220,10 +225,12 @@ Flags:
 	fmt.Fprintf(stdout, "Protected branch: %s\n", cfg.Repo.ProtectedBranch)
 	fmt.Fprintf(stdout, "Main worktree: %s\n", cfg.Repo.MainWorktree)
 	fmt.Fprintf(stdout, "State path: %s\n", state.DefaultPath(layout.GitDir))
+	fmt.Fprintf(stdout, "Global registry: %s\n", mustGlobalRegistryPath())
 	fmt.Fprintln(stdout, "Next:")
 	fmt.Fprintln(stdout, "  git add mainline.toml")
 	fmt.Fprintln(stdout, "  git commit -m \"Initialize mainline repo policy\"")
 	fmt.Fprintln(stdout, "  ./scripts/install-hooks.sh")
+	fmt.Fprintln(stdout, "  ./scripts/install-launch-agent.sh")
 	fmt.Fprintln(stdout, "  mq submit --check-only --json")
 	fmt.Fprintln(stdout, "  mq submit --wait --timeout 15m --json")
 	return nil

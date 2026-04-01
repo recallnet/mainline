@@ -74,4 +74,4 @@ jobs:
         run: make release-snapshot VERSION=ci
 
       - name: GoReleaser config check
-        run: go run github.com/goreleaser/goreleaser/v2 check
+        run: make goreleaser-check

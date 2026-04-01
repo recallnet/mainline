@@ -30,7 +30,10 @@ instructions.
   - `mq repo audit --repo /Users/devrel/Projects/_wt/recallnet/mainline/protected-main --json`
 - Controllers and factory-style daemons should prefer:
   - `mq land --json --timeout 30m`
-  - or a long-lived `mainlined --repo /Users/devrel/Projects/_wt/recallnet/mainline/protected-main --json`
+  - or one machine-global `mainlined --all --json`
+- Plain `mq submit` now opportunistically tries to drain after queueing. If the
+  integration lock is already held, it exits cleanly and the active worker keeps
+  draining.
 - Use `mq events --follow --json --lifecycle` from the protected worktree when a
   long-running agent or daemon needs push/integration notifications.
 - Treat `submission_id`, not branch name, as the stable factory handle for a

@@ -99,7 +99,7 @@ def main():
         "`mq submit --wait --timeout 15m --json` or `mq submit --json` followed by "
         "`mq wait --submission <id> --for landed --json --timeout 30m`.\n"
         "If you are the controller agent, use `mq land --json --timeout 30m` or let "
-        "`mainlined` own the protected worktree.\n"
+        "one machine-global `mainlined --all --json` drainer own registered repos.\n"
         "Allowed on main: read-only inspection and worktree creation. "
         "Blocked here: git commit/merge/rebase/push/pull/reset/switch/checkout and similar branch-mutating commands.\n"
     )

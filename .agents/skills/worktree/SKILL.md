@@ -21,6 +21,7 @@ Default commands to optimize for:
 - `mq submit --wait --timeout 15m --json`
 - `mq wait --submission <id> --for landed --json --timeout 30m`
 - `mq land --json --timeout 30m`
+- `mainlined --all --json`
 - `mq events --follow --json --lifecycle`
 
 Do not use this skill to bypass `mq`. It exists to dogfood the workflow that
@@ -139,6 +140,10 @@ If the branch is ready to hand off asynchronously instead:
 mq submit
 ```
 
+That now queues first and then opportunistically tries to drain. If another
+worker already holds the integration lock, the submit still succeeds and the
+active drainer owns the rest.
+
 If a controller owns the full integrate-plus-publish path:
 
 ```bash
@@ -173,6 +178,13 @@ When publish behavior is part of the dogfood target:
 
 ```bash
 mq publish --repo ~/Projects/_wt/recallnet/mainline/protected-main
+```
+
+For machine-wide steady state, prefer one global daemon instead of one daemon
+per repo:
+
+```bash
+mainlined --all --json
 ```
 
 Recommended verification loop:

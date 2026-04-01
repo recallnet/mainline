@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"os/user"
 	"path/filepath"
 	"time"
@@ -72,6 +73,7 @@ type submitResult struct {
 	Checked          bool   `json:"checked"`
 	Queued           bool   `json:"queued"`
 	Waited           bool   `json:"waited"`
+	DrainAttempted   bool   `json:"drain_attempted,omitempty"`
 	SubmissionID     int64  `json:"submission_id,omitempty"`
 	Branch           string `json:"branch,omitempty"`
 	SourceRef        string `json:"source_ref,omitempty"`
@@ -85,6 +87,7 @@ type submitResult struct {
 	SubmissionStatus string `json:"submission_status,omitempty"`
 	Outcome          string `json:"outcome,omitempty"`
 	DurationMS       int64  `json:"duration_ms,omitempty"`
+	DrainResult      string `json:"drain_result,omitempty"`
 	LastWorkerResult string `json:"last_worker_result,omitempty"`
 	ErrorCode        string `json:"error_code,omitempty"`
 	Error            string `json:"error,omitempty"`
@@ -105,6 +108,10 @@ Queue a topic worktree or detached sha for serialized integration.
 Turbo agent flow:
   mq submit --check-only --json
   mq submit --wait --timeout 15m --json
+
+Plain mq submit now queues first, then opportunistically tries to drain.
+If another worker already holds the integration lock, submit still succeeds and
+the active worker keeps draining.
 
 Examples:
   mq submit
@@ -281,6 +288,17 @@ Flags:
 			return waitErr
 		}
 	}
+	if !waitForResult && shouldTryDrainAfterSubmit() {
+		result.DrainAttempted = true
+		drainResult, drainErr := drainRepoUntilSettled(queued.Config.Repo.MainWorktree)
+		if drainResult != "" {
+			result.DrainResult = drainResult
+			result.LastWorkerResult = drainResult
+		}
+		if drainErr != nil {
+			result.Error = drainErr.Error()
+		}
+	}
 	if asJSON {
 		return writeSubmitJSON(stdout, result, nil)
 	}
@@ -289,6 +307,12 @@ Flags:
 	fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(queued.Submission))
 	fmt.Fprintf(stdout, "Worktree: %s\n", queued.Submission.SourceWorktree)
 	fmt.Fprintf(stdout, "Source SHA: %s\n", queued.Submission.SourceSHA)
+	if result.DrainResult != "" {
+		fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+	}
+	if result.Error != "" && !waitForResult {
+		fmt.Fprintf(stdout, "Drain error: %s\n", result.Error)
+	}
 	if waitForResult {
 		fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
 		if result.LastWorkerResult != "" {
@@ -299,6 +323,10 @@ Flags:
 		}
 	}
 	return nil
+}
+
+func shouldTryDrainAfterSubmit() bool {
+	return os.Getenv("MAINLINE_DISABLE_SUBMIT_DRAIN") == ""
 }
 
 func queueSubmission(opts submitOptions) (queuedSubmission, error) {

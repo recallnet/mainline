@@ -61,7 +61,7 @@ mq submit
 Run the daemon in the protected worktree and let agents only submit:
 
 ```bash
-mainlined --repo /path/to/main --interval 2s --json
+mainlined --all --interval 2s --json
 cd /path/to/agent-worktree
 mq submit --check-only --json
 mq submit --wait --timeout 15m --json
@@ -100,6 +100,9 @@ mq wait --submission 42 --for landed --json --timeout 30m
 ```
 
 That avoids branch-name polling and gives one stable handle per queued change.
+Plain `mq submit` also tries to drain immediately after queueing. If another
+worker already holds the integration lock, it exits cleanly and the active
+drainer keeps working.
 
 For agent wrappers that only need to know whether their branch landed cleanly, prefer:
 
@@ -159,3 +162,9 @@ mq retry --repo /path/to/main --publish 4
 `mq status --json` now projects publish correlation back onto succeeded
 submissions through `publish_request_id`, `publish_status`, and `outcome`, so a
 factory can answer “did this submission fully land?” from one status surface.
+
+For multi-repo machines, prefer one registered-repo daemon:
+
+```bash
+mainlined --all --json
+```

@@ -14,11 +14,13 @@ import (
 )
 
 type daemonOptions struct {
-	repoPath  string
-	interval  time.Duration
-	maxCycles int
-	jsonLogs  bool
-	idleExit  bool
+	repoPath     string
+	registryPath string
+	allRepos     bool
+	interval     time.Duration
+	maxCycles    int
+	jsonLogs     bool
+	idleExit     bool
 }
 
 type daemonLog struct {
@@ -54,11 +56,16 @@ func runDaemonWithName(programName string, args []string, stdout io.Writer, stde
 		repoPath: ".",
 		interval: time.Second,
 	}
+	if path, err := globalRegistryPath(); err == nil {
+		opts.registryPath = path
+	}
 
 	fs.BoolVar(&showHelp, "help", false, "show help")
 	fs.BoolVar(&showHelp, "h", false, "show help")
 	fs.BoolVar(&showVersion, "version", false, "show version")
 	fs.StringVar(&opts.repoPath, "repo", opts.repoPath, "repository path")
+	fs.BoolVar(&opts.allRepos, "all", false, "drain all registered repositories with one daemon")
+	fs.StringVar(&opts.registryPath, "registry", opts.registryPath, "global registry path for --all mode")
 	fs.DurationVar(&opts.interval, "interval", opts.interval, "poll interval")
 	fs.IntVar(&opts.maxCycles, "max-cycles", 0, "stop after N worker cycles (0 means run forever)")
 	fs.BoolVar(&opts.jsonLogs, "json", false, "emit structured json logs")
@@ -91,6 +98,9 @@ func runDaemonWithName(programName string, args []string, stdout io.Writer, stde
 }
 
 func runDaemonLoop(ctx context.Context, opts daemonOptions, stdout io.Writer) error {
+	if opts.allRepos {
+		return runGlobalDaemonLoop(ctx, opts, stdout)
+	}
 	logDaemon(stdout, opts, "info", "daemon.started", 0, "starting worker loop")
 
 	ticker := time.NewTicker(opts.interval)
@@ -124,12 +134,65 @@ func runDaemonLoop(ctx context.Context, opts daemonOptions, stdout io.Writer) er
 	}
 }
 
+func runGlobalDaemonLoop(ctx context.Context, opts daemonOptions, stdout io.Writer) error {
+	if opts.registryPath == "" {
+		path, err := globalRegistryPath()
+		if err != nil {
+			return err
+		}
+		opts.registryPath = path
+	}
+	logDaemon(stdout, opts, "info", "daemon.started", 0, "starting global worker loop")
+
+	ticker := time.NewTicker(opts.interval)
+	defer ticker.Stop()
+
+	for cycle := 1; ; cycle++ {
+		repos, err := loadRegisteredReposFromPath(opts.registryPath)
+		if err != nil {
+			return err
+		}
+		worked := false
+		for _, repo := range repos {
+			result, err := drainRepoUntilSettled(repo.MainWorktree)
+			if err != nil {
+				logDaemonForRepo(stdout, opts, repo.MainWorktree, "error", "cycle.failed", cycle, err.Error())
+				continue
+			}
+			logDaemonForRepo(stdout, opts, repo.MainWorktree, "info", "cycle.completed", cycle, result)
+			if !isIdleWorkerResult(result) && !isBusyWorkerResult(result) {
+				worked = true
+			}
+		}
+
+		if opts.idleExit && !worked {
+			logDaemon(stdout, opts, "info", "daemon.idle_exit", cycle, "no queued work across registered repos")
+			return nil
+		}
+		if opts.maxCycles > 0 && cycle >= opts.maxCycles {
+			logDaemon(stdout, opts, "info", "daemon.max_cycles_reached", cycle, "stopping after configured cycles")
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			logDaemon(stdout, opts, "info", "daemon.stopped", cycle, "shutdown requested")
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
 func logDaemon(w io.Writer, opts daemonOptions, level string, event string, cycle int, message string) {
+	logDaemonForRepo(w, opts, opts.repoPath, level, event, cycle, message)
+}
+
+func logDaemonForRepo(w io.Writer, opts daemonOptions, repo string, level string, event string, cycle int, message string) {
 	if opts.jsonLogs {
 		record := daemonLog{
 			Level:     level,
 			Event:     event,
-			Repo:      opts.repoPath,
+			Repo:      repo,
 			Cycle:     cycle,
 			Message:   message,
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -156,10 +219,15 @@ func daemonHelpText(programName string) string {
 Usage:
   %s [flags]
 
+Recommended machine-wide mode:
+  mainlined --all --json --interval 2s
+
 Flags:
   -h, --help            show help
   --version             show version
   --repo string         repository path (default ".")
+  --all                 drain all registered repositories with one daemon
+  --registry string     global registry path for --all mode
   --interval duration   poll interval (default 1s)
   --max-cycles int      stop after N cycles (default 0 means forever)
   --json                emit structured json logs
