@@ -69,8 +69,9 @@ This repo ships the canonical agent instructions in [.agents/skills/worktree/SKI
 That skill is now expected to use the real end-to-end flow:
 
 ```bash
-mq submit --repo /path/to/topic-worktree --wait --timeout 10m
-mq submit --repo /path/to/topic-worktree
+cd /path/to/topic-worktree
+mq submit --wait --timeout 10m
+mq submit
 mq status --repo /path/to/main --json
 mq run-once --repo /path/to/main
 mq publish --repo /path/to/main
