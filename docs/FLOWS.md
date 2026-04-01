@@ -7,9 +7,10 @@ These are the intended operator flows for `mainline` today.
 Initialize once:
 
 ```bash
-mq repo init --repo .
+mq repo init --repo . 
 git add mainline.toml && git commit -m "Initialize mainline repo policy"
 ./scripts/install-hooks.sh
+mq repo audit --repo . --json
 mq config edit --repo .
 mq doctor --repo .
 ```
@@ -21,6 +22,7 @@ git worktree add ../feature-login -b feature/login main
 cd ../feature-login
 # edit, test, commit
 mq submit
+mq repo audit --repo /path/to/protected-worktree --json
 mq status --repo . --json
 mq run-once --repo /path/to/protected-worktree
 mq publish --repo /path/to/protected-worktree
@@ -35,6 +37,7 @@ Keep one canonical protected-branch worktree and many topic worktrees:
 
 ```bash
 mq repo init --repo /path/to/main --main-worktree /path/to/main
+mq repo audit --repo /path/to/main --json
 mq config edit --repo /path/to/main
 mq doctor --repo /path/to/main
 mq status --repo /path/to/main
@@ -56,6 +59,7 @@ mainlined --repo /path/to/main --interval 2s --json
 cd /path/to/agent-worktree
 mq submit --check-only --json
 mq submit --wait --timeout 15m --json
+mq repo audit --repo /path/to/main --json
 mq events --repo /path/to/main --follow --json --lifecycle
 mq confidence --repo /path/to/main
 mq watch --repo /path/to/main
@@ -73,6 +77,7 @@ That skill is now expected to use the real end-to-end flow:
 cd /path/to/topic-worktree
 mq submit --check-only --json
 mq submit --wait --timeout 15m --json
+mq repo audit --repo /path/to/main --json
 mq status --repo /path/to/main --json
 mq run-once --repo /path/to/main
 mq publish --repo /path/to/main
@@ -101,6 +106,14 @@ mq submit --check-only --json
 ```
 
 That dry run verifies the branch is clean, includes the current protected tip, and is not already active in the queue at the same branch SHA.
+
+For branch ancestry certainty instead of narration, use:
+
+```bash
+mq repo audit --repo /path/to/main --json
+```
+
+An empty `unmerged` list means every discovered local/worktree branch tip is already reachable from the protected branch.
 
 If the repo has `[integration].MaxQueueDepth` set, `mq submit` will fail once the queued integration depth hits that limit. `--check-only` still works for dry-run validation in that state, which lets agents fail fast against a dead queue without silently growing it.
 

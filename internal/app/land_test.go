@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/state"
@@ -117,5 +118,33 @@ func TestLandFailsPreflightBeforeQueueingWhenProtectedWorktreeIsDirty(t *testing
 	}
 	if len(submissions) != 0 {
 		t.Fatalf("expected no queued submissions after preflight failure, got %+v", submissions)
+	}
+}
+
+func TestLandFailsIfSucceededSubmissionIsNotReachableFromProtectedBranch(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-land-verify")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/land-verify", featurePath)
+	writeFileAndCommit(t, featurePath, "verify.txt", "verify\n", "feature verify")
+
+	queued, err := queueSubmission(submitOptions{repoPath: featurePath})
+	if err != nil {
+		t.Fatalf("queueSubmission: %v", err)
+	}
+	if _, err := queued.Store.UpdateIntegrationSubmissionStatus(context.Background(), queued.Submission.ID, "succeeded", ""); err != nil {
+		t.Fatalf("UpdateIntegrationSubmissionStatus: %v", err)
+	}
+
+	result, err := waitForLandedPublish(queued, 100*time.Millisecond, time.Millisecond)
+	if err == nil {
+		t.Fatalf("expected verification failure")
+	}
+	if !strings.Contains(err.Error(), "not reachable from protected branch") {
+		t.Fatalf("expected reachability error, got %v", err)
+	}
+	if result.Error == "" || !strings.Contains(result.Error, "not reachable from protected branch") {
+		t.Fatalf("expected land result error, got %+v", result)
 	}
 }

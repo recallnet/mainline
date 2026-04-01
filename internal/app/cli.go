@@ -27,6 +27,7 @@ var cliCommands = []string{
 	"completion",
 	"version",
 	"config edit",
+	"repo audit",
 	"repo init",
 	"repo show",
 }
@@ -147,6 +148,7 @@ Commands:
   version       show build metadata
   config edit   open mainline.toml in an editor
   repo init     initialize repo config and durable state
+  repo audit    list local branches not yet merged into protected main
   repo show     inspect repo config and worktrees
 
 Use "%s <command> --help" for command-specific examples.

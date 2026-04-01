@@ -22,11 +22,15 @@ instructions.
 - Most coding agents should finish with:
   - `mq submit --check-only --json`
   - `mq submit --wait --timeout 15m --json`
+  - `mq repo audit --repo /Users/devrel/Projects/_wt/recallnet/mainline/protected-main --json`
 - Controllers and factory-style daemons should prefer:
   - `mq land --json --timeout 30m`
   - or a long-lived `mainlined --repo /Users/devrel/Projects/_wt/recallnet/mainline/protected-main --json`
 - Use `mq events --follow --json --lifecycle` from the protected worktree when a
   long-running agent or daemon needs push/integration notifications.
+- If a branch is claimed to be landed, verify it with
+  `mq repo audit --repo /Users/devrel/Projects/_wt/recallnet/mainline/protected-main --json`.
+  An empty `unmerged` list is the source of truth.
 
 ## Intent
 

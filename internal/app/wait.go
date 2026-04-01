@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/recallnet/mainline/internal/git"
 )
 
 type waitOutcome string
@@ -47,6 +49,7 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 		ProtectedBranch:  queued.Config.Repo.ProtectedBranch,
 		SubmissionStatus: queued.Submission.Status,
 	}
+	mainEngine := git.NewEngine(queued.Config.Repo.MainWorktree)
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -69,6 +72,15 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 
 		switch submission.Status {
 		case "succeeded":
+			protectedSHA, err := verifySubmissionReachable(mainEngine, queued.Config, submission)
+			if err != nil {
+				result.Outcome = waitOutcomeFailed
+				result.DurationMS = time.Since(start).Milliseconds()
+				result.Error = err.Error()
+				result.SubmissionStatus = "verification_failed"
+				return result, exitWithCode(1, err)
+			}
+			_ = protectedSHA
 			result.Outcome = waitOutcomeSucceeded
 			result.DurationMS = time.Since(start).Milliseconds()
 			return result, nil

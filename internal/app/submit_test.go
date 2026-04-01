@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
@@ -1042,5 +1043,36 @@ func TestSubmitWaitReturnsTimeoutExitCodeWhenWorkerStaysBusy(t *testing.T) {
 	}
 	if result.ErrorCode != "timeout" || result.Outcome != "timed_out" {
 		t.Fatalf("expected timeout wait result, got %+v", result)
+	}
+}
+
+func TestSubmitWaitFailsIfSucceededSubmissionIsNotReachableFromProtectedBranch(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-verify")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/verify", featurePath)
+	writeFileAndCommit(t, featurePath, "verify.txt", "verify\n", "feature verify")
+
+	queued, err := queueSubmission(submitOptions{repoPath: featurePath})
+	if err != nil {
+		t.Fatalf("queueSubmission: %v", err)
+	}
+	if _, err := queued.Store.UpdateIntegrationSubmissionStatus(context.Background(), queued.Submission.ID, "succeeded", ""); err != nil {
+		t.Fatalf("UpdateIntegrationSubmissionStatus: %v", err)
+	}
+
+	result, err := waitForIntegratedSubmission(queued, 100*time.Millisecond, time.Millisecond)
+	if err == nil {
+		t.Fatalf("expected verification failure")
+	}
+	if got := CLIExitCode(err); got != 1 {
+		t.Fatalf("expected exit code 1, got %d", got)
+	}
+	if result.Outcome != waitOutcomeFailed {
+		t.Fatalf("expected failed outcome, got %+v", result)
+	}
+	if !strings.Contains(result.Error, "not reachable from protected branch") {
+		t.Fatalf("expected reachability error, got %+v", result)
 	}
 }

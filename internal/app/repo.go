@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -25,6 +27,20 @@ type repoShowResult struct {
 	Worktrees      []git.Worktree   `json:"worktrees"`
 	Branch         string           `json:"branch"`
 	BranchStatus   git.BranchStatus `json:"branch_status"`
+}
+
+type unmergedBranch struct {
+	Branch       string `json:"branch"`
+	HeadSHA      string `json:"head_sha"`
+	WorktreePath string `json:"worktree_path,omitempty"`
+	IsCurrent    bool   `json:"is_current,omitempty"`
+}
+
+type repoAuditResult struct {
+	RepositoryRoot  string           `json:"repository_root"`
+	ProtectedBranch string           `json:"protected_branch"`
+	ProtectedSHA    string           `json:"protected_sha,omitempty"`
+	Unmerged        []unmergedBranch `json:"unmerged"`
 }
 
 func handleCommand(command string, args []string, stdout io.Writer, stderr io.Writer) error {
@@ -55,6 +71,8 @@ func handleCommand(command string, args []string, stdout io.Writer, stderr io.Wr
 		return runCompletion(args, stdout, stderr)
 	case "config edit":
 		return runConfigEdit(args, stdout, stderr)
+	case "repo audit":
+		return runRepoAudit(args, stdout, stderr)
 	case "repo init":
 		return runRepoInit(args, stdout, stderr)
 	case "repo show":
@@ -311,6 +329,165 @@ Flags:
 		fmt.Fprintln(stdout, "Protected upstream: none")
 	}
 	return nil
+}
+
+func runRepoAudit(args []string, stdout io.Writer, stderr io.Writer) error {
+	fs := flag.NewFlagSet(currentCLIProgramName()+" repo audit", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s repo audit [flags]
+
+List local branches and worktree refs not yet merged into the protected branch.
+
+Examples:
+  mq repo audit --repo /path/to/protected-main
+  mq repo audit --json
+
+Flags:
+`, currentCLIProgramName()))
+
+	var repoPath string
+	var asJSON bool
+
+	fs.StringVar(&repoPath, "repo", ".", "repository path")
+	fs.BoolVar(&asJSON, "json", false, "output json")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	result, err := collectRepoAudit(repoPath)
+	if err != nil {
+		return err
+	}
+
+	if asJSON {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(result)
+	}
+
+	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
+	fmt.Fprintf(stdout, "Protected branch: %s\n", result.ProtectedBranch)
+	if result.ProtectedSHA != "" {
+		fmt.Fprintf(stdout, "Protected SHA: %s\n", result.ProtectedSHA)
+	}
+	if len(result.Unmerged) == 0 {
+		fmt.Fprintln(stdout, "Unmerged branches: none")
+		return nil
+	}
+
+	fmt.Fprintln(stdout, "Unmerged branches:")
+	for _, branch := range result.Unmerged {
+		if branch.WorktreePath != "" {
+			fmt.Fprintf(stdout, "  %s %s (%s)\n", branch.Branch, branch.HeadSHA, branch.WorktreePath)
+			continue
+		}
+		fmt.Fprintf(stdout, "  %s %s\n", branch.Branch, branch.HeadSHA)
+	}
+	return nil
+}
+
+func collectRepoAudit(repoPath string) (repoAuditResult, error) {
+	layout, repoRoot, cfg, _, _, err := loadRepoContext(repoPath)
+	if err != nil {
+		return repoAuditResult{}, err
+	}
+
+	engine := git.NewEngine(layout.WorktreeRoot)
+	protectedSHA, err := engine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+	if err != nil && engine.BranchExists(cfg.Repo.ProtectedBranch) {
+		return repoAuditResult{}, err
+	}
+
+	worktrees, err := engine.ListWorktrees()
+	if err != nil {
+		return repoAuditResult{}, err
+	}
+
+	attachedWorktree := make(map[string]git.Worktree, len(worktrees))
+	candidates := map[string]unmergedBranch{}
+	for _, wt := range worktrees {
+		if wt.Branch == "" || wt.IsDetached {
+			continue
+		}
+		attachedWorktree[wt.Branch] = wt
+		if wt.Branch == cfg.Repo.ProtectedBranch {
+			continue
+		}
+		merged, err := engine.IsAncestor(wt.Branch, cfg.Repo.ProtectedBranch)
+		if err != nil {
+			return repoAuditResult{}, err
+		}
+		if merged {
+			continue
+		}
+		candidates[wt.Branch] = unmergedBranch{
+			Branch:       wt.Branch,
+			HeadSHA:      wt.HeadSHA,
+			WorktreePath: wt.Path,
+			IsCurrent:    wt.IsCurrent,
+		}
+	}
+
+	output, err := captureGit(layout.WorktreeRoot, "branch", "--format=%(refname:short)")
+	if err != nil {
+		return repoAuditResult{}, err
+	}
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		branch := strings.TrimSpace(line)
+		if branch == "" || branch == cfg.Repo.ProtectedBranch {
+			continue
+		}
+		if _, ok := candidates[branch]; ok {
+			continue
+		}
+		merged, err := engine.IsAncestor(branch, cfg.Repo.ProtectedBranch)
+		if err != nil {
+			return repoAuditResult{}, err
+		}
+		if merged {
+			continue
+		}
+		headSHA, err := engine.BranchHeadSHA(branch)
+		if err != nil {
+			return repoAuditResult{}, err
+		}
+		entry := unmergedBranch{
+			Branch:  branch,
+			HeadSHA: headSHA,
+		}
+		if wt, ok := attachedWorktree[branch]; ok {
+			entry.WorktreePath = wt.Path
+			entry.IsCurrent = wt.IsCurrent
+		}
+		candidates[branch] = entry
+	}
+
+	unmerged := make([]unmergedBranch, 0, len(candidates))
+	for _, entry := range candidates {
+		unmerged = append(unmerged, entry)
+	}
+	sort.Slice(unmerged, func(i, j int) bool {
+		return unmerged[i].Branch < unmerged[j].Branch
+	})
+
+	return repoAuditResult{
+		RepositoryRoot:  repoRoot,
+		ProtectedBranch: cfg.Repo.ProtectedBranch,
+		ProtectedSHA:    protectedSHA,
+		Unmerged:        unmerged,
+	}, nil
+}
+
+func captureGit(worktreePath string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = filepath.Clean(worktreePath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
+	}
+	return string(output), nil
 }
 
 func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {

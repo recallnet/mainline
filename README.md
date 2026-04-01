@@ -188,6 +188,7 @@ Setup:
 
 ```bash
 mq repo init --repo /path/to/protected-main --main-worktree /path/to/protected-main
+mq repo audit --repo /path/to/protected-main --json
 mq config edit --repo /path/to/protected-main
 mq doctor --repo /path/to/protected-main --fix --json
 ```
@@ -205,6 +206,7 @@ Operate and observe:
 
 ```bash
 mq status --repo /path/to/protected-main --json
+mq repo audit --repo /path/to/protected-main --json
 mq watch --repo /path/to/protected-main
 mq events --repo /path/to/protected-main --follow --json --lifecycle
 mq retry --repo /path/to/protected-main --submission 17

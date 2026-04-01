@@ -299,6 +299,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "publish logs watch events doctor completion version config") {
 		t.Fatalf("expected completion script to include config surface, got %q", output)
 	}
+	if !strings.Contains(output, "compgen -W \"init show audit\"") {
+		t.Fatalf("expected repo audit completion to be present, got %q", output)
+	}
 	if strings.Contains(output, "run-once|publish|doctor") {
 		t.Fatalf("expected split completion cases for real command flags, got %q", output)
 	}
@@ -357,6 +360,9 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	}
 	if !strings.Contains(output, "__fish_seen_subcommand_from config edit\" -l editor") {
 		t.Fatalf("expected fish completion to include config edit flags, got %q", output)
+	}
+	if !strings.Contains(output, "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit") {
+		t.Fatalf("expected fish completion to include repo audit subcommand, got %q", output)
 	}
 }
 

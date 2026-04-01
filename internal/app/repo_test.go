@@ -157,6 +157,49 @@ func TestRepoInitFromLinkedWorktreeWritesSharedConfig(t *testing.T) {
 	}
 }
 
+func TestRepoAuditListsUnmergedWorktreeBranches(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	mergedPath := filepath.Join(t.TempDir(), "feature-merged")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/merged", mergedPath)
+	writeFileAndCommit(t, mergedPath, "merged.txt", "merged\n", "feature merged")
+	runTestCommand(t, repoRoot, "git", "merge", "--ff-only", "feature/merged")
+
+	unmergedPath := filepath.Join(t.TempDir(), "feature-unmerged")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/unmerged", unmergedPath)
+	writeFileAndCommit(t, unmergedPath, "unmerged.txt", "unmerged\n", "feature unmerged")
+
+	var auditOut bytes.Buffer
+	var auditErr bytes.Buffer
+	if err := runRepoAudit([]string{"--repo", repoRoot, "--json"}, &auditOut, &auditErr); err != nil {
+		t.Fatalf("runRepoAudit returned error: %v", err)
+	}
+
+	var result repoAuditResult
+	if err := json.Unmarshal(auditOut.Bytes(), &result); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if len(result.Unmerged) != 1 {
+		t.Fatalf("expected one unmerged branch, got %+v", result.Unmerged)
+	}
+	if result.Unmerged[0].Branch != "feature/unmerged" {
+		t.Fatalf("expected feature/unmerged, got %+v", result.Unmerged[0])
+	}
+	wantPath, err := filepath.EvalSymlinks(unmergedPath)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(unmergedPath): %v", err)
+	}
+	if result.Unmerged[0].WorktreePath != wantPath {
+		t.Fatalf("expected worktree path %q, got %+v", wantPath, result.Unmerged[0])
+	}
+}
+
 func TestRepoInitFromBareCloneWorktreeUsesSharedStorage(t *testing.T) {
 	bareDir, worktreePath := createBareCloneWorktree(t)
 

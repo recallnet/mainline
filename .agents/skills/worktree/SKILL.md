@@ -168,6 +168,7 @@ Recommended verification loop:
 
 ```bash
 mq status --repo ~/Projects/_wt/recallnet/mainline/protected-main --json
+mq repo audit --repo ~/Projects/_wt/recallnet/mainline/protected-main --json
 mq events --repo ~/Projects/_wt/recallnet/mainline/protected-main --follow --json --lifecycle
 ```
 
@@ -176,6 +177,7 @@ Expected:
 - submission is visible in durable queue state
 - integration result is visible after `mq run-once`
 - publish result is visible after `mq publish` or daemon-driven publish
+- `unmerged` is empty once the branch is truly reachable from protected `main`
 
 ## Review and fix loop
 
