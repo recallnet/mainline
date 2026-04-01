@@ -112,6 +112,15 @@ mq submit --json
 mq wait --submission 42 --for landed --json --timeout 30m
 ```
 
+If you want to prove daemon-only handling for a specific submission, queue
+without opportunistic drain:
+
+```bash
+cd /path/to/topic-worktree
+mq submit --queue-only --json
+mq wait --submission 42 --for landed --json --timeout 30m
+```
+
 That avoids branch-name polling and gives one stable handle per queued change.
 Plain `mq submit` also tries to drain immediately after queueing. If another
 worker already holds the integration lock, it exits cleanly and the active

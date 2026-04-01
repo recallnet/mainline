@@ -120,6 +120,7 @@ Turbo paths:
     %s submit --check-only --json
     %s submit --wait --timeout 15m --json
     # submit --wait stops at integrated; use land or wait --for landed for remote publish
+    # use submit --queue-only when you want the daemon, not submit, to do the drain
 
   Controller or factory daemon:
     %s land --json --timeout 30m
@@ -132,7 +133,7 @@ Turbo paths:
     %s doctor --fix --repo /path/to/repo-root --json
 
 Initialize once per repo:
-  %s repo init --repo /path/to/repo-root --main-worktree /path/to/repo-root
+  %s repo init --repo /path/to/repo-root
   %s repo root --repo /path/to/repo-root --json
   git add mainline.toml && git commit -m "Initialize mainline repo policy"
   ./scripts/install-hooks.sh

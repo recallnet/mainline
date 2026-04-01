@@ -64,6 +64,7 @@ type rootCheckoutInfo struct {
 	Branch      string `json:"branch,omitempty"`
 	Clean       bool   `json:"clean"`
 	IsCanonical bool   `json:"is_canonical"`
+	Topology    string `json:"topology,omitempty"`
 }
 
 func handleCommand(command string, args []string, stdout io.Writer, stderr io.Writer) error {
@@ -161,29 +162,37 @@ Flags:
 		return err
 	}
 	repoRoot := layout.RepositoryRoot
+	defaultProtectedWorktree := defaultMainWorktree(layout)
+	if mainWorktree == "" {
+		mainWorktree = defaultProtectedWorktree
+	} else if !filepath.IsAbs(mainWorktree) {
+		mainWorktree = filepath.Join(repoRoot, mainWorktree)
+	}
+	mainWorktree = canonicalRegistryPath(mainWorktree)
 
 	engine := git.NewEngine(layout.WorktreeRoot)
 	currentBranch, err := engine.CurrentBranch()
 	if err != nil {
-		return err
+		if protectedBranch == "" && mainWorktree == canonicalRegistryPath(layout.WorktreeRoot) {
+			return fmt.Errorf("repo init requires the protected worktree to be on a branch; detached HEAD is not supported")
+		}
+		currentBranch = ""
 	}
 
 	cfg := policy.DefaultFile()
 	if protectedBranch == "" {
-		protectedBranch = currentBranch
+		if mainWorktree == canonicalRegistryPath(layout.WorktreeRoot) && currentBranch != cfg.Repo.ProtectedBranch {
+			return fmt.Errorf("repo init must run from local branch %q or pass --protected-branch explicitly; current branch is %q", cfg.Repo.ProtectedBranch, currentBranch)
+		}
+		protectedBranch = cfg.Repo.ProtectedBranch
 	}
 	if remote == "" {
 		remote = cfg.Repo.RemoteName
 	}
-	if mainWorktree == "" {
-		mainWorktree = defaultMainWorktree(layout)
-	} else if !filepath.IsAbs(mainWorktree) {
-		mainWorktree = filepath.Join(repoRoot, mainWorktree)
-	}
 
 	cfg.Repo.ProtectedBranch = protectedBranch
 	cfg.Repo.RemoteName = remote
-	cfg.Repo.MainWorktree = canonicalRegistryPath(mainWorktree)
+	cfg.Repo.MainWorktree = mainWorktree
 
 	if err := policy.SaveFile(repoRoot, cfg); err != nil {
 		return err
@@ -243,6 +252,7 @@ Flags:
 				"./scripts/install-hooks.sh",
 				"./scripts/install-launch-agent.sh",
 				"# for agent/factory repos, set [publish].Mode = 'auto' before relying on submit --wait",
+				"mq submit --queue-only --json",
 				"mq submit --check-only --json",
 				"mq submit --wait --timeout 15m --json",
 				"mq land --json --timeout 30m",
@@ -261,6 +271,7 @@ Flags:
 	fmt.Fprintln(stdout, "  ./scripts/install-hooks.sh")
 	fmt.Fprintln(stdout, "  ./scripts/install-launch-agent.sh")
 	fmt.Fprintln(stdout, "  # for agent/factory repos, set [publish].Mode = 'auto' before relying on submit --wait")
+	fmt.Fprintln(stdout, "  mq submit --queue-only --json")
 	fmt.Fprintln(stdout, "  mq submit --check-only --json")
 	fmt.Fprintln(stdout, "  mq submit --wait --timeout 15m --json")
 	fmt.Fprintln(stdout, "  mq land --json --timeout 30m")
@@ -450,6 +461,9 @@ Flags:
 	fmt.Fprintf(stdout, "Protected branch: %s\n", result.ProtectedBranch)
 	fmt.Fprintf(stdout, "Main worktree: %s\n", result.MainWorktree)
 	fmt.Fprintf(stdout, "Root checkout: %s\n", result.RootCheckout.Path)
+	if result.RootCheckout.Topology != "" {
+		fmt.Fprintf(stdout, "Root checkout topology: %s\n", result.RootCheckout.Topology)
+	}
 	fmt.Fprintf(stdout, "Root checkout canonical: %s\n", yesNo(result.RootCheckout.IsCanonical))
 	if result.RootCheckout.Branch != "" {
 		fmt.Fprintf(stdout, "Root checkout branch: %s\n", result.RootCheckout.Branch)
@@ -910,7 +924,15 @@ func hasGitWorktreeMarker(path string) bool {
 
 func inspectCanonicalRootCheckout(cfg policy.File, layout git.RepositoryLayout) (rootCheckoutInfo, []string) {
 	if !hasGitWorktreeMarker(layout.RepositoryRoot) {
-		return rootCheckoutInfo{}, nil
+		info := rootCheckoutInfo{
+			Path:        canonicalRegistryPath(layout.RepositoryRoot),
+			Exists:      false,
+			IsCanonical: false,
+			Topology:    "bare-repository-storage",
+		}
+		return info, []string{
+			fmt.Sprintf("repository root %s is bare Git storage, not a checkout; trust the canonical protected worktree %s instead", info.Path, canonicalRegistryPath(cfg.Repo.MainWorktree)),
+		}
 	}
 
 	rootPath := canonicalRegistryPath(layout.RepositoryRoot)
@@ -919,6 +941,7 @@ func inspectCanonicalRootCheckout(cfg policy.File, layout git.RepositoryLayout) 
 		Path:        rootPath,
 		Exists:      true,
 		IsCanonical: mainWorktreePath == rootPath,
+		Topology:    "root-checkout",
 	}
 	var warnings []string
 	if !info.IsCanonical {

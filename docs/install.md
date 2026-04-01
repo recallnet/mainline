@@ -64,6 +64,10 @@ git commit -m "Initialize mainline repo policy"
 mq repo root --repo . --json
 ```
 
+`mq repo init` expects the protected worktree to be on a branch, not detached
+HEAD. For ordinary repos, run it from local branch `main`. If you really intend
+to protect a different branch, pass `--protected-branch` explicitly.
+
 `mq repo init` automatically registers the repo for the machine-global daemon
 registry used by `mainlined --all`.
 For ordinary repos, treat that root checkout as the canonical protected `main`.
@@ -76,6 +80,10 @@ Use `mq repo root --repo . --json` to confirm that the canonical root checkout
 is trustworthy. If the root checkout is already clean and on the protected
 branch but config drift points elsewhere, repair that with
 `mq repo root --repo . --adopt-root`.
+
+For bare-repository-plus-worktree layouts, there is no human-facing root
+checkout at the bare repo path. In that topology, trust the configured
+canonical protected worktree instead of expecting `root_checkout.exists = true`.
 
 State compatibility:
 

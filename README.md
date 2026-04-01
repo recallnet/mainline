@@ -97,6 +97,13 @@ mq land --json --timeout 30m
 For agent-heavy and factory-style repos, set `[publish].Mode = 'auto'` in
 `mainline.toml` unless there is a real operator reason to keep publish manual.
 
+If you want to prove that the daemon, not `submit`, handled a specific change:
+
+```bash
+mq submit --queue-only --json
+mq wait --submission 42 --for landed --json --timeout 30m
+```
+
 The controller path should feel like this:
 
 ```bash

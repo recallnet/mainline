@@ -221,6 +221,35 @@ func TestSubmitQueuesAndExitsWhenAnotherWorkerHoldsLock(t *testing.T) {
 	}
 }
 
+func TestSubmitQueueOnlySkipsOpportunisticDrain(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-queue-only")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/queue-only", featurePath)
+	writeFileAndCommit(t, featurePath, "queue-only.txt", "queue only\n", "feature queue only")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--queue-only", "--json"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.DrainAttempted {
+		t.Fatalf("expected queue-only submit to skip drain, got %+v", result)
+	}
+	if result.SubmissionStatus != "queued" {
+		t.Fatalf("expected queued submission, got %+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, "queue-only.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected queue-only branch not to land yet, got err=%v", err)
+	}
+}
+
 func TestSubmitRejectsProtectedBranch(t *testing.T) {
 	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
 

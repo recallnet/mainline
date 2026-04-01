@@ -40,6 +40,7 @@ type submitOptions struct {
 	requestedBy  string
 	priority     string
 	checkOnly    bool
+	queueOnly    bool
 	allowNewer   bool
 }
 
@@ -116,9 +117,12 @@ Turbo agent flow:
 Plain mq submit now queues first, then opportunistically tries to drain.
 If another worker already holds the integration lock, submit still succeeds and
 the active worker keeps draining.
+Use --queue-only when you want to prove daemon-only handling for a specific
+submission.
 
 Examples:
   mq submit
+  mq submit --queue-only --json
   mq submit --allow-newer-head --wait --timeout 15m --json
   mq submit --wait --timeout 15m --json
   mq submit --sha <commit> --json
@@ -136,6 +140,7 @@ Flags:
 	var checkOnly bool
 	var checkOnlyAlias bool
 	var waitForResult bool
+	var queueOnly bool
 	var timeout time.Duration
 	var pollInterval time.Duration
 	var allowNewerHead bool
@@ -149,6 +154,7 @@ Flags:
 	fs.BoolVar(&asJSON, "json", false, "output json")
 	fs.BoolVar(&checkOnly, "check", false, "validate submission without queueing it")
 	fs.BoolVar(&checkOnlyAlias, "check-only", false, "validate submission without queueing it")
+	fs.BoolVar(&queueOnly, "queue-only", false, "queue the submission without opportunistically draining it")
 	fs.BoolVar(&allowNewerHead, "allow-newer-head", false, "allow a queued branch head to advance before integration if it remains a descendant of the submitted sha")
 	fs.BoolVar(&waitForResult, "wait", false, "wait for the submission to integrate (not remote publish)")
 	fs.DurationVar(&timeout, "timeout", 10*time.Minute, "maximum time to wait for integration")
@@ -175,6 +181,7 @@ Flags:
 		requestedBy:  requestedBy,
 		priority:     priority,
 		checkOnly:    checkOnly,
+		queueOnly:    queueOnly,
 		allowNewer:   allowNewerHead,
 	}
 	prepared, err := prepareSubmission(opts)
@@ -298,7 +305,7 @@ Flags:
 			return waitErr
 		}
 	}
-	if !waitForResult && shouldTryDrainAfterSubmit() {
+	if !waitForResult && shouldTryDrainAfterSubmit(opts) {
 		result.DrainAttempted = true
 		drainResult, drainErr := drainRepoUntilSettled(queued.Config.Repo.MainWorktree)
 		if drainResult != "" {
@@ -355,8 +362,8 @@ Flags:
 	return nil
 }
 
-func shouldTryDrainAfterSubmit() bool {
-	return os.Getenv("MAINLINE_DISABLE_SUBMIT_DRAIN") == ""
+func shouldTryDrainAfterSubmit(opts submitOptions) bool {
+	return !opts.queueOnly && os.Getenv("MAINLINE_DISABLE_SUBMIT_DRAIN") == ""
 }
 
 func queueSubmission(opts submitOptions) (queuedSubmission, error) {

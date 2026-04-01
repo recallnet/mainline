@@ -25,6 +25,7 @@ instructions.
   - `mq submit --wait --timeout 15m --json`
   - treat `submit --wait` as `integrated`, not remote-published
   - capture `submission_id` from JSON when a wrapper needs durable tracking
+  - use `mq submit --queue-only --json` when the point is to let the daemon, not submit, own the drain
   - `mq wait --submission <id> --for landed --json --timeout 30m` when the
     wrapper needs integrate-plus-publish confirmation by id
   - or `mq land --json --timeout 30m` when remote landing is the actual end of the job
@@ -48,6 +49,9 @@ instructions.
 - Use `mq repo root --repo /Users/devrel/Projects/recallnet/mainline --json`
   as the explicit source of truth for whether the canonical root checkout is
   trustworthy.
+- In bare-repository-plus-worktree layouts, do not expect a human-facing root
+  checkout at the bare repo path. Trust the configured canonical protected
+  worktree instead.
 - Use `mq repo root --repo /Users/devrel/Projects/recallnet/mainline --adopt-root`
   only after the root checkout is already clean and on branch `main`.
 - Plain `mq submit` now opportunistically tries to drain after queueing. If the

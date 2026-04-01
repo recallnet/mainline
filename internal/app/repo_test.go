@@ -443,6 +443,38 @@ func TestRepoInitCanonicalizesRelativeMainWorktreeToRepoRoot(t *testing.T) {
 	}
 }
 
+func TestRepoInitRejectsDetachedProtectedWorktree(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	detachedPath := filepath.Join(t.TempDir(), "detached-protected")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "--detach", detachedPath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	err := runRepoInit([]string{"--repo", detachedPath, "--main-worktree", detachedPath}, &initOut, &initErr)
+	if err == nil {
+		t.Fatalf("expected detached protected worktree rejection")
+	}
+	if !strings.Contains(err.Error(), "detached HEAD") {
+		t.Fatalf("expected detached HEAD guidance, got %v", err)
+	}
+}
+
+func TestRepoInitRejectsNonDefaultProtectedBranchWithoutExplicitOverride(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	protectedPath := filepath.Join(t.TempDir(), "protected-main")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "protected-main", protectedPath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	err := runRepoInit([]string{"--repo", protectedPath, "--main-worktree", protectedPath}, &initOut, &initErr)
+	if err == nil {
+		t.Fatalf("expected non-default protected branch rejection")
+	}
+	if !strings.Contains(err.Error(), `local branch "main"`) || !strings.Contains(err.Error(), `current branch is "protected-main"`) {
+		t.Fatalf("expected main-branch guidance, got %v", err)
+	}
+}
+
 func TestRepoShowWarnsWhenRootCheckoutIsDirtyAndNonCanonical(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	featurePath := filepath.Join(t.TempDir(), "feature-root-warning")
@@ -657,6 +689,40 @@ func TestDoctorSucceedsFromBareCloneWorktree(t *testing.T) {
 
 	if got := report["main_worktree_path"]; got != wantWorktreePath {
 		t.Fatalf("expected main worktree path %q, got %#v", wantWorktreePath, got)
+	}
+}
+
+func TestRepoShowReportsBareStorageTopologyForRootCheckout(t *testing.T) {
+	bareDir, worktreePath := createBareCloneWorktree(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", worktreePath, "--protected-branch", "main"}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	var showOut bytes.Buffer
+	var showErr bytes.Buffer
+	if err := runRepoShow([]string{"--repo", worktreePath, "--json"}, &showOut, &showErr); err != nil {
+		t.Fatalf("runRepoShow returned error: %v", err)
+	}
+
+	var result repoShowResult
+	if err := json.Unmarshal(showOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	wantBareDir, err := filepath.EvalSymlinks(bareDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(bareDir): %v", err)
+	}
+	if result.RootCheckout.Path != wantBareDir || result.RootCheckout.Exists {
+		t.Fatalf("expected bare storage root checkout info, got %+v", result.RootCheckout)
+	}
+	if result.RootCheckout.Topology != "bare-repository-storage" {
+		t.Fatalf("expected bare storage topology, got %+v", result.RootCheckout)
+	}
+	if !strings.Contains(strings.Join(result.Warnings, "\n"), "bare Git storage") {
+		t.Fatalf("expected bare storage warning, got %#v", result.Warnings)
 	}
 }
 
