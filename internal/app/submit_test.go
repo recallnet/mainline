@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/recallnet/mainline/internal/git"
+	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
 )
 
@@ -689,6 +690,148 @@ func TestSubmitRejectsCheckOnlyWaitCombination(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--check/--check-only and --wait cannot be used together") {
 		t.Fatalf("expected combined check/check-only conflict error, got %v", err)
+	}
+}
+
+func TestSubmitRejectsWhenIntegrationQueueDepthReached(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featureOne := filepath.Join(t.TempDir(), "feature-one")
+	featureTwo := filepath.Join(t.TempDir(), "feature-two")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/one", featureOne)
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/two", featureTwo)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Integration.MaxQueueDepth = 1
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+
+	writeFileAndCommit(t, featureOne, "one.txt", "one\n", "feature one")
+	writeFileAndCommit(t, featureTwo, "two.txt", "two\n", "feature two")
+
+	if err := runSubmit([]string{"--repo", featureOne}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("first runSubmit returned error: %v", err)
+	}
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err = runSubmit([]string{"--repo", featureTwo, "--json"}, &submitOut, &submitErr)
+	if err == nil {
+		t.Fatalf("expected queue depth rejection")
+	}
+
+	var result submitResult
+	if unmarshalErr := json.Unmarshal(submitOut.Bytes(), &result); unmarshalErr != nil {
+		t.Fatalf("Unmarshal: %v", unmarshalErr)
+	}
+	if result.ErrorCode != "integration_queue_full" {
+		t.Fatalf("expected integration_queue_full, got %+v", result)
+	}
+	if !strings.Contains(result.Error, "max_queue_depth=1") {
+		t.Fatalf("expected max_queue_depth message, got %+v", result)
+	}
+}
+
+func TestSubmitCheckOnlyIgnoresQueueDepthLimit(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featureOne := filepath.Join(t.TempDir(), "feature-one")
+	featureTwo := filepath.Join(t.TempDir(), "feature-two")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/one", featureOne)
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/two", featureTwo)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Integration.MaxQueueDepth = 1
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+
+	writeFileAndCommit(t, featureOne, "one.txt", "one\n", "feature one")
+	writeFileAndCommit(t, featureTwo, "two.txt", "two\n", "feature two")
+
+	if err := runSubmit([]string{"--repo", featureOne}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("first runSubmit returned error: %v", err)
+	}
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featureTwo, "--check-only", "--json"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("expected check-only to pass, got %v", err)
+	}
+
+	var result submitResult
+	if unmarshalErr := json.Unmarshal(submitOut.Bytes(), &result); unmarshalErr != nil {
+		t.Fatalf("Unmarshal: %v", unmarshalErr)
+	}
+	if !result.OK || result.Queued {
+		t.Fatalf("expected successful dry-run result, got %+v", result)
+	}
+}
+
+func TestSubmitCanReprioritizeQueuedDuplicateWhenQueueDepthReached(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-priority")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/priority", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Integration.MaxQueueDepth = 1
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityLow}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("first runSubmit returned error: %v", err)
+	}
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("reprioritize runSubmit returned error: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(featurePath)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if len(submissions) != 1 || submissions[0].Priority != submissionPriorityHigh {
+		t.Fatalf("expected queued duplicate reprioritized despite full queue, got %+v", submissions)
 	}
 }
 

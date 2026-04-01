@@ -169,6 +169,7 @@ For factory or daemon callers, the intended handoff is:
 
 - `mq submit --check --json` to fast-fail deterministic problems before queue mutation
 - `mq submit --check-only --json` for the stricter dry-run path: clean worktree, current protected tip included, and no duplicate active submission for the same branch SHA
+- `integration.max_queue_depth` to stop dead queues from silently accumulating unbounded queued branches
 - `mq submit --json` to record the branch and get a stable `submission_id`
 - `mq submit --wait --timeout 10m` when an agent needs a blocking landed-or-blocked answer without implementing its own poll loop
 - `mainlined` or `mq land` to carry the branch the rest of the way to integrated and published state
@@ -176,6 +177,8 @@ For factory or daemon callers, the intended handoff is:
 If `origin/main` advances before your branch reaches the front of the queue, that is normal queue work, not a manual repair job. `mainline` syncs protected `main` from upstream before integration when policy allows it, records that as a durable event, and only blocks if the branch now has a real rebase conflict.
 
 `mq submit --wait` is integration-scoped, not publish-scoped. It exits `0` when the branch is integrated, `1` for blocked/failed/cancelled outcomes, and `2` on timeout.
+
+If a repo sets `integration.max_queue_depth`, `mq submit` will reject new queued work once that many submissions are already waiting. Use `mq submit --check-only --json` when an agent wants a cheap preflight without consuming queue capacity.
 
 Observe and control:
 

@@ -516,6 +516,18 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 				Message: fmt.Sprintf("submission %d for %q at %s is already %s", duplicate.ID, sourceRef, headSHA, duplicate.Status),
 			}
 		}
+		if !opts.checkOnly && cfg.Integration.MaxQueueDepth > 0 {
+			queuedCount, err := store.CountQueuedIntegrationSubmissions(ctx, repoRecord.ID)
+			if err != nil {
+				return preparedSubmission{}, err
+			}
+			if queuedCount >= cfg.Integration.MaxQueueDepth {
+				return preparedSubmission{}, &submitValidationError{
+					Code:    "integration_queue_full",
+					Message: fmt.Sprintf("integration queue depth %d reached max_queue_depth=%d; wait for mainlined to drain the queue or raise integration.max_queue_depth", queuedCount, cfg.Integration.MaxQueueDepth),
+				}
+			}
+		}
 	}
 
 	if opts.checkOnly {

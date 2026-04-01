@@ -682,6 +682,26 @@ func (s Store) CountUnfinishedItems(ctx context.Context, repoID int64) (int, err
 	return submissionCount + publishCount, nil
 }
 
+// CountQueuedIntegrationSubmissions returns the number of queued submissions for a repo.
+func (s Store) CountQueuedIntegrationSubmissions(ctx context.Context, repoID int64) (int, error) {
+	db, err := s.open()
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+
+	var count int
+	if err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM integration_submissions
+		WHERE repo_id = ? AND status = 'queued'
+	`, repoID).Scan(&count); err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
 func (s Store) open() (*sql.DB, error) {
 	if s.Path == "" {
 		return nil, fmt.Errorf("state path is empty")

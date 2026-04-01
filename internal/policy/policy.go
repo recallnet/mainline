@@ -23,6 +23,7 @@ type IntegrationConfig struct {
 	Strategy            string
 	SyncPolicy          string
 	DirtyWorktreePolicy string
+	MaxQueueDepth       int
 }
 
 // PublishConfig holds publish policy defaults.
@@ -54,6 +55,7 @@ func DefaultConfig() Config {
 			Strategy:            "rebase-then-ff",
 			SyncPolicy:          "sync-before-integrate",
 			DirtyWorktreePolicy: "reject",
+			MaxQueueDepth:       0,
 		},
 		Publish: PublishConfig{
 			Mode:              "manual",
