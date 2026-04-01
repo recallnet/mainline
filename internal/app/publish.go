@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
@@ -66,7 +67,7 @@ Flags:
 		return fmt.Errorf("protected branch %q does not exist", cfg.Repo.ProtectedBranch)
 	}
 	if !report.ProtectedBranchClean {
-		return fmt.Errorf("protected branch worktree %s is dirty", cfg.Repo.MainWorktree)
+		return protectedWorktreeDirtyError(cfg.Repo.MainWorktree, report.ProtectedDirtyPaths)
 	}
 	if report.HasDivergedUpstream {
 		return fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, report.UpstreamRef)
@@ -144,6 +145,21 @@ Flags:
 
 func shouldTryDrainAfterMutation() bool {
 	return os.Getenv("MAINLINE_DISABLE_MUTATION_DRAIN") == ""
+}
+
+func protectedWorktreeDirtyError(mainWorktree string, dirtyPaths []string) error {
+	if len(dirtyPaths) == 0 {
+		return fmt.Errorf("protected branch worktree %s is dirty", mainWorktree)
+	}
+	preview := dirtyPaths
+	if len(preview) > 5 {
+		preview = dirtyPaths[:5]
+	}
+	message := fmt.Sprintf("protected branch worktree %s is dirty (%s)", mainWorktree, strings.Join(preview, ", "))
+	if len(dirtyPaths) > len(preview) {
+		message = fmt.Sprintf("%s and %d more", message, len(dirtyPaths)-len(preview))
+	}
+	return fmt.Errorf("%s; clean or commit those paths in the protected root checkout before retrying", message)
 }
 
 func loadRepoContext(repoPath string) (git.RepositoryLayout, string, policy.File, state.RepositoryRecord, state.Store, error) {

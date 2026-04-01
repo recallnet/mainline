@@ -102,6 +102,9 @@ func TestLandFailsPreflightBeforeQueueingWhenProtectedWorktreeIsDirty(t *testing
 	if !strings.Contains(err.Error(), "dirty") {
 		t.Fatalf("expected dirty preflight error, got %v", err)
 	}
+	if !strings.Contains(err.Error(), "dirty.txt") {
+		t.Fatalf("expected dirty file path in preflight error, got %v", err)
+	}
 
 	layout, discoverErr := git.DiscoverRepositoryLayout(repoRoot)
 	if discoverErr != nil {

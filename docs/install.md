@@ -69,6 +69,9 @@ to protect a different branch, pass `--protected-branch` explicitly.
 For ordinary repos, treat that root checkout as the canonical protected `main`.
 Keep it clean and on `main`, because humans inspect it and the machine wrappers
 build from it.
+Do not run package-manager helpers like `npm skills` from that protected root
+checkout; run them in the topic worktree you are changing so lockfile drift
+does not block publish.
 The machine-level `mq` and `mainlined` wrappers refuse to build from a dirty
 root checkout so local binaries cannot silently drift away from the code humans
 are reading.

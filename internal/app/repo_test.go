@@ -612,6 +612,32 @@ func TestDoctorWarnsWhenRootCheckoutIsDirtyAndNonCanonical(t *testing.T) {
 	}
 }
 
+func TestDoctorJSONIncludesProtectedDirtyPaths(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "skills-lock.json"), []byte("{\"drift\":true}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(skills-lock.json): %v", err)
+	}
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, &out, &errOut); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	var result doctorResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal doctor result: %v", err)
+	}
+	if result.ProtectedBranchClean {
+		t.Fatalf("expected protected branch to be dirty, got %+v", result)
+	}
+	if len(result.ProtectedDirtyPaths) != 1 || result.ProtectedDirtyPaths[0] != "skills-lock.json" {
+		t.Fatalf("expected protected dirty path to include skills-lock.json, got %+v", result.ProtectedDirtyPaths)
+	}
+}
+
 func TestStatusJSONWorksWhenCanonicalRootIsDirty(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

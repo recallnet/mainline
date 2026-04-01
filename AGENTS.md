@@ -9,6 +9,9 @@ instructions.
   `main` checkout for this repo.
 - The root checkout must stay clean and on branch `main`. Humans inspect it,
   wrappers build from it, and docs refer to it.
+- Do not run local environment-mutating helpers like `npm skills` from that
+  canonical protected root checkout. Run them in the topic worktree you are
+  changing so generated lockfiles and cache drift do not block publish.
 - Do not use native mutating `git` commands from that worktree while on branch
   `main`.
 - Blocked examples: `git commit`, `git merge`, `git rebase`, `git push`,

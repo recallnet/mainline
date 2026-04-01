@@ -71,6 +71,9 @@ func TestPublishRejectsDirtyCanonicalRootCheckout(t *testing.T) {
 	if !strings.Contains(err.Error(), "protected branch worktree") || !strings.Contains(err.Error(), "dirty") {
 		t.Fatalf("expected dirty protected worktree error, got %v", err)
 	}
+	if !strings.Contains(err.Error(), "DIRTY.txt") {
+		t.Fatalf("expected dirty file path in error, got %v", err)
+	}
 }
 
 func TestPublishDrainsAndPublishesWithoutDaemon(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -76,6 +77,7 @@ type HealthReport struct {
 	ProtectedBranchExists bool     `json:"protected_branch_exists"`
 	MainWorktreeExists    bool     `json:"main_worktree_exists"`
 	ProtectedBranchClean  bool     `json:"protected_branch_clean"`
+	ProtectedDirtyPaths   []string `json:"protected_dirty_paths,omitempty"`
 	HasUpstream           bool     `json:"has_upstream"`
 	UpstreamRef           string   `json:"upstream_ref"`
 	IsBehindUpstream      bool     `json:"is_behind_upstream"`
@@ -293,6 +295,34 @@ func (e Engine) WorktreeIsClean(path string) (bool, error) {
 	}
 
 	return status == "", nil
+}
+
+// WorktreeDirtyPaths returns tracked and untracked paths that make a worktree dirty.
+func (e Engine) WorktreeDirtyPaths(path string) ([]string, error) {
+	repo, err := openRepository(path)
+	if err != nil {
+		return nil, err
+	}
+
+	wt, err := repo.Worktree()
+	if err != nil {
+		return nil, err
+	}
+
+	status, err := wt.Status()
+	if err != nil {
+		return nil, err
+	}
+
+	paths := make([]string, 0, len(status))
+	for filePath, fileStatus := range status {
+		if fileStatus.Staging == 0 && fileStatus.Worktree == 0 {
+			continue
+		}
+		paths = append(paths, filePath)
+	}
+	sort.Strings(paths)
+	return paths, nil
 }
 
 // CurrentBranchAtPath returns the checked-out branch for a specific worktree path.
@@ -678,6 +708,12 @@ func (e Engine) InspectHealth(protectedBranch string, mainWorktreePath string) (
 				return HealthReport{}, err
 			}
 			report.ProtectedBranchClean = status == ""
+			if !report.ProtectedBranchClean {
+				report.ProtectedDirtyPaths, err = engine.WorktreeDirtyPaths(wt.Path)
+				if err != nil {
+					return HealthReport{}, err
+				}
+			}
 		}
 		break
 	}

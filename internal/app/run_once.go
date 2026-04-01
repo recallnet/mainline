@@ -87,7 +87,7 @@ func runOneCycle(repoPath string) (string, error) {
 		return "", fmt.Errorf("protected branch %q does not exist", cfg.Repo.ProtectedBranch)
 	}
 	if !report.ProtectedBranchClean {
-		return "", fmt.Errorf("protected branch worktree %s is dirty", cfg.Repo.MainWorktree)
+		return "", protectedWorktreeDirtyError(cfg.Repo.MainWorktree, report.ProtectedDirtyPaths)
 	}
 	if report.HasDivergedUpstream {
 		return "", fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, report.UpstreamRef)

@@ -72,6 +72,8 @@ Expected:
 - worktree is clean
 - branch is `main`
 - this root checkout is the one humans inspect and wrappers build from
+- do not run helpers like `npm skills` there; run them in the topic worktree so
+  generated lockfile drift does not block publish
 
 Before trusting that assumption on a machine you did not set up yourself:
 

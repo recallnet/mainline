@@ -63,6 +63,9 @@ Once that line is real, the rest follows:
 
 Git still owns refs, rebases, fast-forwards, pushes, and worktrees. SQLite owns
 queue state, locks, and event history. `mainline` coordinates the two.
+Do not run environment-mutating helpers like `npm skills` from the protected
+root checkout; run them in the topic worktree you are changing so local
+lockfile drift does not block publish.
 
 ## The Daily Shape
 
@@ -229,6 +232,8 @@ For normal repos, the root checkout should be the canonical protected `main`.
 Keep it clean and boring. Humans inspect that path, and the machine wrapper
 builds `mq` and `mainlined` from it. If it is dirty, the wrapper should refuse
 to build rather than silently drift.
+Run package-manager helpers and lockfile generators in topic worktrees, not in
+the protected root checkout.
 Use `mq repo root --repo . --json` to verify that the root checkout is still
 trustworthy. Use `mq repo root --repo . --adopt-root` only when the root
 checkout is already clean and on the protected branch.

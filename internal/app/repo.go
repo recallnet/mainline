@@ -937,6 +937,9 @@ Flags:
 	fmt.Fprintf(stdout, "Protected branch exists: %s\n", yesNo(result.ProtectedBranchExists))
 	fmt.Fprintf(stdout, "Main worktree exists: %s\n", yesNo(result.MainWorktreeExists))
 	fmt.Fprintf(stdout, "Protected branch clean: %s\n", yesNo(result.ProtectedBranchClean))
+	for _, dirtyPath := range result.ProtectedDirtyPaths {
+		fmt.Fprintf(stdout, "Protected dirty path: %s\n", dirtyPath)
+	}
 	if result.HasUpstream {
 		fmt.Fprintf(stdout, "Upstream: %s\n", result.UpstreamRef)
 		fmt.Fprintf(stdout, "Behind upstream: %s\n", yesNo(result.IsBehindUpstream))
