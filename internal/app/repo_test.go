@@ -467,6 +467,39 @@ func TestDoctorFixQueuesPublishForProtectedTipAheadOfUpstream(t *testing.T) {
 	}
 }
 
+func TestDoctorFixDoesNotQueuePublishWhenProtectedWorktreeIsDirty(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	writeFileAndCommit(t, repoRoot, "ahead.txt", "ahead\n", "main ahead")
+	if err := os.WriteFile(filepath.Join(repoRoot, "dirty.txt"), []byte("dirty"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) != 0 {
+		t.Fatalf("expected no publish requests when protected worktree is dirty, got %+v", requests)
+	}
+}
+
 func TestConfigEditScaffoldsMissingConfigAndInvokesEditor(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	editorPath := filepath.Join(t.TempDir(), "editor.sh")

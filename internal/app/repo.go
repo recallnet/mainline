@@ -436,6 +436,7 @@ type doctorResult struct {
 func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockManager state.LockManager, store state.Store, repoRecord state.RepositoryRecord, hasRepoRecord bool) ([]string, []string, error) {
 	var applied []string
 	var skipped []string
+	protectedWorktreeCleanForPublish := false
 
 	staleLocks, err := lockManager.InspectStale(time.Hour)
 	if err != nil {
@@ -543,12 +544,21 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 				}
 				if !clean {
 					skipped = append(skipped, "left protected branch worktree dirty because no safe auto-fix was available")
+				} else {
+					protectedWorktreeCleanForPublish = true
 				}
+			}
+			if operation != "" {
+				clean, err := engine.WorktreeIsClean(cfg.Repo.MainWorktree)
+				if err != nil {
+					return nil, nil, err
+				}
+				protectedWorktreeCleanForPublish = clean
 			}
 		}
 	}
 
-	if cfg.Repo.RemoteName != "" && cfg.Repo.MainWorktree != "" {
+	if cfg.Repo.RemoteName != "" && cfg.Repo.MainWorktree != "" && protectedWorktreeCleanForPublish {
 		if _, err := os.Stat(cfg.Repo.MainWorktree); err == nil {
 			if err := engine.FetchRemote(cfg.Repo.MainWorktree, cfg.Repo.RemoteName); err != nil {
 				skipped = append(skipped, fmt.Sprintf("could not refresh upstream state: %v", err))
