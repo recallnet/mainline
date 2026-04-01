@@ -51,7 +51,7 @@ positive to work around. Move to a feature worktree and continue there.
 6. Prefer `mq submit` from the current worktree instead of manually spelling
    `--repo` when the current shell is already in the topic worktree.
 7. Use explicit protected-worktree paths when invoking operator commands like
-   `mq run-once`, `mq publish`, `mq land`, `mq watch`, or `mainlined`.
+   `mq publish`, `mq land`, `mq watch`, or `mq events`.
 
 ## Standard flow
 

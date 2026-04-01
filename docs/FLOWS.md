@@ -104,8 +104,6 @@ mq submit --check-only --json
 mq submit --wait --timeout 15m --json
 mq repo audit --repo /path/to/main --json
 mq status --repo /path/to/main --json
-mq run-once --repo /path/to/main
-mq publish --repo /path/to/main
 mq watch --repo /path/to/main
 mq events --repo /path/to/main --follow --json --lifecycle
 ```
@@ -207,7 +205,7 @@ mq retry --repo /path/to/main --publish 4
 submissions through `publish_request_id`, `publish_status`, and `outcome`, so a
 factory can answer “did this submission fully land?” from one status surface.
 
-For multi-repo experiments, one registered-repo daemon is still available:
+Optional only: for multi-repo experiments, one registered-repo host is still available:
 
 ```bash
 mainlined --all --json

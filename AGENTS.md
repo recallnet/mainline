@@ -51,12 +51,12 @@ instructions.
   integration lock is already held, it exits cleanly and the active worker keeps
   draining.
 - Use `mq events --follow --json --lifecycle` from the protected worktree when a
-  long-running agent or daemon needs push/integration notifications.
+  long-running agent or controller needs push/integration notifications.
 - Use `mq registry prune --json` if stale temp repos or deleted repos are
   polluting the optional global registry.
 - Treat `submission_id`, not branch name, as the stable factory handle for a
   queued change.
-- If an agent or daemon parses machine-readable output, bind only to the
+- If an agent or controller parses machine-readable output, bind only to the
   documented contracts in
   [docs/JSON_CONTRACTS.md](/Users/devrel/Projects/recallnet/mainline/docs/JSON_CONTRACTS.md).
 - If a branch is claimed to be landed, verify it with

@@ -5,9 +5,8 @@ Git is very good at branching.
 Git is not a coordinator.
 
 That distinction does not matter when one person is working in one checkout.
-It matters a lot when one machine is running five agents, ten worktrees, a
-factory daemon, and a protected local `main` that still needs to stay clean and
-pushable all day.
+It matters a lot when one machine is running five agents, ten worktrees, and a
+protected local `main` that still needs to stay clean and pushable all day.
 
 That is what `mainline` is for.
 
@@ -152,9 +151,8 @@ Because the model is conservative in the right places.
 - publish is coalesced instead of “whatever finished pushing last”
 
 This is exactly what you want when the machine is running Codex, Claude,
-factory daemons, humans, or all of them at once. `mainline` does not ask those
-actors to become perfectly disciplined. It turns the safe path into the normal
-path.
+humans, or all of them at once. `mainline` does not ask those actors to become
+perfectly disciplined. It turns the safe path into the normal path.
 
 ## What Ships
 
@@ -168,7 +166,7 @@ path.
 - opportunistic submit-side draining when no worker already holds the lock
 - `wait --submission <id> --for integrated|landed`
 - `status`, `watch`, `logs`, `events`, `doctor`, and `confidence`
-- optional manual `mainlined` helper mode for experimentation
+- optional manual `mainlined` helper mode for experiments or multi-repo hosting
 - retry and cancel as real operator controls
 - policy checks, hook coordination, and repo-managed hooks
 - Homebrew, Nix, GitHub release archives, checksums, and release manifests
@@ -182,8 +180,8 @@ Recent hardening coverage now explicitly exercises the adoption-critical paths:
 - external protected-branch advancement while queued work waits
 - inherited `pre-push` hook success and failure-plus-retry publish paths
 - crash/restart recovery around rebase, fast-forward, and push boundaries
-- JSON contract tests for `status`, raw `events`, lifecycle `events`, `watch`, and daemon logs
-- bare-repo plus linked-worktree daemon runs
+- JSON contract tests for `status`, raw `events`, lifecycle `events`, `watch`, and host logs
+- bare-repo plus linked-worktree runs
 
 This repo dogfoods that workflow. The repo-local worktree instructions live in
 [.agents/skills/worktree/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/worktree/SKILL.md),
@@ -210,8 +208,9 @@ With `go install`:
 ```bash
 go install github.com/recallnet/mainline/cmd/mainline@latest
 go install github.com/recallnet/mainline/cmd/mq@latest
-go install github.com/recallnet/mainline/cmd/mainlined@latest
 ```
+
+`mq` is the default product path. `mainlined` is optional.
 
 Homebrew and Nix details are in
 [install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md).
@@ -230,7 +229,7 @@ That init commit matters. It turns the repo’s queue policy into versioned,
 reviewable state instead of one more local convention that agents have to infer.
 For normal repos, the root checkout should be the canonical protected `main`.
 Keep it clean and boring. Humans inspect that path, and the machine wrapper
-builds `mq` and `mainlined` from it. If it is dirty, the wrapper should refuse
+builds `mq` from it. If it is dirty, the wrapper should refuse
 to build rather than silently drift.
 Run package-manager helpers and lockfile generators in topic worktrees, not in
 the protected root checkout.

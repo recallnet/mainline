@@ -49,8 +49,9 @@ Confirm the installed binary version:
 ```bash
 mq version
 mainline version
-mainlined --version
 ```
+
+`mq` is the default operator path. `mainlined` is optional.
 
 Recommended first-time repo setup after install:
 
@@ -72,9 +73,8 @@ build from it.
 Do not run package-manager helpers like `npm skills` from that protected root
 checkout; run them in the topic worktree you are changing so lockfile drift
 does not block publish.
-The machine-level `mq` and `mainlined` wrappers refuse to build from a dirty
-root checkout so local binaries cannot silently drift away from the code humans
-are reading.
+The machine-level `mq` wrapper refuses to build from a dirty root checkout so
+local binaries cannot silently drift away from the code humans are reading.
 Use `mq repo root --repo . --json` to confirm that the canonical root checkout
 is trustworthy. If the root checkout is already clean and on the protected
 branch but config drift points elsewhere, repair that with
