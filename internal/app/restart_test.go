@@ -94,6 +94,47 @@ func TestRunOnceRecoversRunningPublishAfterWorkerCrash(t *testing.T) {
 	}
 }
 
+func TestRunOnceRecoversRunningSubmissionAfterFastForwardBoundaryCrash(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-fast-forward-restart")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/fast-forward-restart", featurePath)
+	writeFileAndCommit(t, featurePath, "ff.txt", "ff\n", "fast-forward restart feature")
+	submitBranch(t, featurePath)
+
+	protectedBefore := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	cmd, _ := startWorkerHelper(t, "integration-fast-forward-crash", repoRoot)
+	waitForHelperReady(t, cmd)
+	killHelper(t, cmd)
+
+	store, repoRecord := openRepoStore(t, repoRoot)
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if len(submissions) != 1 || submissions[0].Status != "running" {
+		t.Fatalf("expected crashed submission to remain running before recovery, got %+v", submissions)
+	}
+
+	runOnce(t, repoRoot)
+
+	protectedAfter := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	if protectedAfter == protectedBefore {
+		t.Fatalf("expected recovered run to advance protected head, still %q", protectedAfter)
+	}
+
+	submissions, err = store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if submissions[0].Status != "succeeded" {
+		t.Fatalf("expected recovered submission to succeed, got %+v", submissions[0])
+	}
+	assertStoreEventPresent(t, store, repoRecord.ID, "integration.recovered")
+	assertProtectedWorktreeClean(t, repoRoot)
+}
+
 func TestRunOnceReportsBusyWhileAnotherWorkerHoldsIntegrationLock(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)
@@ -194,6 +235,18 @@ func TestWorkerCrashHelper(t *testing.T) {
 		restore := setAppTestFaultHooks(testFaultHooks{
 			before: func(point string) error {
 				if point == "integration.rebase" {
+					markHelperReady(t, readyPath)
+					time.Sleep(30 * time.Second)
+				}
+				return nil
+			},
+		})
+		defer restore()
+		_, _ = runOneCycle(repoRoot)
+	case "integration-fast-forward-crash":
+		restore := setAppTestFaultHooks(testFaultHooks{
+			before: func(point string) error {
+				if point == "integration.fast_forward" {
 					markHelperReady(t, readyPath)
 					time.Sleep(30 * time.Second)
 				}

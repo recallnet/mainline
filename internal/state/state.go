@@ -29,55 +29,55 @@ type Store struct {
 
 // RepositoryRecord is the durable repository row.
 type RepositoryRecord struct {
-	ID              int64
-	CanonicalPath   string
-	ProtectedBranch string
-	RemoteName      string
-	MainWorktree    string
-	PolicyVersion   string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID              int64     `json:"id"`
+	CanonicalPath   string    `json:"canonical_path"`
+	ProtectedBranch string    `json:"protected_branch"`
+	RemoteName      string    `json:"remote_name"`
+	MainWorktree    string    `json:"main_worktree_path"`
+	PolicyVersion   string    `json:"policy_version"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // IntegrationSubmission is the durable submission row.
 type IntegrationSubmission struct {
-	ID             int64
-	RepoID         int64
-	BranchName     string
-	SourceRef      string
-	RefKind        string
-	SourceWorktree string
-	SourceSHA      string
-	RequestedBy    string
-	Priority       string
-	Status         string
-	LastError      string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID             int64     `json:"id"`
+	RepoID         int64     `json:"repo_id"`
+	BranchName     string    `json:"branch_name"`
+	SourceRef      string    `json:"source_ref"`
+	RefKind        string    `json:"ref_kind"`
+	SourceWorktree string    `json:"source_worktree_path"`
+	SourceSHA      string    `json:"source_sha"`
+	RequestedBy    string    `json:"requested_by"`
+	Priority       string    `json:"priority"`
+	Status         string    `json:"status"`
+	LastError      string    `json:"last_error"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // PublishRequest is the durable publish row.
 type PublishRequest struct {
-	ID            int64
-	RepoID        int64
-	TargetSHA     string
-	Status        string
-	AttemptCount  int
-	NextAttemptAt sql.NullTime
-	SupersededBy  sql.NullInt64
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID            int64         `json:"id"`
+	RepoID        int64         `json:"repo_id"`
+	TargetSHA     string        `json:"target_sha"`
+	Status        string        `json:"status"`
+	AttemptCount  int           `json:"attempt_count"`
+	NextAttemptAt sql.NullTime  `json:"next_attempt_at"`
+	SupersededBy  sql.NullInt64 `json:"superseded_by"`
+	CreatedAt     time.Time     `json:"created_at"`
+	UpdatedAt     time.Time     `json:"updated_at"`
 }
 
 // EventRecord is the durable event row.
 type EventRecord struct {
-	ID        int64
-	RepoID    int64
-	ItemType  string
-	ItemID    sql.NullInt64
-	EventType string
-	Payload   json.RawMessage
-	CreatedAt time.Time
+	ID        int64           `json:"id"`
+	RepoID    int64           `json:"repo_id"`
+	ItemType  string          `json:"item_type"`
+	ItemID    sql.NullInt64   `json:"item_id"`
+	EventType string          `json:"event_type"`
+	Payload   json.RawMessage `json:"payload"`
+	CreatedAt time.Time       `json:"created_at"`
 }
 
 // NewStore returns a repo-local durable store.

@@ -146,15 +146,19 @@ Recent hardening coverage now explicitly exercises the adoption-critical paths:
 
 - concurrent multi-worktree submit, integrate, and publish flows
 - deleted, moved, relinked, and dirtied source worktrees after submit
+- queued branch head drift after submit
 - external protected-branch advancement while queued work waits
 - inherited `pre-push` hook success and failure-plus-retry publish paths
-- JSON contract tests for `status`, lifecycle `events`, and daemon logs
+- crash/restart recovery around rebase, fast-forward, and push boundaries
+- JSON contract tests for `status`, raw `events`, lifecycle `events`, `watch`, and daemon logs
 - bare-repo plus linked-worktree daemon runs
 
 This repo dogfoods that workflow. The repo-local worktree instructions live in
 [.agents/skills/worktree/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/worktree/SKILL.md),
 and the repo-specific guardrails live in
 [AGENTS.md](/Users/devrel/Projects/recallnet/mainline/AGENTS.md).
+Machine-readable JSON contracts and their compatibility policy are documented in
+[JSON_CONTRACTS.md](/Users/devrel/Projects/recallnet/mainline/docs/JSON_CONTRACTS.md).
 
 ## Install
 

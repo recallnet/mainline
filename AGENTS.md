@@ -28,6 +28,9 @@ instructions.
   - or a long-lived `mainlined --repo /Users/devrel/Projects/_wt/recallnet/mainline/protected-main --json`
 - Use `mq events --follow --json --lifecycle` from the protected worktree when a
   long-running agent or daemon needs push/integration notifications.
+- If an agent or daemon parses machine-readable output, bind only to the
+  documented contracts in
+  [docs/JSON_CONTRACTS.md](/Users/devrel/Projects/recallnet/mainline/docs/JSON_CONTRACTS.md).
 - If a branch is claimed to be landed, verify it with
   `mq repo audit --repo /Users/devrel/Projects/_wt/recallnet/mainline/protected-main --json`.
   An empty `unmerged` list is the source of truth.

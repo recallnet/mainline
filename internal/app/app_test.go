@@ -249,6 +249,37 @@ func TestEventsLifecycleJSONContractContainsStableFields(t *testing.T) {
 	}
 }
 
+func TestEventsJSONContractContainsStableFields(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	queuePublish(t, repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--limit", "5"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) == 0 {
+		t.Fatalf("expected event json lines")
+	}
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(line), &payload); err != nil {
+			t.Fatalf("Unmarshal line %q: %v", line, err)
+		}
+		wantKeys := []string{"created_at", "event_type", "id", "item_id", "item_type", "payload", "repo_id"}
+		if gotKeys := sortedJSONKeys(payload); !slices.Equal(gotKeys, wantKeys) {
+			t.Fatalf("expected raw event json keys %v, got %v", wantKeys, gotKeys)
+		}
+		break
+	}
+}
+
 func TestDaemonJSONLogContractContainsStableFields(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
@@ -282,6 +313,30 @@ func TestDaemonJSONLogContractContainsStableFields(t *testing.T) {
 	}
 	if gotKeys := sortedJSONKeys(last); !slices.Equal(gotKeys, []string{"cycle", "event", "level", "message", "repo", "timestamp"}) {
 		t.Fatalf("unexpected daemon terminal json keys: %v", gotKeys)
+	}
+}
+
+func TestWatchJSONContractContainsStableFields(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	var stdout bytes.Buffer
+	if err := runWatchLoop(context.Background(), watchOptions{
+		repoPath:   repoRoot,
+		interval:   10 * time.Millisecond,
+		eventLimit: 1,
+		maxCycles:  1,
+		asJSON:     true,
+	}, &stdout); err != nil {
+		t.Fatalf("runWatchLoop returned error: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &payload); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if gotKeys := sortedJSONKeys(payload); !slices.Equal(gotKeys, []string{"observed_at", "status"}) {
+		t.Fatalf("unexpected watch json keys: %v", gotKeys)
 	}
 }
 

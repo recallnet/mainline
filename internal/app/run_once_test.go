@@ -605,6 +605,47 @@ func TestRunOnceFailsWhenSubmittedSourceWorktreeTurnsDirtyAfterSubmit(t *testing
 	}
 }
 
+func TestRunOnceFailsWhenQueuedBranchHeadDriftsAfterSubmit(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-head-drift")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/head-drift", featurePath)
+	writeFileAndCommit(t, featurePath, "head-drift.txt", "one\n", "head drift one")
+	submitBranch(t, featurePath)
+	submittedSHA := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+
+	writeFileAndCommit(t, featurePath, "head-drift.txt", "two\n", "head drift two")
+	driftedSHA := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+	if driftedSHA == submittedSHA {
+		t.Fatalf("expected branch head to move after second commit")
+	}
+
+	protectedBefore := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if !strings.Contains(runOut.String(), "moved from submitted SHA") {
+		t.Fatalf("expected branch drift failure, got %q", runOut.String())
+	}
+
+	protectedAfter := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	if protectedAfter != protectedBefore {
+		t.Fatalf("expected protected branch to remain unchanged, got %q then %q", protectedBefore, protectedAfter)
+	}
+
+	status := readStatusJSON(t, repoRoot)
+	if status.LatestSubmission == nil || status.LatestSubmission.Status != "failed" {
+		t.Fatalf("expected failed latest submission, got %+v", status.LatestSubmission)
+	}
+	if !strings.Contains(status.LatestSubmission.LastError, submittedSHA) || !strings.Contains(status.LatestSubmission.LastError, driftedSHA) {
+		t.Fatalf("expected last error to include submitted and drifted shas, got %+v", status.LatestSubmission)
+	}
+}
+
 func TestRunOnceSyncsExternalProtectedAdvanceBeforeNextQueuedSubmission(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

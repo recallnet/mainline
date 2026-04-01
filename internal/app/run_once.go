@@ -294,6 +294,9 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 		}
 	}
 
+	if err := applyAppTestFault("integration.fast_forward"); err != nil {
+		return failIntegrationSubmission(ctx, store, repoRecord.ID, submission, err)
+	}
 	if err := mainEngine.FastForwardCurrentBranch(cfg.Repo.MainWorktree, targetRef); err != nil {
 		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, err)
 	}
