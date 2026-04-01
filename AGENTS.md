@@ -23,9 +23,11 @@ instructions.
 - Most coding agents should finish with:
   - `mq submit --check-only --json`
   - `mq submit --wait --timeout 15m --json`
+  - treat `submit --wait` as `integrated`, not remote-published
   - capture `submission_id` from JSON when a wrapper needs durable tracking
   - `mq wait --submission <id> --for landed --json --timeout 30m` when the
     wrapper needs integrate-plus-publish confirmation by id
+  - or `mq land --json --timeout 30m` when remote landing is the actual end of the job
   - `mq repo audit --repo /Users/devrel/Projects/recallnet/mainline --json`
 - Controllers and factory-style daemons should prefer:
   - `mq land --json --timeout 30m`
@@ -61,6 +63,8 @@ instructions.
 - If a branch is claimed to be landed, verify it with
   `mq repo audit --repo /Users/devrel/Projects/recallnet/mainline --json`.
   An empty `unmerged` list is the source of truth.
+- For agent-heavy repos, prefer `[publish].Mode = 'auto'` so `submit --wait`
+  does not leave integrated-but-unpublished work sitting on local `main`.
 
 ## Intent
 

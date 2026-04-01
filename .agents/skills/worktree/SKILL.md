@@ -152,6 +152,10 @@ mq submit --check-only --json
 mq submit --wait --timeout 15m --json
 ```
 
+Treat `mq submit --wait` as an integration answer, not a remote-publish answer.
+If the repo keeps `[publish].Mode = 'manual'`, use `mq land` or
+`mq wait --for landed` when the job is not done until remote `main` moves.
+
 That gives the agent:
 
 - a deterministic dry-run before expensive follow-up work

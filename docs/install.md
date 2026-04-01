@@ -173,6 +173,16 @@ mq repo init --repo .
 `mq repo init` writes `mainline.toml`. Make any repo-specific policy edits after
 that step, then commit the resulting file.
 
+For agent-heavy repos, strongly consider:
+
+```toml
+[publish]
+Mode = 'auto'
+```
+
+With `Mode = 'manual'`, `mq submit --wait` only proves `integrated`. Remote
+publish still requires `mq publish`, `mq land`, or `mq wait --for landed`.
+
 Run it directly:
 
 ```bash

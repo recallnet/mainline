@@ -209,7 +209,7 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 				return result, exitWithCode(1, err)
 			}
 			_ = protectedSHA
-			result.Outcome = waitOutcomeSucceeded
+			result.Outcome = waitOutcome("integrated")
 			result.DurationMS = time.Since(start).Milliseconds()
 			return result, nil
 		case "blocked":

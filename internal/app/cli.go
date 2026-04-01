@@ -119,6 +119,7 @@ Turbo paths:
   Agent in a topic worktree:
     %s submit --check-only --json
     %s submit --wait --timeout 15m --json
+    # submit --wait stops at integrated; use land or wait --for landed for remote publish
 
   Controller or factory daemon:
     %s land --json --timeout 30m

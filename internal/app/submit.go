@@ -104,10 +104,14 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
   %s submit [flags]
 
 Queue a topic worktree or detached sha for serialized integration.
+By default, --wait stops at integration. If publish mode is manual, that means
+the branch is on local protected main but not yet pushed to remote.
 
 Turbo agent flow:
   mq submit --check-only --json
   mq submit --wait --timeout 15m --json
+  mq wait --submission <id> --for landed --json --timeout 30m
+  mq land --json --timeout 30m
 
 Plain mq submit now queues first, then opportunistically tries to drain.
 If another worker already holds the integration lock, submit still succeeds and
@@ -146,7 +150,7 @@ Flags:
 	fs.BoolVar(&checkOnly, "check", false, "validate submission without queueing it")
 	fs.BoolVar(&checkOnlyAlias, "check-only", false, "validate submission without queueing it")
 	fs.BoolVar(&allowNewerHead, "allow-newer-head", false, "allow a queued branch head to advance before integration if it remains a descendant of the submitted sha")
-	fs.BoolVar(&waitForResult, "wait", false, "wait for the submission to integrate")
+	fs.BoolVar(&waitForResult, "wait", false, "wait for the submission to integrate (not remote publish)")
 	fs.DurationVar(&timeout, "timeout", 10*time.Minute, "maximum time to wait for integration")
 	fs.DurationVar(&pollInterval, "poll-interval", 500*time.Millisecond, "wait interval between worker checks")
 
@@ -279,11 +283,17 @@ Flags:
 			fmt.Fprintf(stdout, "Worktree: %s\n", queued.Submission.SourceWorktree)
 			fmt.Fprintf(stdout, "Source SHA: %s\n", queued.Submission.SourceSHA)
 			fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
+			if result.Outcome != "" {
+				fmt.Fprintf(stdout, "Outcome: %s\n", result.Outcome)
+			}
 			if result.LastWorkerResult != "" {
 				fmt.Fprintf(stdout, "Last worker result: %s\n", result.LastWorkerResult)
 			}
 			if result.DurationMS > 0 {
 				fmt.Fprintf(stdout, "Duration: %s\n", (time.Duration(result.DurationMS) * time.Millisecond).Round(time.Millisecond))
+			}
+			if result.Outcome == submissionOutcomeIntegrated && queued.Config.Publish.Mode == "manual" {
+				fmt.Fprintln(stdout, "Publish mode is manual: run mq publish or use mq land / mq wait --for landed when remote landing is required.")
 			}
 			return waitErr
 		}
@@ -329,11 +339,17 @@ Flags:
 	}
 	if waitForResult {
 		fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
+		if result.Outcome != "" {
+			fmt.Fprintf(stdout, "Outcome: %s\n", result.Outcome)
+		}
 		if result.LastWorkerResult != "" {
 			fmt.Fprintf(stdout, "Last worker result: %s\n", result.LastWorkerResult)
 		}
 		if result.DurationMS > 0 {
 			fmt.Fprintf(stdout, "Duration: %s\n", (time.Duration(result.DurationMS) * time.Millisecond).Round(time.Millisecond))
+		}
+		if result.Outcome == submissionOutcomeIntegrated && queued.Config.Publish.Mode == "manual" {
+			fmt.Fprintln(stdout, "Publish mode is manual: run mq publish or use mq land / mq wait --for landed when remote landing is required.")
 		}
 	}
 	return nil

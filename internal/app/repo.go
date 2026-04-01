@@ -242,8 +242,10 @@ Flags:
 				"git commit -m \"Initialize mainline repo policy\"",
 				"./scripts/install-hooks.sh",
 				"./scripts/install-launch-agent.sh",
+				"# for agent/factory repos, set [publish].Mode = 'auto' before relying on submit --wait",
 				"mq submit --check-only --json",
 				"mq submit --wait --timeout 15m --json",
+				"mq land --json --timeout 30m",
 			},
 		})
 	}
@@ -258,8 +260,10 @@ Flags:
 	fmt.Fprintln(stdout, "  git commit -m \"Initialize mainline repo policy\"")
 	fmt.Fprintln(stdout, "  ./scripts/install-hooks.sh")
 	fmt.Fprintln(stdout, "  ./scripts/install-launch-agent.sh")
+	fmt.Fprintln(stdout, "  # for agent/factory repos, set [publish].Mode = 'auto' before relying on submit --wait")
 	fmt.Fprintln(stdout, "  mq submit --check-only --json")
 	fmt.Fprintln(stdout, "  mq submit --wait --timeout 15m --json")
+	fmt.Fprintln(stdout, "  mq land --json --timeout 30m")
 	return nil
 }
 

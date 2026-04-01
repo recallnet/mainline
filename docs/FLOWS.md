@@ -80,6 +80,10 @@ mq confidence --repo /path/to/main
 mq watch --repo /path/to/main
 ```
 
+For unattended agent repos, set `[publish].Mode = 'auto'`. Otherwise
+`mq submit --wait` only proves `integrated`, not that remote `main` has been
+updated.
+
 This is the intended dogfooding direction for the repo-local worktree skill: agents do all edits and commits in topic worktrees, then land through `mq` instead of manually merging into `main`.
 
 ## Repo-Local Skill
@@ -120,8 +124,22 @@ cd /path/to/topic-worktree
 mq submit --wait --timeout 10m --json
 ```
 
-If the wrapper needs to integrate first and publish later, wait for
-`integrated`. If it needs the full landed outcome, wait for `landed`.
+That waits for `integrated`, not `landed`.
+
+If the wrapper needs the full remote result, prefer:
+
+```bash
+cd /path/to/topic-worktree
+mq land --json --timeout 30m
+```
+
+Or, if it wants an explicit submission-id flow:
+
+```bash
+cd /path/to/topic-worktree
+mq submit --json
+mq wait --submission 42 --for landed --json --timeout 30m
+```
 
 If a factory keeps appending commits to the same queued branch and wants the
 newest descendant tip instead of a hard failure on head drift, submit with:
@@ -139,6 +157,8 @@ Exit codes:
 - `0`: integrated
 - `1`: blocked, failed, or cancelled
 - `2`: timed out waiting for integration
+
+Treat those exit codes as integration-only unless you waited for `landed`.
 
 For cheap preflight before expensive local gates, use:
 

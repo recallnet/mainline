@@ -1100,7 +1100,7 @@ func TestSubmitJSONDetachedFailureUsesStableErrorCode(t *testing.T) {
 	}
 }
 
-func TestSubmitWaitIntegratesBranchAndReturnsSucceededOutcome(t *testing.T) {
+func TestSubmitWaitIntegratesBranchAndReturnsIntegratedOutcome(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
 
@@ -1118,8 +1118,8 @@ func TestSubmitWaitIntegratesBranchAndReturnsSucceededOutcome(t *testing.T) {
 	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if !result.OK || !result.Waited || result.SubmissionStatus != "succeeded" || result.Outcome != "succeeded" {
-		t.Fatalf("expected waited succeeded result, got %+v", result)
+	if !result.OK || !result.Waited || result.SubmissionStatus != "succeeded" || result.Outcome != submissionOutcomeIntegrated {
+		t.Fatalf("expected waited integrated result, got %+v", result)
 	}
 	if !strings.Contains(result.LastWorkerResult, "Integrated submission") {
 		t.Fatalf("expected worker result, got %+v", result)
@@ -1156,8 +1156,8 @@ func TestSubmitWaitSucceedsAfterQueuedRebaseRewritesBranchSHA(t *testing.T) {
 	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if !result.OK || result.Outcome != "succeeded" || result.SubmissionStatus != "succeeded" {
-		t.Fatalf("expected succeeded wait result, got %+v", result)
+	if !result.OK || result.Outcome != submissionOutcomeIntegrated || result.SubmissionStatus != "succeeded" {
+		t.Fatalf("expected integrated wait result, got %+v", result)
 	}
 
 	finalProtectedSHA := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "main"))
@@ -1166,6 +1166,29 @@ func TestSubmitWaitSucceedsAfterQueuedRebaseRewritesBranchSHA(t *testing.T) {
 	}
 	if !strings.Contains(result.LastWorkerResult, "Integrated submission") {
 		t.Fatalf("expected worker result, got %+v", result)
+	}
+}
+
+func TestSubmitWaitTextWarnsWhenPublishModeIsManual(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-wait-text")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/wait-text", featurePath)
+	writeFileAndCommit(t, featurePath, "wait.txt", "wait\n", "feature wait text")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--timeout", "30s", "--poll-interval", "10ms"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	text := submitOut.String()
+	if !strings.Contains(text, "Outcome: integrated") {
+		t.Fatalf("expected integrated outcome in text output, got %q", text)
+	}
+	if !strings.Contains(text, "Publish mode is manual") {
+		t.Fatalf("expected manual publish warning in text output, got %q", text)
 	}
 }
 

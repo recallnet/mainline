@@ -77,12 +77,25 @@ mq submit --check-only --json
 mq submit --wait --timeout 15m --json
 ```
 
+Important: `mq submit --wait` stops at `integrated`. In a repo with
+`[publish].Mode = 'manual'`, that means the commit is on local protected
+`main` but not yet pushed to remote.
+
 Or, when the caller wants a durable machine handle instead of a one-shot wait:
 
 ```bash
 mq submit --json
 mq wait --submission 42 --for landed --json --timeout 30m
 ```
+
+If the wrapper expects remote landing as part of the same job, prefer:
+
+```bash
+mq land --json --timeout 30m
+```
+
+For agent-heavy and factory-style repos, set `[publish].Mode = 'auto'` in
+`mainline.toml` unless there is a real operator reason to keep publish manual.
 
 The controller path should feel like this:
 
