@@ -97,7 +97,7 @@ mq submit --repo /path/to/topic-worktree --check-only --json
 
 That dry run verifies the branch is clean, includes the current protected tip, and is not already active in the queue at the same branch SHA.
 
-If the repo has `integration.max_queue_depth` set, `mq submit` will fail once the queued integration depth hits that limit. `--check-only` still works for dry-run validation in that state, which lets agents fail fast against a dead queue without silently growing it.
+If the repo has `[integration].MaxQueueDepth` set, `mq submit` will fail once the queued integration depth hits that limit. `--check-only` still works for dry-run validation in that state, which lets agents fail fast against a dead queue without silently growing it.
 
 If a queue item needs operator intervention:
 

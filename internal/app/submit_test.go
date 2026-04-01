@@ -736,8 +736,8 @@ func TestSubmitRejectsWhenIntegrationQueueDepthReached(t *testing.T) {
 	if result.ErrorCode != "integration_queue_full" {
 		t.Fatalf("expected integration_queue_full, got %+v", result)
 	}
-	if !strings.Contains(result.Error, "max_queue_depth=1") {
-		t.Fatalf("expected max_queue_depth message, got %+v", result)
+	if !strings.Contains(result.Error, "MaxQueueDepth=1") {
+		t.Fatalf("expected MaxQueueDepth message, got %+v", result)
 	}
 }
 

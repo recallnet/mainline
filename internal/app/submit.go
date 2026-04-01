@@ -524,7 +524,7 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 			if queuedCount >= cfg.Integration.MaxQueueDepth {
 				return preparedSubmission{}, &submitValidationError{
 					Code:    "integration_queue_full",
-					Message: fmt.Sprintf("integration queue depth %d reached max_queue_depth=%d; wait for mainlined to drain the queue or raise integration.max_queue_depth", queuedCount, cfg.Integration.MaxQueueDepth),
+					Message: fmt.Sprintf("integration queue depth %d reached MaxQueueDepth=%d; wait for mainlined to drain the queue or raise [integration].MaxQueueDepth", queuedCount, cfg.Integration.MaxQueueDepth),
 				}
 			}
 		}

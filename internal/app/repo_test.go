@@ -29,6 +29,13 @@ func TestRepoInitAndShow(t *testing.T) {
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("expected config file at %s: %v", configPath, err)
 	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(configPath): %v", err)
+	}
+	if !strings.Contains(string(data), "MaxQueueDepth = 0") {
+		t.Fatalf("expected default MaxQueueDepth scaffold in config, got %q", string(data))
+	}
 
 	var showOut bytes.Buffer
 	var showErr bytes.Buffer
