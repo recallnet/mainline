@@ -32,18 +32,7 @@ instructions.
   - `mq repo audit --repo /Users/devrel/Projects/recallnet/mainline --json`
 - Controllers and factory-style callers should prefer:
   - `mq land --json --timeout 30m`
-  - or an optional machine-global `mainlined --all --json` when one helper process should cover many repos
-  - on macOS, `./scripts/install-launch-agent.sh` installs the global service
-    label `com.recallnet.mainline.global`
-  - verify it with
-    `launchctl print gui/$(id -u)/com.recallnet.mainline.global`
-  - `Could not find service "com.recallnet.mainline.global"` means it is not
-    installed yet, not that the label changed
-  - healthy-machine checks:
-    - `tail -n 50 ~/Library/Logs/mainline/mainlined.out.log`
-    - `tail -n 50 ~/Library/Logs/mainline/mainlined.err.log`
-    - `mq repo root --repo /Users/devrel/Projects/recallnet/mainline --json`
-    - `mq doctor --repo /Users/devrel/Projects/recallnet/mainline --json`
+  - `mainlined --all --json` only as an explicit manual experiment, not as the default machine setup
 - If `mq repo show` or `mq doctor` warns that the root checkout is dirty or not
   canonical, fix that before trusting local binaries or local docs.
 - Use `mq repo root --repo /Users/devrel/Projects/recallnet/mainline --json`

@@ -60,16 +60,12 @@ mq repo init --repo .
 git add mainline.toml
 git commit -m "Initialize mainline repo policy"
 ./scripts/install-hooks.sh
-./scripts/install-launch-agent.sh
 mq repo root --repo . --json
 ```
 
 `mq repo init` expects the protected worktree to be on a branch, not detached
 HEAD. For ordinary repos, run it from local branch `main`. If you really intend
 to protect a different branch, pass `--protected-branch` explicitly.
-
-`mq repo init` automatically registers the repo for the optional machine-global
-registry used by `mainlined --all`.
 For ordinary repos, treat that root checkout as the canonical protected `main`.
 Keep it clean and on `main`, because humans inspect it and the machine wrappers
 build from it.
@@ -166,22 +162,12 @@ git push origin v0.1.0
 
 GitHub will not show any Releases until the first `v*` tag has been pushed.
 
-## Machine-Global Daemon
+## Manual Helper Mode
 
-For a machine running many repos, you can run one optional
-`mainlined --all` process instead of one idle daemon per repo.
-The core queue flow does not require it: mutating commands try to become the
-drainer themselves and stay alive until the repo is quiescent.
-
-Register each repo once:
-
-```bash
-cd /path/to/repo-root
-mq repo init --repo .
-```
-
-`mq repo init` writes `mainline.toml`. Make any repo-specific policy edits after
-that step, then commit the resulting file.
+`mainlined` still exists, but the default product model does not require a
+standing daemon. Mutating `mq` commands queue work and then opportunistically
+become the per-repo drainer themselves, staying alive until the repo is
+quiescent.
 
 For agent-heavy repos, strongly consider:
 
@@ -193,54 +179,14 @@ Mode = 'auto'
 With `Mode = 'manual'`, `mq submit --wait` only proves `integrated`. Remote
 publish still requires `mq publish`, `mq land`, or `mq wait --for landed`.
 
-Run it directly:
+If you want to experiment manually with a long-lived helper process anyway, run
+it directly:
 
 ```bash
 mainlined --all --json --interval 2s
 ```
 
-Or install the macOS launch agent:
-
-```bash
-./scripts/install-launch-agent.sh
-```
-
-The launch agent is opt-in. `mq repo init` registers repos for `--all` mode,
-but it does not install the service by itself.
-
-Verify the exact label:
-
-```bash
-launchctl print gui/$(id -u)/com.recallnet.mainline.global
-```
-
-If macOS reports:
-
-```text
-Could not find service "com.recallnet.mainline.global"
-```
-
-the service is simply not installed yet. Run
-`./scripts/install-launch-agent.sh` and verify again.
-
-Healthy machine-global daemon checklist:
-
-```bash
-launchctl print gui/$(id -u)/com.recallnet.mainline.global
-tail -n 50 ~/Library/Logs/mainline/mainlined.out.log
-tail -n 50 ~/Library/Logs/mainline/mainlined.err.log
-mq repo root --repo /path/to/repo-root --json
-mq doctor --repo /path/to/repo-root --json
-```
-
-What good looks like:
-
-- launchd reports the service present and running
-- stderr is quiet
-- stdout shows normal `cycle.completed` / `daemon.idle_exit` style JSON, not a
-  flood of dead temp repos
-- `mq repo root` reports the canonical root checkout is trustworthy
-- `mq doctor` reports the repo is initialized and operator-safe
+That path is optional and not part of the default machine setup.
 
 ## Completion Install
 

@@ -67,10 +67,9 @@ mq submit
 
 ## Agent-Heavy Repo
 
-Use the optional machine-wide daemon and let agents only submit:
+Use the daemonless default flow and let agents submit directly:
 
 ```bash
-mainlined --all --interval 2s --json
 cd /path/to/agent-worktree
 mq submit --check-only --json
 mq submit --wait --timeout 15m --json
@@ -201,7 +200,7 @@ mq retry --repo /path/to/main --publish 4
 submissions through `publish_request_id`, `publish_status`, and `outcome`, so a
 factory can answer “did this submission fully land?” from one status surface.
 
-For multi-repo machines, one registered-repo daemon is optional:
+For multi-repo experiments, one registered-repo daemon is still available:
 
 ```bash
 mainlined --all --json

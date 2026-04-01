@@ -23,21 +23,7 @@ Default commands to optimize for:
 - `mq submit --wait --timeout 15m --json`
 - `mq wait --submission <id> --for landed --json --timeout 30m`
 - `mq land --json --timeout 30m`
-- `mainlined --all --json` for the optional machine-global helper
 - `mq events --follow --json --lifecycle`
-
-If you want the machine-global daemon on macOS, install and verify the exact
-launch-agent label:
-
-- install: `./scripts/install-launch-agent.sh`
-- verify: `launchctl print gui/$(id -u)/com.recallnet.mainline.global`
-- if macOS says `Could not find service "com.recallnet.mainline.global"`, the
-  daemon is not installed yet
-- when proving the daemon path is nominal, inspect:
-  - `tail -n 50 ~/Library/Logs/mainline/mainlined.out.log`
-  - `tail -n 50 ~/Library/Logs/mainline/mainlined.err.log`
-  - `mq repo root --repo ~/Projects/recallnet/mainline --json`
-  - `mq doctor --repo ~/Projects/recallnet/mainline --json`
 
 Do not use this skill to bypass `mq`. It exists to dogfood the workflow that
 `mainline` is building for other repos.
@@ -164,7 +150,7 @@ That gives the agent:
 
 - a deterministic dry-run before expensive follow-up work
 - a blocking integrated-or-blocked answer without inventing a poll loop
-- stable JSON for wrappers and daemon orchestration
+- stable JSON for wrappers and orchestration
 
 If the wrapper needs a durable handle instead of waiting inline:
 
@@ -222,13 +208,6 @@ When publish behavior is part of the dogfood target:
 mq publish --repo ~/Projects/recallnet/mainline
 ```
 
-For machine-wide steady state, an optional global daemon can replace one daemon
-per repo:
-
-```bash
-mainlined --all --json
-```
-
 Recommended verification loop:
 
 ```bash
@@ -241,7 +220,7 @@ Expected:
 
 - submission is visible in durable queue state
 - integration result is visible after `mq run-once`
-- publish result is visible after `mq publish` or daemon-driven publish
+- publish result is visible after `mq publish`
 - `status --json` can correlate a succeeded submission to `publish_request_id`,
   `publish_status`, and `outcome`
 - `unmerged` is empty once the branch is truly reachable from protected `main`

@@ -110,13 +110,6 @@ The controller path should feel like this:
 mq land --json --timeout 30m
 ```
 
-The optional machine-wide helper path should feel like this:
-
-```bash
-mainlined --all --interval 2s --json
-mq events --repo /path/to/repo-root --follow --json --lifecycle
-```
-
 That is the product: one machine, one protected branch, many worktrees, one
 queue.
 
@@ -166,7 +159,7 @@ path.
 - opportunistic submit-side draining when no worker already holds the lock
 - `wait --submission <id> --for integrated|landed`
 - `status`, `watch`, `logs`, `events`, `doctor`, and `confidence`
-- optional machine-wide draining through `mainlined`
+- optional manual `mainlined` helper mode for experimentation
 - retry and cancel as real operator controls
 - policy checks, hook coordination, and repo-managed hooks
 - Homebrew, Nix, GitHub release archives, checksums, and release manifests
@@ -222,14 +215,10 @@ mq repo init --repo .
 git add mainline.toml
 git commit -m "Initialize mainline repo policy"
 ./scripts/install-hooks.sh
-./scripts/install-launch-agent.sh
 ```
 
 That init commit matters. It turns the repo’s queue policy into versioned,
 reviewable state instead of one more local convention that agents have to infer.
-`mq repo init` also registers the repo for optional `mainlined --all` mode, so
-one machine process can drain many repos if you want background progress across
-repos. The core queue flow does not require that daemon to exist.
 For normal repos, the root checkout should be the canonical protected `main`.
 Keep it clean and boring. Humans inspect that path, and the machine wrapper
 builds `mq` and `mainlined` from it. If it is dirty, the wrapper should refuse
@@ -269,41 +258,14 @@ mq status --repo /path/to/repo-root --json
 mq repo audit --repo /path/to/repo-root --json
 mq watch --repo /path/to/repo-root
 mq events --repo /path/to/repo-root --follow --json --lifecycle
-mainlined --all --json
 mq retry --repo /path/to/repo-root --submission 17
 mq cancel --repo /path/to/repo-root --publish 4
 ```
 
-`mainlined --all` is optional and not installed automatically. The default
-model is queue-first commands that try to become the drainer themselves and
-stay alive until the repo is quiescent, including sleeping through scheduled
-publish retries. If you still want a login service on macOS, run
-`./scripts/install-launch-agent.sh` and verify the exact label with:
-
-```bash
-launchctl print gui/$(id -u)/com.recallnet.mainline.global
-```
-
-When you want to prove the daemon path is nominal instead of trusting it by
-assumption, use:
-
-```bash
-tail -n 50 ~/Library/Logs/mainline/mainlined.out.log
-tail -n 50 ~/Library/Logs/mainline/mainlined.err.log
-mq repo root --repo /path/to/repo-root --json
-mq doctor --repo /path/to/repo-root --json
-```
-
-Healthy state means:
-
-- launchd shows the service installed and running
-- stderr is quiet
-- stdout is normal cycle JSON, not a storm of dead temp repos
-- `mq repo root` says the canonical root checkout is trustworthy
-- `mq doctor` says the repo is initialized and safe to operate
-
-If you see `Could not find service "com.recallnet.mainline.global"`, the
-service has not been installed yet.
+The default model is queue-first commands that try to become the drainer
+themselves and stay alive until the repo is quiescent, including sleeping
+through scheduled publish retries. `mainlined` still exists as an optional
+manual helper mode, but it is not part of the default machine setup.
 
 ## Repository Layouts
 
