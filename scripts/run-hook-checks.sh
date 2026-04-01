@@ -117,6 +117,7 @@ run_release_regressions_if_staged() {
     'scripts/test-build-release.sh' \
     'scripts/generate-homebrew-formula.sh' \
     'scripts/generate-release-manifest.sh' \
+    'scripts/package-release-assets.sh' \
     '.github/workflows/release.yml' \
     '.github/workflows/ci.yml' \
     'Formula/*.rb' \
@@ -133,6 +134,10 @@ run_release_regressions_if_staged() {
   ./scripts/generate-homebrew-formula.sh --version v0.0.0-hook --checksums "${out}/SHA256SUMS" --output "${out}/mainline.rb"
   ruby -c "${out}/mainline.rb" >/dev/null
   ./scripts/generate-release-manifest.sh --version v0.0.0-hook --checksums "${out}/SHA256SUMS" --output "${out}/release-manifest.json"
+  ./scripts/package-release-assets.sh --version v0.0.0-hook --dist "${out}"
+  test -f "${out}/mainline_v0.0.0-hook.rb"
+  test -f "${out}/release-manifest_v0.0.0-hook.json"
+  test -f "${out}/mainline_packages_v0.0.0-hook.tar.gz"
   rm -rf "${out}"
 }
 
@@ -149,6 +154,10 @@ run_full_repo_suite() {
   ./scripts/generate-homebrew-formula.sh --version v0.0.0-hook --checksums "${out}/SHA256SUMS" --output "${out}/mainline.rb"
   ruby -c "${out}/mainline.rb" >/dev/null
   ./scripts/generate-release-manifest.sh --version v0.0.0-hook --checksums "${out}/SHA256SUMS" --output "${out}/release-manifest.json"
+  ./scripts/package-release-assets.sh --version v0.0.0-hook --dist "${out}"
+  test -f "${out}/mainline_v0.0.0-hook.rb"
+  test -f "${out}/release-manifest_v0.0.0-hook.json"
+  test -f "${out}/mainline_packages_v0.0.0-hook.tar.gz"
   rm -rf "${out}"
 }
 
