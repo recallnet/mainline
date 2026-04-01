@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -59,16 +60,12 @@ func runConfiguredChecks(checks []string, workdir string, timeoutSetting string)
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), effectiveTimeout)
-		cmd := exec.CommandContext(ctx, "/bin/sh", "-lc", command)
-		cmd.Dir = workdir
-		output, err := cmd.CombinedOutput()
+		output, err := runTimedCheck(ctx, workdir, command)
 		cancel()
-		if ctx.Err() == context.DeadlineExceeded {
-			return &checkTimeoutError{
-				Command:          command,
-				RequestedTimeout: timeout,
-				EffectiveTimeout: effectiveTimeout,
-			}
+		if timeoutErr, ok := isCheckTimeoutError(err); ok {
+			timeoutErr.RequestedTimeout = timeout
+			timeoutErr.EffectiveTimeout = effectiveTimeout
+			return timeoutErr
 		}
 		if err != nil {
 			return fmt.Errorf("check %q failed: %s", command, strings.TrimSpace(string(output)))
@@ -76,6 +73,37 @@ func runConfiguredChecks(checks []string, workdir string, timeoutSetting string)
 	}
 
 	return nil
+}
+
+func runTimedCheck(ctx context.Context, workdir string, command string) ([]byte, error) {
+	cmd := exec.Command("/bin/sh", "-lc", command)
+	cmd.SysProcAttr = checkSysProcAttr()
+	cmd.Dir = workdir
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	resultCh := make(chan error, 1)
+	go func() {
+		resultCh <- cmd.Wait()
+	}()
+
+	select {
+	case err := <-resultCh:
+		return output.Bytes(), err
+	case <-ctx.Done():
+		_ = interruptCheckProcess(cmd.Process.Pid)
+		err := <-resultCh
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, &checkTimeoutError{
+				Command: command,
+			}
+		}
+		return output.Bytes(), err
+	}
 }
 
 func resolveCommandTimeout(timeoutSetting string) (time.Duration, time.Duration, error) {
