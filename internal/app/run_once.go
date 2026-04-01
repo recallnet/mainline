@@ -110,7 +110,9 @@ func runOneCycle(repoPath string) (string, error) {
 			return "", err
 		}
 		if err := appendSubmissionEvent(ctx, store, repoRecord.ID, submission.ID, "integration.started", map[string]string{
-			"branch":           submission.BranchName,
+			"branch":           submissionDisplayRef(submission),
+			"source_ref":       submission.SourceRef,
+			"ref_kind":         submission.RefKind,
 			"source_worktree":  submission.SourceWorktree,
 			"submitted_source": submission.SourceSHA,
 		}); err != nil {
@@ -187,10 +189,10 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 	if err != nil {
 		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, err)
 	}
-	if worktree.IsDetached {
-		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, fmt.Errorf("source worktree %s is detached", submission.SourceWorktree))
+	if submission.RefKind == submissionRefKindBranch && worktree.IsDetached {
+		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, fmt.Errorf("source worktree %s is detached; check out %q or resubmit by sha", submission.SourceWorktree, submission.SourceRef))
 	}
-	if worktree.Branch != submission.BranchName {
+	if submission.RefKind == submissionRefKindBranch && worktree.Branch != submission.BranchName {
 		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, fmt.Errorf("source worktree %s is on %q, expected %q", submission.SourceWorktree, worktree.Branch, submission.BranchName))
 	}
 
@@ -202,12 +204,20 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, fmt.Errorf("source worktree %s is dirty; clean it and resubmit", submission.SourceWorktree))
 	}
 
-	headSHA, err := sourceEngine.BranchHeadSHA(submission.BranchName)
-	if err != nil {
-		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, fmt.Errorf("resolve branch head for %q: %w", submission.BranchName, err))
-	}
-	if headSHA != submission.SourceSHA {
-		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, fmt.Errorf("branch %q moved from submitted SHA %s to %s; resubmit the branch", submission.BranchName, submission.SourceSHA, headSHA))
+	var headSHA string
+	if submission.RefKind == submissionRefKindBranch {
+		headSHA, err = sourceEngine.BranchHeadSHA(submission.SourceRef)
+		if err != nil {
+			return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, fmt.Errorf("resolve branch head for %q: %w", submission.SourceRef, err))
+		}
+		if headSHA != submission.SourceSHA {
+			return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, fmt.Errorf("branch %q moved from submitted SHA %s to %s; resubmit the branch", submission.SourceRef, submission.SourceSHA, headSHA))
+		}
+	} else {
+		headSHA = worktree.HeadSHA
+		if headSHA != submission.SourceSHA {
+			return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, fmt.Errorf("detached worktree %s moved from submitted SHA %s to %s; resubmit the commit", submission.SourceWorktree, submission.SourceSHA, headSHA))
+		}
 	}
 
 	if err := runConfiguredChecks(cfg.Checks.PreIntegrate, submission.SourceWorktree, cfg.Checks.CommandTimeout); err != nil {
@@ -230,7 +240,9 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 			return blockIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult,
 				fmt.Errorf("rebase conflict in %s: resolve in the source worktree and resubmit", submission.SourceWorktree),
 				map[string]any{
-					"branch":             submission.BranchName,
+					"branch":             submissionDisplayRef(submission),
+					"source_ref":         submission.SourceRef,
+					"ref_kind":           submission.RefKind,
 					"blocked_reason":     "rebase_conflict",
 					"conflict_files":     conflictFiles,
 					"protected_tip_sha":  protectedTipSHA,
@@ -245,7 +257,15 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, err)
 	}
 
-	if err := mainEngine.FastForwardCurrentBranch(cfg.Repo.MainWorktree, submission.BranchName); err != nil {
+	targetRef := submission.SourceRef
+	if submission.RefKind == submissionRefKindSHA {
+		targetRef, err = sourceEngine.WorktreeHeadSHA(submission.SourceWorktree)
+		if err != nil {
+			return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, err)
+		}
+	}
+
+	if err := mainEngine.FastForwardCurrentBranch(cfg.Repo.MainWorktree, targetRef); err != nil {
 		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult, err)
 	}
 
@@ -258,7 +278,9 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 		return "", err
 	}
 	if err := appendSubmissionEvent(ctx, store, repoRecord.ID, submission.ID, "integration.succeeded", map[string]string{
-		"branch":        submission.BranchName,
+		"branch":        submissionDisplayRef(submission),
+		"source_ref":    submission.SourceRef,
+		"ref_kind":      submission.RefKind,
 		"protected_sha": protectedHead,
 	}); err != nil {
 		return "", err
@@ -281,7 +303,9 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 			Payload: mustJSON(map[string]string{
 				"target_sha": protectedHead,
 				"reason":     "integration_succeeded",
-				"branch":     submission.BranchName,
+				"branch":     submissionDisplayRef(submission),
+				"source_ref": submission.SourceRef,
+				"ref_kind":   submission.RefKind,
 			}),
 		}); err != nil {
 			return "", err
@@ -289,10 +313,10 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 	}
 
 	if syncResult.Synced {
-		return fmt.Sprintf("Synced %s from %s and integrated submission %d from %s onto %s", cfg.Repo.ProtectedBranch, syncResult.Upstream, submission.ID, submission.BranchName, cfg.Repo.ProtectedBranch), nil
+		return fmt.Sprintf("Synced %s from %s and integrated submission %d from %s onto %s", cfg.Repo.ProtectedBranch, syncResult.Upstream, submission.ID, submissionDisplayRef(submission), cfg.Repo.ProtectedBranch), nil
 	}
 
-	return fmt.Sprintf("Integrated submission %d from %s onto %s", submission.ID, submission.BranchName, cfg.Repo.ProtectedBranch), nil
+	return fmt.Sprintf("Integrated submission %d from %s onto %s", submission.ID, submissionDisplayRef(submission), cfg.Repo.ProtectedBranch), nil
 }
 
 type protectedSyncResult struct {
@@ -704,8 +728,10 @@ func recoverInterruptedIntegrationSubmissions(ctx context.Context, store state.S
 			return err
 		}
 		if err := appendSubmissionEvent(ctx, store, repoID, submission.ID, "integration.recovered", map[string]string{
-			"branch": submission.BranchName,
-			"reason": "worker_restarted_without_active_lock",
+			"branch":     submissionDisplayRef(submission),
+			"source_ref": submission.SourceRef,
+			"ref_kind":   submission.RefKind,
+			"reason":     "worker_restarted_without_active_lock",
 		}); err != nil {
 			return err
 		}

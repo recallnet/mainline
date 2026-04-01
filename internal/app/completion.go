@@ -72,10 +72,10 @@ _mainline_completions()
 
   case "${words[1]}" in
     land)
-      COMPREPLY=( $(compgen -W "--repo --branch --worktree --requested-by --priority --json --timeout --poll-interval" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --branch --sha --worktree --requested-by --priority --json --timeout --poll-interval" -- "$cur") )
       ;;
     submit)
-      COMPREPLY=( $(compgen -W "--repo --branch --worktree --requested-by --priority --json --check --check-only --wait --timeout --poll-interval" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --branch --sha --worktree --requested-by --priority --json --check --check-only --wait --timeout --poll-interval" -- "$cur") )
       ;;
     status)
       COMPREPLY=( $(compgen -W "--repo --json --events" -- "$cur") )
@@ -173,11 +173,11 @@ _mainline() {
       return
       ;;
     land)
-      _arguments '--repo[source worktree path]:path:_files -/' '--branch[branch to submit]:branch:' '--worktree[source worktree override]:path:_files -/' '--requested-by[submitter identity]:identity:' '--priority[submission priority]:priority:(high normal low)' '--json[json output]' '--timeout[maximum wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
+      _arguments '--repo[source worktree path]:path:_files -/' '--branch[branch to submit]:branch:' '--sha[detached commit to submit]:sha:' '--worktree[source worktree override]:path:_files -/' '--requested-by[submitter identity]:identity:' '--priority[submission priority]:priority:(high normal low)' '--json[json output]' '--timeout[maximum wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
       return
       ;;
     submit)
-      _arguments '--repo[repository path]:path:_files -/' '--branch[branch name]:branch:' '--worktree[source worktree]:path:_files -/' '--requested-by[submitter identity]:identity:' '--priority[submission priority]:priority:(high normal low)' '--json[json output]' '--check[validate submission without queueing]' '--check-only[validate submission without queueing]' '--wait[wait for the submission to integrate]' '--timeout[maximum integration wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
+      _arguments '--repo[repository path]:path:_files -/' '--branch[branch name]:branch:' '--sha[detached commit to submit]:sha:' '--worktree[source worktree]:path:_files -/' '--requested-by[submitter identity]:identity:' '--priority[submission priority]:priority:(high normal low)' '--json[json output]' '--check[validate submission without queueing]' '--check-only[validate submission without queueing]' '--wait[wait for the submission to integrate]' '--timeout[maximum integration wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
       return
       ;;
     status)
@@ -271,10 +271,14 @@ complete -c mainline -n "__fish_seen_subcommand_from confidence" -l cert-report
 complete -c mq -n "__fish_seen_subcommand_from confidence" -l cert-report
 complete -c mainline -n "__fish_seen_subcommand_from land" -l branch
 complete -c mq -n "__fish_seen_subcommand_from land" -l branch
+complete -c mainline -n "__fish_seen_subcommand_from land" -l sha
+complete -c mq -n "__fish_seen_subcommand_from land" -l sha
 complete -c mainline -n "__fish_seen_subcommand_from land" -l worktree
 complete -c mq -n "__fish_seen_subcommand_from land" -l worktree
 complete -c mainline -n "__fish_seen_subcommand_from land" -l requested-by
 complete -c mq -n "__fish_seen_subcommand_from land" -l requested-by
+complete -c mainline -n "__fish_seen_subcommand_from land" -l priority
+complete -c mq -n "__fish_seen_subcommand_from land" -l priority
 complete -c mainline -n "__fish_seen_subcommand_from land" -l json
 complete -c mq -n "__fish_seen_subcommand_from land" -l json
 complete -c mainline -n "__fish_seen_subcommand_from land" -l timeout
@@ -283,6 +287,8 @@ complete -c mainline -n "__fish_seen_subcommand_from land" -l poll-interval
 complete -c mq -n "__fish_seen_subcommand_from land" -l poll-interval
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l branch
 complete -c mq -n "__fish_seen_subcommand_from submit" -l branch
+complete -c mainline -n "__fish_seen_subcommand_from submit" -l sha
+complete -c mq -n "__fish_seen_subcommand_from submit" -l sha
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l worktree
 complete -c mq -n "__fish_seen_subcommand_from submit" -l worktree
 complete -c mainline -n "__fish_seen_subcommand_from submit" -l requested-by

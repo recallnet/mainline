@@ -189,7 +189,7 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 	if result.LatestSubmission != nil {
 		fmt.Fprintf(stdout, "Latest submission: #%d %s from %s (%s, priority=%s)\n",
 			result.LatestSubmission.ID,
-			result.LatestSubmission.BranchName,
+			submissionDisplayRef(result.LatestSubmission.IntegrationSubmission),
 			result.LatestSubmission.SourceWorktree,
 			result.LatestSubmission.Status,
 			result.LatestSubmission.Priority,
@@ -221,7 +221,7 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 	if len(result.ActiveSubmissions) > 0 {
 		fmt.Fprintln(stdout, "Active submissions:")
 		for _, submission := range result.ActiveSubmissions {
-			fmt.Fprintf(stdout, "  #%d %s (%s)\n", submission.ID, submission.BranchName, submission.Status)
+			fmt.Fprintf(stdout, "  #%d %s (%s)\n", submission.ID, submissionDisplayRef(submission.IntegrationSubmission), submission.Status)
 		}
 	}
 	if len(result.ActivePublishes) > 0 {

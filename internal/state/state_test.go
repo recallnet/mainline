@@ -39,6 +39,8 @@ func TestStorePersistsAcrossRestarts(t *testing.T) {
 	if _, err := store.CreateIntegrationSubmission(ctx, IntegrationSubmission{
 		RepoID:         repo.ID,
 		BranchName:     "feature/test",
+		SourceRef:      "feature/test",
+		RefKind:        "branch",
 		SourceWorktree: repoRoot,
 		SourceSHA:      "abc123",
 		RequestedBy:    "tester",
@@ -154,6 +156,9 @@ func TestEnsureSchemaMigratesLegacyVersionOnePriorityColumn(t *testing.T) {
 	}
 	if submission.Priority != "normal" {
 		t.Fatalf("expected migrated priority normal, got %q", submission.Priority)
+	}
+	if submission.SourceRef != "feature/test" || submission.RefKind != "branch" {
+		t.Fatalf("expected migrated source ref metadata, got %+v", submission)
 	}
 }
 

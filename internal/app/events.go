@@ -229,19 +229,31 @@ func (e *lifecycleEmitter) project(event state.EventRecord) (lifecycleEvent, boo
 		}
 		return out
 	}
+	getRef := func() string {
+		if branch := getString("branch"); branch != "" {
+			return branch
+		}
+		if sourceRef := getString("source_ref"); sourceRef != "" {
+			return sourceRef
+		}
+		if sourceSHA := getString("source_sha"); sourceSHA != "" {
+			return sourceSHA
+		}
+		return getString("submitted_source")
+	}
 
 	switch event.EventType {
 	case "submission.created":
 		record.Event = "submitted"
 		record.Status = "queued"
-		record.Branch = getString("branch")
+		record.Branch = getRef()
 		record.SourceSHA = getString("source_sha")
 		record.SourceWorktree = getString("source_worktree")
 		return record, true, nil
 	case "integration.started":
 		record.Event = "integration_started"
 		record.Status = "running"
-		record.Branch = getString("branch")
+		record.Branch = getRef()
 		record.SourceSHA = getString("submitted_source")
 		record.SourceWorktree = getString("source_worktree")
 		return record, true, nil
@@ -249,7 +261,7 @@ func (e *lifecycleEmitter) project(event state.EventRecord) (lifecycleEvent, boo
 		record.Event = "blocked"
 		record.Status = "blocked"
 		record.Error = getString("error")
-		record.Branch = getString("branch")
+		record.Branch = getRef()
 		record.SourceWorktree = getString("source_worktree")
 		record.ConflictFiles = getStringSlice("conflict_files")
 		record.ProtectedTipSHA = getString("protected_tip_sha")
@@ -260,12 +272,12 @@ func (e *lifecycleEmitter) project(event state.EventRecord) (lifecycleEvent, boo
 		record.Event = "failed"
 		record.Status = "failed"
 		record.Error = getString("error")
-		record.Branch = getString("branch")
+		record.Branch = getRef()
 		return record, true, nil
 	case "integration.succeeded":
 		record.Event = "integrated"
 		record.Status = "succeeded"
-		record.Branch = getString("branch")
+		record.Branch = getRef()
 		record.SHA = getString("protected_sha")
 		if record.SHA != "" && record.Branch != "" {
 			e.shaToBranch[record.SHA] = record.Branch
@@ -274,18 +286,18 @@ func (e *lifecycleEmitter) project(event state.EventRecord) (lifecycleEvent, boo
 	case "submission.retried":
 		record.Event = "retried"
 		record.Status = "queued"
-		record.Branch = getString("branch")
+		record.Branch = getRef()
 		return record, true, nil
 	case "submission.cancelled":
 		record.Event = "cancelled"
 		record.Status = "cancelled"
-		record.Branch = getString("branch")
+		record.Branch = getRef()
 		return record, true, nil
 	case "publish.requested":
 		record.Event = "publish_requested"
 		record.Status = "queued"
 		record.SHA = getString("target_sha")
-		record.Branch = getString("branch")
+		record.Branch = getRef()
 		if record.Branch == "" {
 			record.Branch = e.shaToBranch[record.SHA]
 		}

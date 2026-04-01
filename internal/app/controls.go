@@ -82,7 +82,9 @@ func controlSubmission(ctx context.Context, action string, store state.Store, re
 		}
 		if err := appendSubmissionEvent(ctx, store, repoID, submissionID, "submission.retried", map[string]string{
 			"from_status": submission.Status,
-			"branch":      submission.BranchName,
+			"branch":      submissionDisplayRef(submission),
+			"source_ref":  submission.SourceRef,
+			"ref_kind":    submission.RefKind,
 		}); err != nil {
 			return err
 		}
@@ -92,12 +94,12 @@ func controlSubmission(ctx context.Context, action string, store state.Store, re
 				Action:   action,
 				ItemType: "submission",
 				ID:       updated.ID,
-				Branch:   updated.BranchName,
+				Branch:   submissionDisplayRef(updated),
 				Status:   updated.Status,
 			})
 		}
 		fmt.Fprintf(stdout, "Retried submission %d\n", updated.ID)
-		fmt.Fprintf(stdout, "Branch: %s\n", updated.BranchName)
+		fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(updated))
 		fmt.Fprintf(stdout, "Status: %s\n", updated.Status)
 		return nil
 	case "cancel":
@@ -110,7 +112,9 @@ func controlSubmission(ctx context.Context, action string, store state.Store, re
 		}
 		if err := appendSubmissionEvent(ctx, store, repoID, submissionID, "submission.cancelled", map[string]string{
 			"from_status": submission.Status,
-			"branch":      submission.BranchName,
+			"branch":      submissionDisplayRef(submission),
+			"source_ref":  submission.SourceRef,
+			"ref_kind":    submission.RefKind,
 		}); err != nil {
 			return err
 		}
@@ -120,12 +124,12 @@ func controlSubmission(ctx context.Context, action string, store state.Store, re
 				Action:   action,
 				ItemType: "submission",
 				ID:       updated.ID,
-				Branch:   updated.BranchName,
+				Branch:   submissionDisplayRef(updated),
 				Status:   updated.Status,
 			})
 		}
 		fmt.Fprintf(stdout, "Cancelled submission %d\n", updated.ID)
-		fmt.Fprintf(stdout, "Branch: %s\n", updated.BranchName)
+		fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(updated))
 		fmt.Fprintf(stdout, "Status: %s\n", updated.Status)
 		return nil
 	default:

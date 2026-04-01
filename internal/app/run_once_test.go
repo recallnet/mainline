@@ -101,6 +101,45 @@ func TestRunOnceIntegratesHigherPriorityBranchesFirst(t *testing.T) {
 	}
 }
 
+func TestRunOnceIntegratesDetachedHeadSubmissionBySHA(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	detachedPath := filepath.Join(t.TempDir(), "detached-feature")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "--detach", detachedPath)
+	writeFileAndCommit(t, detachedPath, "detached.txt", "detached\n", "detached feature")
+	runTestCommand(t, detachedPath, "git", "checkout", "--detach", "HEAD")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", detachedPath, "--json"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	runOnce(t, repoRoot)
+
+	if _, err := os.Stat(filepath.Join(repoRoot, "detached.txt")); err != nil {
+		t.Fatalf("expected detached.txt after integration: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if len(submissions) != 1 || submissions[0].RefKind != submissionRefKindSHA || submissions[0].Status != "succeeded" {
+		t.Fatalf("expected succeeded sha submission, got %+v", submissions)
+	}
+}
+
 func TestRunOnceBlocksConflictAndLeavesProtectedBranchUntouched(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)

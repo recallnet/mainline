@@ -9,7 +9,6 @@ import (
 	"io"
 	"os/user"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/recallnet/mainline/internal/git"
@@ -35,6 +34,7 @@ func (e *submitValidationError) Error() string {
 type submitOptions struct {
 	repoPath     string
 	branch       string
+	sha          string
 	worktreePath string
 	requestedBy  string
 	priority     string
@@ -47,6 +47,8 @@ type preparedSubmission struct {
 	Config       policy.File
 	Store        state.Store
 	Branch       string
+	SourceRef    string
+	RefKind      string
 	WorktreePath string
 	SourceSHA    string
 	RequestedBy  string
@@ -70,6 +72,8 @@ type submitResult struct {
 	Waited           bool   `json:"waited"`
 	SubmissionID     int64  `json:"submission_id,omitempty"`
 	Branch           string `json:"branch,omitempty"`
+	SourceRef        string `json:"source_ref,omitempty"`
+	RefKind          string `json:"ref_kind,omitempty"`
 	SourceWorktree   string `json:"source_worktree,omitempty"`
 	SourceSHA        string `json:"source_sha,omitempty"`
 	RepositoryRoot   string `json:"repository_root,omitempty"`
@@ -93,6 +97,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	var repoPath string
 	var branch string
+	var sha string
 	var worktreePath string
 	var requestedBy string
 	var priority string
@@ -105,6 +110,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	fs.StringVar(&repoPath, "repo", ".", "repository path")
 	fs.StringVar(&branch, "branch", "", "branch to submit")
+	fs.StringVar(&sha, "sha", "", "detached commit to submit")
 	fs.StringVar(&worktreePath, "worktree", "", "source worktree path")
 	fs.StringVar(&requestedBy, "requested-by", "", "submitter identity")
 	fs.StringVar(&priority, "priority", submissionPriorityNormal, "submission priority: high, normal, or low")
@@ -131,6 +137,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	opts := submitOptions{
 		repoPath:     repoPath,
 		branch:       branch,
+		sha:          sha,
 		worktreePath: worktreePath,
 		requestedBy:  requestedBy,
 		priority:     priority,
@@ -143,6 +150,9 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 				OK:        false,
 				Checked:   true,
 				Queued:    false,
+				Branch:    preparedSubmissionDisplayRef(prepared),
+				SourceRef: prepared.SourceRef,
+				RefKind:   prepared.RefKind,
 				ErrorCode: submitErrorCode(err),
 				Error:     err.Error(),
 			}, err)
@@ -155,7 +165,9 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 			OK:             true,
 			Checked:        true,
 			Queued:         false,
-			Branch:         prepared.Branch,
+			Branch:         preparedSubmissionDisplayRef(prepared),
+			SourceRef:      prepared.SourceRef,
+			RefKind:        prepared.RefKind,
 			SourceWorktree: prepared.WorktreePath,
 			SourceSHA:      prepared.SourceSHA,
 			RepositoryRoot: prepared.RepoRoot,
@@ -179,7 +191,9 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 				OK:             false,
 				Checked:        true,
 				Queued:         false,
-				Branch:         prepared.Branch,
+				Branch:         preparedSubmissionDisplayRef(prepared),
+				SourceRef:      prepared.SourceRef,
+				RefKind:        prepared.RefKind,
 				SourceWorktree: prepared.WorktreePath,
 				SourceSHA:      prepared.SourceSHA,
 				RepositoryRoot: prepared.RepoRoot,
@@ -198,7 +212,9 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 		Queued:           true,
 		Waited:           false,
 		SubmissionID:     queued.Submission.ID,
-		Branch:           queued.Submission.BranchName,
+		Branch:           submissionDisplayRef(queued.Submission),
+		SourceRef:        queued.Submission.SourceRef,
+		RefKind:          queued.Submission.RefKind,
 		SourceWorktree:   queued.Submission.SourceWorktree,
 		SourceSHA:        queued.Submission.SourceSHA,
 		RepositoryRoot:   queued.RepoRoot,
@@ -225,7 +241,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 				return writeSubmitJSON(stdout, result, waitErr)
 			}
 			fmt.Fprintf(stdout, "Queued submission %d\n", queued.Submission.ID)
-			fmt.Fprintf(stdout, "Branch: %s\n", queued.Submission.BranchName)
+			fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(queued.Submission))
 			fmt.Fprintf(stdout, "Worktree: %s\n", queued.Submission.SourceWorktree)
 			fmt.Fprintf(stdout, "Source SHA: %s\n", queued.Submission.SourceSHA)
 			fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
@@ -243,7 +259,7 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 	}
 
 	fmt.Fprintf(stdout, "Queued submission %d\n", queued.Submission.ID)
-	fmt.Fprintf(stdout, "Branch: %s\n", queued.Submission.BranchName)
+	fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(queued.Submission))
 	fmt.Fprintf(stdout, "Worktree: %s\n", queued.Submission.SourceWorktree)
 	fmt.Fprintf(stdout, "Source SHA: %s\n", queued.Submission.SourceSHA)
 	if waitForResult {
@@ -322,44 +338,18 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		}
 	}
 
-	branch := opts.branch
-	if branch == "" {
-		if worktree.IsDetached {
-			return preparedSubmission{}, &submitValidationError{
-				Code:    "detached_head",
-				Message: "cannot submit from detached HEAD; pass --branch with a checked-out branch worktree",
-			}
-		}
-		branch = worktree.Branch
-	}
-
-	currentBranch, err := engine.CurrentBranchAtPath(worktreePath)
-	if err != nil {
-		if strings.Contains(err.Error(), "detached HEAD state") {
-			return preparedSubmission{}, &submitValidationError{
-				Code:    "detached_head",
-				Message: "cannot submit from detached HEAD; pass --branch with a checked-out branch worktree",
-			}
-		}
-		return preparedSubmission{}, err
-	}
-	if currentBranch != branch {
+	if opts.branch != "" && opts.sha != "" {
 		return preparedSubmission{}, &submitValidationError{
-			Code:    "branch_not_checked_out",
-			Message: fmt.Sprintf("branch %q is not checked out in worktree %s", branch, worktreePath),
+			Code:    "ref_conflict",
+			Message: "--branch and --sha cannot be used together",
 		}
 	}
 
-	if branch == cfg.Repo.ProtectedBranch {
+	branch := opts.branch
+	if !worktree.IsDetached && worktree.Branch == cfg.Repo.ProtectedBranch {
 		return preparedSubmission{}, &submitValidationError{
 			Code:    "protected_branch",
-			Message: fmt.Sprintf("cannot submit protected branch %q", branch),
-		}
-	}
-	if !engine.BranchExists(branch) {
-		return preparedSubmission{}, &submitValidationError{
-			Code:    "branch_missing",
-			Message: fmt.Sprintf("branch %q does not exist", branch),
+			Message: fmt.Sprintf("cannot submit protected branch %q", cfg.Repo.ProtectedBranch),
 		}
 	}
 
@@ -374,20 +364,102 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		}
 	}
 
-	commitCount, err := engine.CommitCount(branch)
+	headSHA, err := engine.WorktreeHeadSHA(worktreePath)
+	if err != nil {
+		return preparedSubmission{}, fmt.Errorf("resolve worktree head for %s: %w", worktreePath, err)
+	}
+
+	sourceRef := ""
+	refKind := submissionRefKindBranch
+	if opts.sha != "" {
+		resolvedSHA, err := engine.BranchHeadSHA(opts.sha)
+		if err != nil {
+			return preparedSubmission{}, &submitValidationError{
+				Code:    "sha_missing",
+				Message: fmt.Sprintf("commit %q does not exist", opts.sha),
+			}
+		}
+		if resolvedSHA != headSHA {
+			return preparedSubmission{}, &submitValidationError{
+				Code:    "sha_not_checked_out",
+				Message: fmt.Sprintf("worktree %s is at %s, expected %s to be checked out", worktreePath, headSHA, resolvedSHA),
+			}
+		}
+		sourceRef = resolvedSHA
+		refKind = submissionRefKindSHA
+	} else if branch != "" {
+		if worktree.IsDetached {
+			return preparedSubmission{}, &submitValidationError{
+				Code:    "detached_head",
+				Message: fmt.Sprintf("worktree %s is detached; pass --sha %s or check out branch %q", worktreePath, headSHA, branch),
+			}
+		}
+		currentBranch, err := engine.CurrentBranchAtPath(worktreePath)
+		if err != nil {
+			return preparedSubmission{}, err
+		}
+		if currentBranch != branch {
+			return preparedSubmission{}, &submitValidationError{
+				Code:    "branch_not_checked_out",
+				Message: fmt.Sprintf("branch %q is not checked out in worktree %s", branch, worktreePath),
+			}
+		}
+		if branch == cfg.Repo.ProtectedBranch {
+			return preparedSubmission{}, &submitValidationError{
+				Code:    "protected_branch",
+				Message: fmt.Sprintf("cannot submit protected branch %q", branch),
+			}
+		}
+		if !engine.BranchExists(branch) {
+			return preparedSubmission{}, &submitValidationError{
+				Code:    "branch_missing",
+				Message: fmt.Sprintf("branch %q does not exist", branch),
+			}
+		}
+		sourceRef = branch
+		refKind = submissionRefKindBranch
+		headSHA, err = engine.BranchHeadSHA(branch)
+		if err != nil {
+			return preparedSubmission{}, fmt.Errorf("resolve branch head for %q: %w", branch, err)
+		}
+	} else if worktree.IsDetached {
+		sourceRef = headSHA
+		refKind = submissionRefKindSHA
+	} else {
+		branch = worktree.Branch
+		if branch == cfg.Repo.ProtectedBranch {
+			return preparedSubmission{}, &submitValidationError{
+				Code:    "protected_branch",
+				Message: fmt.Sprintf("cannot submit protected branch %q", branch),
+			}
+		}
+		if !engine.BranchExists(branch) {
+			return preparedSubmission{}, &submitValidationError{
+				Code:    "branch_missing",
+				Message: fmt.Sprintf("branch %q does not exist", branch),
+			}
+		}
+		sourceRef = branch
+		refKind = submissionRefKindBranch
+		headSHA, err = engine.BranchHeadSHA(branch)
+		if err != nil {
+			return preparedSubmission{}, fmt.Errorf("resolve branch head for %q: %w", branch, err)
+		}
+	}
+
+	commitCount, err := engine.CommitCount(sourceRef)
 	if err != nil {
 		return preparedSubmission{}, err
 	}
 	if commitCount == 0 {
-		return preparedSubmission{}, &submitValidationError{
-			Code:    "branch_has_no_commits",
-			Message: fmt.Sprintf("branch %q has no commits", branch),
+		target := sourceRef
+		if target == "" {
+			target = headSHA
 		}
-	}
-
-	headSHA, err := engine.BranchHeadSHA(branch)
-	if err != nil {
-		return preparedSubmission{}, fmt.Errorf("resolve branch head for %q: %w", branch, err)
+		return preparedSubmission{}, &submitValidationError{
+			Code:    "ref_has_no_commits",
+			Message: fmt.Sprintf("reference %q has no commits", target),
+		}
 	}
 
 	requestedBy := opts.requestedBy
@@ -417,7 +489,7 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		return preparedSubmission{}, err
 	}
 	if err == nil {
-		duplicate, found, err := findActiveDuplicateSubmission(ctx, store, repoRecord.ID, branch, headSHA)
+		duplicate, found, err := findActiveDuplicateSubmission(ctx, store, repoRecord.ID, sourceRef, headSHA)
 		if err != nil {
 			return preparedSubmission{}, err
 		}
@@ -430,6 +502,8 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 					Config:       cfg,
 					Store:        store,
 					Branch:       branch,
+					SourceRef:    sourceRef,
+					RefKind:      refKind,
 					WorktreePath: worktree.Path,
 					SourceSHA:    headSHA,
 					RequestedBy:  requestedBy,
@@ -439,7 +513,7 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 			}
 			return preparedSubmission{}, &submitValidationError{
 				Code:    "already_queued",
-				Message: fmt.Sprintf("submission %d for branch %q at %s is already %s", duplicate.ID, branch, headSHA, duplicate.Status),
+				Message: fmt.Sprintf("submission %d for %q at %s is already %s", duplicate.ID, sourceRef, headSHA, duplicate.Status),
 			}
 		}
 	}
@@ -449,14 +523,20 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		if err != nil {
 			return preparedSubmission{}, fmt.Errorf("resolve protected branch head for %q: %w", cfg.Repo.ProtectedBranch, err)
 		}
-		descended, err := engine.IsAncestor(cfg.Repo.ProtectedBranch, branch)
+		descended, err := engine.IsAncestor(cfg.Repo.ProtectedBranch, sourceRef)
 		if err != nil {
 			return preparedSubmission{}, err
 		}
 		if !descended {
+			target := sourceRef
+			if branch != "" {
+				target = fmt.Sprintf("branch %q", branch)
+			} else {
+				target = fmt.Sprintf("commit %s", sourceRef)
+			}
 			return preparedSubmission{}, &submitValidationError{
 				Code:    "branch_needs_rebase",
-				Message: fmt.Sprintf("branch %q does not include protected branch %q at %s; rebase before submission", branch, cfg.Repo.ProtectedBranch, protectedHeadSHA),
+				Message: fmt.Sprintf("%s does not include protected branch %q at %s; rebase before submission", target, cfg.Repo.ProtectedBranch, protectedHeadSHA),
 			}
 		}
 	}
@@ -467,6 +547,8 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		Config:       cfg,
 		Store:        store,
 		Branch:       branch,
+		SourceRef:    sourceRef,
+		RefKind:      refKind,
 		WorktreePath: worktree.Path,
 		SourceSHA:    headSHA,
 		RequestedBy:  requestedBy,
@@ -483,13 +565,13 @@ func isValidSubmissionPriority(priority string) bool {
 	}
 }
 
-func findActiveDuplicateSubmission(ctx context.Context, store state.Store, repoID int64, branch string, sourceSHA string) (state.IntegrationSubmission, bool, error) {
+func findActiveDuplicateSubmission(ctx context.Context, store state.Store, repoID int64, sourceRef string, sourceSHA string) (state.IntegrationSubmission, bool, error) {
 	submissions, err := store.ListIntegrationSubmissions(ctx, repoID)
 	if err != nil {
 		return state.IntegrationSubmission{}, false, err
 	}
 	for _, submission := range submissions {
-		if submission.BranchName != branch || submission.SourceSHA != sourceSHA {
+		if submission.SourceRef != sourceRef || submission.SourceSHA != sourceSHA {
 			continue
 		}
 		switch submission.Status {
@@ -527,6 +609,8 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 		}
 		payload, err := json.Marshal(map[string]string{
 			"branch":            prepared.Branch,
+			"source_ref":        prepared.SourceRef,
+			"ref_kind":          prepared.RefKind,
 			"source_worktree":   prepared.WorktreePath,
 			"source_sha":        prepared.SourceSHA,
 			"requested_by":      prepared.RequestedBy,
@@ -559,6 +643,8 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 	submission, err := prepared.Store.CreateIntegrationSubmission(ctx, state.IntegrationSubmission{
 		RepoID:         repoRecord.ID,
 		BranchName:     prepared.Branch,
+		SourceRef:      prepared.SourceRef,
+		RefKind:        prepared.RefKind,
 		SourceWorktree: prepared.WorktreePath,
 		SourceSHA:      prepared.SourceSHA,
 		RequestedBy:    prepared.RequestedBy,
@@ -571,6 +657,8 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 
 	payload, err := json.Marshal(map[string]string{
 		"branch":          prepared.Branch,
+		"source_ref":      prepared.SourceRef,
+		"ref_kind":        prepared.RefKind,
 		"source_worktree": prepared.WorktreePath,
 		"source_sha":      prepared.SourceSHA,
 		"requested_by":    prepared.RequestedBy,

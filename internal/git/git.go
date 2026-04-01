@@ -306,6 +306,21 @@ func (e Engine) CurrentBranchAtPath(path string) (string, error) {
 	return head.Name().Short(), nil
 }
 
+// WorktreeHeadSHA returns the current HEAD commit for a specific worktree path.
+func (e Engine) WorktreeHeadSHA(path string) (string, error) {
+	repo, err := openRepository(path)
+	if err != nil {
+		return "", err
+	}
+
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+
+	return head.Hash().String(), nil
+}
+
 // ResolveWorktree finds a known worktree by path.
 func (e Engine) ResolveWorktree(path string) (Worktree, error) {
 	worktrees, err := e.ListWorktrees()

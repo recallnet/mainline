@@ -119,9 +119,77 @@ func TestSubmitRejectsDetachedHeadWithoutBranch(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", detachedPath}, &submitOut, &submitErr)
-	if err == nil || !strings.Contains(err.Error(), "detached HEAD") {
-		t.Fatalf("expected detached HEAD rejection, got %v", err)
+	if err := os.WriteFile(filepath.Join(detachedPath, "detached.txt"), []byte("detached\n"), 0o644); err != nil {
+		t.Fatalf("write detached file: %v", err)
+	}
+	runTestCommand(t, detachedPath, "git", "add", "detached.txt")
+	runTestCommand(t, detachedPath, "git", "commit", "-m", "detached commit")
+	runTestCommand(t, detachedPath, "git", "checkout", "--detach", "HEAD")
+
+	if err := runSubmit([]string{"--repo", detachedPath, "--json"}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("expected detached HEAD submit to succeed, got %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.OK || !result.Queued || result.RefKind != submissionRefKindSHA {
+		t.Fatalf("expected detached HEAD queued as sha submission, got %+v", result)
+	}
+	if result.SourceRef == "" || result.SourceRef != result.SourceSHA {
+		t.Fatalf("expected detached submit to use head sha as source ref, got %+v", result)
+	}
+}
+
+func TestSubmitAcceptsExplicitSHAWhenCheckedOut(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-sha")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/sha", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+	headSHA := strings.TrimSpace(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--sha", headSHA}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.RefKind != submissionRefKindSHA || result.SourceRef != headSHA {
+		t.Fatalf("expected explicit sha submission, got %+v", result)
+	}
+}
+
+func TestSubmitRejectsSHAWhenNotCheckedOut(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-sha-mismatch")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/sha-mismatch", featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+	parentSHA := strings.TrimSpace(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD^"))
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err := runSubmit([]string{"--repo", featurePath, "--sha", parentSHA}, &submitOut, &submitErr)
+	if err == nil || !strings.Contains(err.Error(), "expected "+parentSHA+" to be checked out") {
+		t.Fatalf("expected sha checkout mismatch rejection, got %v", err)
 	}
 }
 

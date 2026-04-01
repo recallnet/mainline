@@ -17,7 +17,7 @@ import (
 const (
 	defaultDirName       = "mainline"
 	defaultDBName        = "state.db"
-	currentSchemaVersion = 2
+	currentSchemaVersion = 3
 )
 
 var ErrUnsupportedSchemaVersion = errors.New("unsupported state schema version")
@@ -44,6 +44,8 @@ type IntegrationSubmission struct {
 	ID             int64
 	RepoID         int64
 	BranchName     string
+	SourceRef      string
+	RefKind        string
 	SourceWorktree string
 	SourceSHA      string
 	RequestedBy    string
@@ -185,6 +187,15 @@ func (s Store) CreateIntegrationSubmission(ctx context.Context, submission Integ
 	if submission.Priority == "" {
 		submission.Priority = "normal"
 	}
+	if submission.SourceRef == "" {
+		if submission.BranchName != "" {
+			submission.SourceRef = submission.BranchName
+			submission.RefKind = "branch"
+		} else {
+			submission.SourceRef = submission.SourceSHA
+			submission.RefKind = "sha"
+		}
+	}
 	db, err := s.open()
 	if err != nil {
 		return IntegrationSubmission{}, err
@@ -195,17 +206,21 @@ func (s Store) CreateIntegrationSubmission(ctx context.Context, submission Integ
 		INSERT INTO integration_submissions (
 			repo_id,
 			branch_name,
+			source_ref,
+			ref_kind,
 			source_worktree_path,
 			source_sha,
 			requested_by,
 			priority,
 			status,
 			last_error
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 	`,
 		submission.RepoID,
 		submission.BranchName,
+		submission.SourceRef,
+		submission.RefKind,
 		submission.SourceWorktree,
 		submission.SourceSHA,
 		submission.RequestedBy,
@@ -226,7 +241,7 @@ func (s Store) GetIntegrationSubmission(ctx context.Context, submissionID int64)
 	defer db.Close()
 
 	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
+		SELECT id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 		FROM integration_submissions
 		WHERE id = ?
 	`, submissionID)
@@ -251,7 +266,7 @@ func (s Store) NextQueuedIntegrationSubmission(ctx context.Context, repoID int64
 	defer db.Close()
 
 	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
+		SELECT id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 		FROM integration_submissions
 		WHERE repo_id = ? AND status = 'queued'
 		ORDER BY
@@ -292,7 +307,7 @@ func (s Store) UpdateIntegrationSubmissionStatus(ctx context.Context, submission
 		UPDATE integration_submissions
 		SET status = ?, last_error = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
-		RETURNING id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
+		RETURNING id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 	`, status, lastError, submissionID)
 
 	submission, err := scanIntegrationSubmission(row)
@@ -318,7 +333,7 @@ func (s Store) UpdateIntegrationSubmissionPriority(ctx context.Context, submissi
 		UPDATE integration_submissions
 		SET priority = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
-		RETURNING id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
+		RETURNING id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 	`, priority, submissionID)
 
 	submission, err := scanIntegrationSubmission(row)
@@ -624,6 +639,37 @@ func ensureSchemaVersion(ctx context.Context, db *sql.DB) error {
 		version = 2
 		migrated = true
 	}
+	if version < 3 {
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE integration_submissions
+			ADD COLUMN source_ref TEXT NOT NULL DEFAULT ''
+		`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return fmt.Errorf("add integration submission source_ref column: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE integration_submissions
+			ADD COLUMN ref_kind TEXT NOT NULL DEFAULT 'branch'
+		`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return fmt.Errorf("add integration submission ref_kind column: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE integration_submissions
+			SET source_ref = CASE
+				WHEN source_ref <> '' THEN source_ref
+				WHEN branch_name <> '' THEN branch_name
+				ELSE source_sha
+			END,
+			    ref_kind = CASE
+				WHEN ref_kind <> '' THEN ref_kind
+				WHEN branch_name <> '' THEN 'branch'
+				ELSE 'sha'
+			END
+		`); err != nil {
+			return fmt.Errorf("backfill integration submission source refs: %w", err)
+		}
+		version = 3
+		migrated = true
+	}
 	if migrated && version < currentSchemaVersion {
 		version = currentSchemaVersion
 	}
@@ -674,6 +720,8 @@ func scanIntegrationSubmission(row scanner) (IntegrationSubmission, error) {
 		&submission.ID,
 		&submission.RepoID,
 		&submission.BranchName,
+		&submission.SourceRef,
+		&submission.RefKind,
 		&submission.SourceWorktree,
 		&submission.SourceSHA,
 		&submission.RequestedBy,
@@ -838,7 +886,7 @@ func (s Store) ListIntegrationSubmissions(ctx context.Context, repoID int64) ([]
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
+		SELECT id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 		FROM integration_submissions
 		WHERE repo_id = ?
 		ORDER BY created_at ASC, id ASC
@@ -869,7 +917,7 @@ func (s Store) ListIntegrationSubmissionsByStatus(ctx context.Context, repoID in
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, branch_name, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
+		SELECT id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, requested_by, priority, status, last_error, created_at, updated_at
 		FROM integration_submissions
 		WHERE repo_id = ? AND status = ?
 		ORDER BY created_at ASC, id ASC
@@ -940,6 +988,8 @@ CREATE TABLE IF NOT EXISTS integration_submissions (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	repo_id INTEGER NOT NULL,
 	branch_name TEXT NOT NULL,
+	source_ref TEXT NOT NULL DEFAULT '',
+	ref_kind TEXT NOT NULL DEFAULT 'branch',
 	source_worktree_path TEXT NOT NULL,
 	source_sha TEXT NOT NULL,
 	requested_by TEXT NOT NULL,

@@ -16,6 +16,8 @@ type landResult struct {
 	SubmissionID     int64  `json:"submission_id"`
 	PublishRequestID int64  `json:"publish_request_id,omitempty"`
 	Branch           string `json:"branch"`
+	SourceRef        string `json:"source_ref,omitempty"`
+	RefKind          string `json:"ref_kind,omitempty"`
 	SourceWorktree   string `json:"source_worktree"`
 	SourceSHA        string `json:"source_sha"`
 	Priority         string `json:"priority,omitempty"`
@@ -37,6 +39,7 @@ func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	var repoPath string
 	var branch string
+	var sha string
 	var worktreePath string
 	var requestedBy string
 	var priority string
@@ -46,6 +49,7 @@ func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	fs.StringVar(&repoPath, "repo", ".", "source worktree path")
 	fs.StringVar(&branch, "branch", "", "branch to submit")
+	fs.StringVar(&sha, "sha", "", "detached commit to submit")
 	fs.StringVar(&worktreePath, "worktree", "", "source worktree path override")
 	fs.StringVar(&requestedBy, "requested-by", "", "submitter identity")
 	fs.StringVar(&priority, "priority", submissionPriorityNormal, "submission priority: high, normal, or low")
@@ -73,6 +77,7 @@ func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
 	queued, err := queueSubmission(submitOptions{
 		repoPath:     repoPath,
 		branch:       branch,
+		sha:          sha,
 		worktreePath: worktreePath,
 		requestedBy:  requestedBy,
 		priority:     priority,
@@ -153,7 +158,9 @@ func waitForLandedPublish(queued queuedSubmission, timeout time.Duration, pollIn
 
 	result := landResult{
 		SubmissionID:     queued.Submission.ID,
-		Branch:           queued.Submission.BranchName,
+		Branch:           submissionDisplayRef(queued.Submission),
+		SourceRef:        queued.Submission.SourceRef,
+		RefKind:          queued.Submission.RefKind,
 		SourceWorktree:   queued.Submission.SourceWorktree,
 		SourceSHA:        queued.Submission.SourceSHA,
 		Priority:         queued.Submission.Priority,

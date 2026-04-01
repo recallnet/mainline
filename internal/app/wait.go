@@ -19,6 +19,8 @@ const (
 type integrationWaitResult struct {
 	SubmissionID     int64       `json:"submission_id"`
 	Branch           string      `json:"branch"`
+	SourceRef        string      `json:"source_ref,omitempty"`
+	RefKind          string      `json:"ref_kind,omitempty"`
 	SourceWorktree   string      `json:"source_worktree"`
 	SourceSHA        string      `json:"source_sha"`
 	RepositoryRoot   string      `json:"repository_root"`
@@ -36,7 +38,9 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 
 	result := integrationWaitResult{
 		SubmissionID:     queued.Submission.ID,
-		Branch:           queued.Submission.BranchName,
+		Branch:           submissionDisplayRef(queued.Submission),
+		SourceRef:        queued.Submission.SourceRef,
+		RefKind:          queued.Submission.RefKind,
 		SourceWorktree:   queued.Submission.SourceWorktree,
 		SourceSHA:        queued.Submission.SourceSHA,
 		RepositoryRoot:   queued.RepoRoot,
