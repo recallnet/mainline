@@ -201,6 +201,20 @@ func TestRepoRootRejectsAdoptWhenRootCheckoutIsDirty(t *testing.T) {
 	}
 }
 
+func TestRepoRootAdoptRequiresInitializedRepo(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+
+	var rootOut bytes.Buffer
+	var rootErr bytes.Buffer
+	err := runRepoRoot([]string{"--repo", repoRoot, "--adopt-root", "--json"}, &rootOut, &rootErr)
+	if err == nil {
+		t.Fatalf("expected adopt-root to require repo init first")
+	}
+	if !strings.Contains(err.Error(), "run `mq repo init") {
+		t.Fatalf("expected repo init guidance, got %v", err)
+	}
+}
+
 func TestRepoInitSupportsJSONOutput(t *testing.T) {
 	repoRoot, worktreePath := createTestRepo(t)
 	registryPath := filepath.Join(t.TempDir(), "registry.json")

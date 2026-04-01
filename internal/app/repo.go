@@ -414,7 +414,7 @@ Flags:
 	}
 	repoRoot := layout.RepositoryRoot
 
-	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	cfg, present, err := policy.LoadOrDefault(repoRoot)
 	if err != nil {
 		return err
 	}
@@ -424,7 +424,7 @@ Flags:
 
 	fixesApplied := []string{}
 	if adoptRoot {
-		if err := adoptRepositoryRoot(repoRoot, layout, &cfg); err != nil {
+		if err := adoptRepositoryRoot(repoRoot, layout, &cfg, present); err != nil {
 			return err
 		}
 		fixesApplied = append(fixesApplied, fmt.Sprintf("set canonical main worktree to repository root %s", filepath.Clean(layout.RepositoryRoot)))
@@ -463,7 +463,16 @@ Flags:
 	return nil
 }
 
-func adoptRepositoryRoot(repoRoot string, layout git.RepositoryLayout, cfg *policy.File) error {
+func adoptRepositoryRoot(repoRoot string, layout git.RepositoryLayout, cfg *policy.File, configPresent bool) error {
+	if !configPresent {
+		return fmt.Errorf("repository is not initialized; run `mq repo init --repo %s` before adopting the root checkout", repoRoot)
+	}
+
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	if !store.Exists() {
+		return fmt.Errorf("repository is not initialized; run `mq repo init --repo %s` before adopting the root checkout", repoRoot)
+	}
+
 	result := buildRepoRootResult(repoRoot, *cfg, layout)
 	if !result.CanAdoptRoot {
 		return fmt.Errorf("cannot adopt repository root as canonical main worktree yet; run `mq repo root --repo %s --json` and complete the recommended actions first", repoRoot)
@@ -474,24 +483,21 @@ func adoptRepositoryRoot(repoRoot string, layout git.RepositoryLayout, cfg *poli
 		return err
 	}
 
-	store := state.NewStore(state.DefaultPath(layout.GitDir))
-	if store.Exists() {
-		ctx := context.Background()
-		if err := store.EnsureSchema(ctx); err != nil {
-			return err
-		}
-		if _, _, err := ensureRepositoryRecord(ctx, store, repoRoot, *cfg); err != nil {
-			return err
-		}
-		if _, err := store.UpsertRepository(ctx, state.RepositoryRecord{
-			CanonicalPath:   repoRoot,
-			ProtectedBranch: cfg.Repo.ProtectedBranch,
-			RemoteName:      cfg.Repo.RemoteName,
-			MainWorktree:    cfg.Repo.MainWorktree,
-			PolicyVersion:   "v1",
-		}); err != nil {
-			return err
-		}
+	ctx := context.Background()
+	if err := store.EnsureSchema(ctx); err != nil {
+		return err
+	}
+	if _, _, err := ensureRepositoryRecord(ctx, store, repoRoot, *cfg); err != nil {
+		return err
+	}
+	if _, err := store.UpsertRepository(ctx, state.RepositoryRecord{
+		CanonicalPath:   repoRoot,
+		ProtectedBranch: cfg.Repo.ProtectedBranch,
+		RemoteName:      cfg.Repo.RemoteName,
+		MainWorktree:    cfg.Repo.MainWorktree,
+		PolicyVersion:   "v1",
+	}); err != nil {
+		return err
 	}
 	return registerRepo(cfg.Repo.MainWorktree, repoRoot, state.DefaultPath(layout.GitDir))
 }
