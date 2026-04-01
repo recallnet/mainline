@@ -8,6 +8,8 @@ Initialize once:
 
 ```bash
 mq repo init --repo .
+git add mainline.toml && git commit -m "Initialize mainline repo policy"
+./scripts/install-hooks.sh
 mq config edit --repo .
 mq doctor --repo .
 ```
@@ -52,12 +54,11 @@ Run the daemon in the protected worktree and let agents only submit:
 ```bash
 mainlined --repo /path/to/main --interval 2s --json
 cd /path/to/agent-worktree
-mq submit
-mq status --repo /path/to/main --json
+mq submit --check-only --json
+mq submit --wait --timeout 15m --json
+mq events --repo /path/to/main --follow --json --lifecycle
 mq confidence --repo /path/to/main
 mq watch --repo /path/to/main
-mq logs --repo /path/to/main --follow
-mq events --repo /path/to/main --follow
 ```
 
 This is the intended dogfooding direction for the repo-local worktree skill: agents do all edits and commits in topic worktrees, then land through `mq` instead of manually merging into `main`.
@@ -70,14 +71,13 @@ That skill is now expected to use the real end-to-end flow:
 
 ```bash
 cd /path/to/topic-worktree
-mq submit --wait --timeout 10m
-mq submit
+mq submit --check-only --json
+mq submit --wait --timeout 15m --json
 mq status --repo /path/to/main --json
 mq run-once --repo /path/to/main
 mq publish --repo /path/to/main
 mq watch --repo /path/to/main
-mq logs --repo /path/to/main --follow
-mq events --repo /path/to/main --follow
+mq events --repo /path/to/main --follow --json --lifecycle
 ```
 
 For agent wrappers that only need to know whether their branch landed cleanly, prefer:

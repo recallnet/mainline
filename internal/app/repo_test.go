@@ -50,6 +50,9 @@ func TestRepoInitAndShow(t *testing.T) {
 	if !strings.Contains(output, "Protected branch: main") {
 		t.Fatalf("expected protected branch in output, got %q", output)
 	}
+	if !strings.Contains(initOut.String(), "Initialize mainline repo policy") {
+		t.Fatalf("expected init output to include recommended commit, got %q", initOut.String())
+	}
 }
 
 func TestRepoInitSupportsJSONOutput(t *testing.T) {
@@ -73,6 +76,13 @@ func TestRepoInitSupportsJSONOutput(t *testing.T) {
 	}
 	if result["main_worktree"] != worktreePath {
 		t.Fatalf("expected main worktree %q, got %#v", worktreePath, result["main_worktree"])
+	}
+	if result["recommended_commit_message"] != "Initialize mainline repo policy" {
+		t.Fatalf("expected recommended commit message, got %#v", result["recommended_commit_message"])
+	}
+	nextSteps, ok := result["next_steps"].([]any)
+	if !ok || len(nextSteps) == 0 {
+		t.Fatalf("expected next steps in json output, got %#v", result["next_steps"])
 	}
 }
 

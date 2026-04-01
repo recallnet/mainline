@@ -102,29 +102,47 @@ func cliHelpText(programName string) string {
 	return fmt.Sprintf(`%s coordinates local protected-branch integrations and publishes.
 
 Usage:
-  %s [--json] [command]
+  %s [--json] <command> [flags]
+
+Turbo paths:
+  Agent in a topic worktree:
+    %s submit --check-only --json
+    %s submit --wait --timeout 15m --json
+
+  Controller or factory daemon:
+    %s land --json --timeout 30m
+    %s events --follow --json --lifecycle --repo /path/to/protected-main
+
+  Operator:
+    %s status --repo /path/to/protected-main --json
+    %s doctor --fix --repo /path/to/protected-main --json
+
+Initialize once per repo:
+  %s repo init --repo /path/to/protected-main --main-worktree /path/to/protected-main
+  git add mainline.toml && git commit -m "Initialize mainline repo policy"
+  ./scripts/install-hooks.sh
 
 Commands:
-  land
-  submit
-  status
-  confidence
-  run-once
-  retry
-  cancel
-  publish
-  logs
-  watch
-  events
-  doctor
-  completion
-  version
-  config edit
-  repo init
-  repo show
+  land          submit and wait for integrate plus publish
+  submit        queue a topic worktree or detached sha
+  status        show queue and protected-branch state
+  confidence    summarize evidence and promotion gates
+  run-once      run one integration or publish cycle
+  retry         requeue a blocked, failed, or cancelled item
+  cancel        cancel a queued, blocked, or failed item
+  publish       queue publish of the protected tip
+  logs          replay durable event history
+  watch         refresh status continuously
+  events        stream durable events or lifecycle envelopes
+  doctor        inspect and optionally repair stuck states
+  completion    emit shell completion
+  version       show build metadata
+  config edit   open mainline.toml in an editor
+  repo init     initialize repo config and durable state
+  repo show     inspect repo config and worktrees
 
-Implemented today: repo init/show, doctor, land, submit, status, confidence, run-once, retry, cancel, publish, logs, watch, events, completion, version, config edit.
-`, programName, programName)
+Use "%s <command> --help" for command-specific examples.
+`, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName)
 }
 
 func isKnownCLICommand(command string) bool {
@@ -158,4 +176,11 @@ func appendJSONFlag(args []string) []string {
 		}
 	}
 	return append([]string{"--json"}, args...)
+}
+
+func setFlagUsage(fs *flag.FlagSet, text string) {
+	fs.Usage = func() {
+		fmt.Fprint(fs.Output(), text)
+		fs.PrintDefaults()
+	}
 }

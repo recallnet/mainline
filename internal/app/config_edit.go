@@ -17,6 +17,17 @@ import (
 func runConfigEdit(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline config edit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	setFlagUsage(fs, `Usage:
+  mainline config edit [flags]
+
+Open the shared repo config, even when invoked from a linked worktree.
+
+Examples:
+  mq config edit --repo /path/to/protected-main
+  mq config edit --print-path
+
+Flags:
+`)
 
 	var repoPath string
 	var editor string

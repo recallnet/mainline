@@ -15,6 +15,13 @@ The goal is simple:
 - all commits happen in the feature worktree
 - landing happens through `mq`, not manual merge into `main`
 
+Default commands to optimize for:
+
+- `mq submit --check-only --json`
+- `mq submit --wait --timeout 15m --json`
+- `mq land --json --timeout 30m`
+- `mq events --follow --json --lifecycle`
+
 Do not use this skill to bypass `mq`. It exists to dogfood the workflow that
 `mainline` is building for other repos.
 
@@ -32,7 +39,10 @@ positive to work around. Move to a feature worktree and continue there.
    normal flow.
 5. Make all code changes, tests, and commits from the feature worktree tied to
    the branch being submitted.
-6. Use explicit branch and worktree paths when that removes ambiguity.
+6. Prefer `mq submit` from the current worktree instead of manually spelling
+   `--repo` when the current shell is already in the topic worktree.
+7. Use explicit protected-worktree paths when invoking operator commands like
+   `mq run-once`, `mq publish`, `mq land`, `mq watch`, or `mainlined`.
 
 ## Standard flow
 
@@ -99,10 +109,29 @@ branch unless there is an explicit reason to rewrite history.
 
 ### 5. Submit through `mq`
 
-When the branch is ready to land, submit it from the feature worktree:
+Most agents should finish from the feature worktree with:
+
+```bash
+mq submit --check-only --json
+mq submit --wait --timeout 15m --json
+```
+
+That gives the agent:
+
+- a deterministic dry-run before expensive follow-up work
+- a blocking integrated-or-blocked answer without inventing a poll loop
+- stable JSON for wrappers and daemon orchestration
+
+If the branch is ready to hand off asynchronously instead:
 
 ```bash
 mq submit
+```
+
+If a controller owns the full integrate-plus-publish path:
+
+```bash
+mq land --json --timeout 30m
 ```
 
 If needed, be explicit:
@@ -126,19 +155,20 @@ Submission expectations:
 Use `mq` instead of manual merge:
 
 ```bash
-mq run-once --repo ~/Projects/recallnet/mainline
+mq run-once --repo ~/Projects/_wt/recallnet/mainline/protected-main
 ```
 
 When publish behavior is part of the dogfood target:
 
 ```bash
-mq publish --repo ~/Projects/recallnet/mainline
+mq publish --repo ~/Projects/_wt/recallnet/mainline/protected-main
 ```
 
 Recommended verification loop:
 
 ```bash
-mq status --repo ~/Projects/recallnet/mainline --json
+mq status --repo ~/Projects/_wt/recallnet/mainline/protected-main --json
+mq events --repo ~/Projects/_wt/recallnet/mainline/protected-main --follow --json --lifecycle
 ```
 
 Expected:

@@ -36,6 +36,20 @@ type landResult struct {
 func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline land", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	setFlagUsage(fs, `Usage:
+  mainline land [flags]
+
+Submit a topic worktree and wait until it is integrated and published.
+
+Best for controller agents and factory daemons that want one command in and one
+final outcome out.
+
+Examples:
+  mq land --json --timeout 30m
+  mq land --repo /path/to/topic-worktree --json
+
+Flags:
+`)
 
 	var repoPath string
 	var branch string

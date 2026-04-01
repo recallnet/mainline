@@ -63,8 +63,11 @@ You do your normal work in a feature worktree. You commit there. Then you hand t
 
 ```bash
 mq repo init --repo .
+git add mainline.toml && git commit -m "Initialize mainline repo policy"
+./scripts/install-hooks.sh
 cd /path/to/topic-worktree
-mq land
+mq submit --check-only --json
+mq submit --wait --timeout 15m --json
 mq watch --repo /path/to/main
 ```
 
@@ -162,7 +165,6 @@ mq submit --check-only --json
 mq submit --json
 mq submit --wait --timeout 10m
 mq land --json --timeout 30m
-mq submit
 mq run-once --repo /path/to/main
 mq publish --repo /path/to/main
 ```
@@ -174,7 +176,22 @@ For factory or daemon callers, the intended handoff is:
 - `[integration].MaxQueueDepth` to stop dead queues from silently accumulating unbounded queued branches
 - `mq submit --json` to record the branch and get a stable `submission_id`
 - `mq submit --wait --timeout 10m` when an agent needs a blocking landed-or-blocked answer without implementing its own poll loop
+- `mq events --follow --json --lifecycle` to subscribe once instead of polling
 - `mainlined` or `mq land` to carry the branch the rest of the way to integrated and published state
+
+The best default for coding agents in this repo is:
+
+```bash
+cd /path/to/topic-worktree
+mq submit --check-only --json
+mq submit --wait --timeout 15m --json
+```
+
+The best default for controller agents and factory daemons is:
+
+```bash
+mq land --json --timeout 30m
+```
 
 If `origin/main` advances before your branch reaches the front of the queue, that is normal queue work, not a manual repair job. `mainline` syncs protected `main` from upstream before integration when policy allows it, records that as a durable event, and only blocks if the branch now has a real rebase conflict.
 

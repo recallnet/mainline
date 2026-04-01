@@ -79,6 +79,18 @@ type certificationRepoEvidence struct {
 func runConfidence(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline confidence", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	setFlagUsage(fs, `Usage:
+  mainline confidence [flags]
+
+Summarize live repo health, evidence files, and promotion gates for the current
+build.
+
+Examples:
+  mq confidence --repo /path/to/protected-main --json
+  mq confidence --soak-summary artifacts/soak/latest/summary.json --json
+
+Flags:
+`)
 
 	var repoPath string
 	var asJSON bool

@@ -57,6 +57,18 @@ func runLogs(args []string, stdout io.Writer, stderr io.Writer) error {
 func runEventCommand(commandName string, args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet(commandName, flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s [flags]
+
+Replay or follow durable queue events. Add --lifecycle for stable branch-level
+records that long-lived agents and daemons can consume directly.
+
+Examples:
+  mq events --repo /path/to/protected-main --follow --json --lifecycle
+  mq logs --repo /path/to/protected-main --limit 50
+
+Flags:
+`, commandName))
 
 	opts := eventOptions{
 		repoPath:     ".",

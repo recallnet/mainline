@@ -49,6 +49,16 @@ mainline version
 mainlined --version
 ```
 
+Recommended first-time repo setup after install:
+
+```bash
+cd /path/to/protected-main
+mq repo init --repo . --main-worktree .
+git add mainline.toml
+git commit -m "Initialize mainline repo policy"
+./scripts/install-hooks.sh
+```
+
 State compatibility:
 
 - the SQLite queue store is schema-versioned

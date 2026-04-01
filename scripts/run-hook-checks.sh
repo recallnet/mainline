@@ -175,7 +175,9 @@ check_remote_main_not_ahead() {
   behind="$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
   if [[ "${behind}" != "0" ]]; then
     echo "❌ pre-push blocked: origin/main is ${behind} commit(s) ahead" >&2
-    echo "   Fix: git fetch origin main && git rebase origin/main" >&2
+    echo "   Fix: do not repair protected main by hand." >&2
+    echo "   Topic worktree: rebase there, then use mq submit --wait --timeout 15m --json." >&2
+    echo "   Protected worktree/controller: use mq land or mainlined so mainline performs the sync safely." >&2
     exit 1
   fi
 }
@@ -200,7 +202,7 @@ check_push_target_policy() {
 
   if [[ "${pushes_main}" == "1" ]] && [[ "$(current_branch)" != "main" ]]; then
     echo "❌ pre-push blocked: pushes to origin/main must come from local branch main" >&2
-    echo "   Use mq to land work onto protected main before pushing." >&2
+    echo "   Use mq submit --wait --timeout 15m --json or mq land instead of pushing a topic branch into main." >&2
     exit 1
   fi
 }

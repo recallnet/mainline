@@ -24,6 +24,17 @@ type publishResult struct {
 func runPublish(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline publish", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	setFlagUsage(fs, `Usage:
+  mainline publish [flags]
+
+Queue publish of the current protected-branch tip.
+
+Examples:
+  mq publish --repo /path/to/protected-main
+  mq publish --repo /path/to/protected-main --json
+
+Flags:
+`)
 
 	var repoPath string
 	var asJSON bool

@@ -25,6 +25,17 @@ type watchFrame struct {
 func runWatch(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline watch", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	setFlagUsage(fs, `Usage:
+  mainline watch [flags]
+
+Continuously refresh protected-branch and queue state.
+
+Examples:
+  mq watch --repo /path/to/protected-main
+  mq watch --repo /path/to/protected-main --json --interval 1s
+
+Flags:
+`)
 
 	opts := watchOptions{
 		repoPath:   ".",

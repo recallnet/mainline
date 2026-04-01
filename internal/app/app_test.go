@@ -29,6 +29,9 @@ func TestCLIHelp(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Usage:") {
 		t.Fatalf("expected help output, got %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "submit --check-only --json") {
+		t.Fatalf("expected turbo submit guidance in help, got %q", stdout.String())
+	}
 }
 
 func TestMQHelpUsesMQIdentity(t *testing.T) {
@@ -41,6 +44,9 @@ func TestMQHelpUsesMQIdentity(t *testing.T) {
 
 	if !strings.Contains(stdout.String(), "mq coordinates local protected-branch integrations and publishes.") {
 		t.Fatalf("expected mq help identity, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "mq land --json --timeout 30m") {
+		t.Fatalf("expected mq help to include controller path, got %q", stdout.String())
 	}
 }
 
@@ -927,11 +933,24 @@ func TestLogsHelpUsesLogsCommandName(t *testing.T) {
 		t.Fatalf("expected help error for logs command")
 	}
 	output := stderr.String()
-	if !strings.Contains(output, "Usage of mainline logs:") {
+	if !strings.Contains(output, "mainline logs [flags]") {
 		t.Fatalf("expected logs help usage, got %q", output)
 	}
-	if strings.Contains(output, "Usage of mainline events:") {
+	if strings.Contains(output, "mainline events [flags]") {
 		t.Fatalf("expected logs help to avoid events alias wording, got %q", output)
+	}
+}
+
+func TestSubmitHelpMentionsAgentTurboPath(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := runCLI([]string{"submit", "--help"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatalf("expected help error for submit command")
+	}
+	output := stderr.String()
+	if !strings.Contains(output, "mq submit --wait --timeout 15m --json") {
+		t.Fatalf("expected submit help to mention wait json path, got %q", output)
 	}
 }
 

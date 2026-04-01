@@ -20,6 +20,17 @@ import (
 func runRunOnce(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline run-once", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	setFlagUsage(fs, `Usage:
+  mainline run-once [flags]
+
+Run one serialized integration or publish cycle from the protected worktree.
+
+Examples:
+  mq run-once --repo /path/to/protected-main
+  mq run-once --repo /path/to/protected-main --json
+
+Flags:
+`)
 
 	var repoPath string
 	var asJSON bool

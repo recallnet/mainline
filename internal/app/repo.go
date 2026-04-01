@@ -80,6 +80,20 @@ func runPlaceholderCommand(command string, args []string, stdout io.Writer) erro
 func runRepoInit(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline repo init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	setFlagUsage(fs, `Usage:
+  mainline repo init [flags]
+
+Initialize durable mq state for the current repo and scaffold mainline.toml.
+
+Recommended first commit:
+  git add mainline.toml
+  git commit -m "Initialize mainline repo policy"
+
+Then install hooks:
+  ./scripts/install-hooks.sh
+
+Flags:
+`)
 
 	var repoPath string
 	var protectedBranch string
@@ -165,12 +179,20 @@ func runRepoInit(args []string, stdout io.Writer, stderr io.Writer) error {
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(map[string]any{
-			"ok":               true,
-			"config_path":      policy.ConfigPath(repoRoot),
-			"protected_branch": cfg.Repo.ProtectedBranch,
-			"main_worktree":    cfg.Repo.MainWorktree,
-			"state_path":       state.DefaultPath(layout.GitDir),
-			"repository_root":  repoRoot,
+			"ok":                         true,
+			"config_path":                policy.ConfigPath(repoRoot),
+			"protected_branch":           cfg.Repo.ProtectedBranch,
+			"main_worktree":              cfg.Repo.MainWorktree,
+			"state_path":                 state.DefaultPath(layout.GitDir),
+			"repository_root":            repoRoot,
+			"recommended_commit_message": "Initialize mainline repo policy",
+			"next_steps": []string{
+				"git add mainline.toml",
+				"git commit -m \"Initialize mainline repo policy\"",
+				"./scripts/install-hooks.sh",
+				"mq submit --check-only --json",
+				"mq submit --wait --timeout 15m --json",
+			},
 		})
 	}
 
@@ -178,12 +200,29 @@ func runRepoInit(args []string, stdout io.Writer, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "Protected branch: %s\n", cfg.Repo.ProtectedBranch)
 	fmt.Fprintf(stdout, "Main worktree: %s\n", cfg.Repo.MainWorktree)
 	fmt.Fprintf(stdout, "State path: %s\n", state.DefaultPath(layout.GitDir))
+	fmt.Fprintln(stdout, "Next:")
+	fmt.Fprintln(stdout, "  git add mainline.toml")
+	fmt.Fprintln(stdout, "  git commit -m \"Initialize mainline repo policy\"")
+	fmt.Fprintln(stdout, "  ./scripts/install-hooks.sh")
+	fmt.Fprintln(stdout, "  mq submit --check-only --json")
+	fmt.Fprintln(stdout, "  mq submit --wait --timeout 15m --json")
 	return nil
 }
 
 func runRepoShow(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline repo show", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	setFlagUsage(fs, `Usage:
+  mainline repo show [flags]
+
+Show the stored repo config, protected-branch status, and discovered worktrees.
+
+Examples:
+  mq repo show --repo /path/to/protected-main
+  mq repo show --json
+
+Flags:
+`)
 
 	var repoPath string
 	var asJSON bool
@@ -277,6 +316,17 @@ func runRepoShow(args []string, stdout io.Writer, stderr io.Writer) error {
 func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mainline doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	setFlagUsage(fs, `Usage:
+  mainline doctor [flags]
+
+Inspect repo health and optionally apply safe automatic recovery steps.
+
+Examples:
+  mq doctor --repo /path/to/protected-main
+  mq doctor --repo /path/to/protected-main --fix --json
+
+Flags:
+`)
 
 	var repoPath string
 	var asJSON bool

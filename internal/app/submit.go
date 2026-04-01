@@ -94,6 +94,22 @@ func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	fs := flag.NewFlagSet("mainline submit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	setFlagUsage(fs, `Usage:
+  mainline submit [flags]
+
+Queue a topic worktree or detached sha for serialized integration.
+
+Turbo agent flow:
+  mq submit --check-only --json
+  mq submit --wait --timeout 15m --json
+
+Examples:
+  mq submit
+  mq submit --wait --timeout 15m --json
+  mq submit --sha <commit> --json
+
+Flags:
+`)
 
 	var repoPath string
 	var branch string
