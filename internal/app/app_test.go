@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -746,6 +747,69 @@ func TestEventsLifecycleReplayKeepsBranchOnPublishWindow(t *testing.T) {
 	}
 	if !foundPublished {
 		t.Fatalf("expected published lifecycle event in %q", stdout.String())
+	}
+}
+
+func TestEventsLifecycleFailedDetachedSubmissionKeepsSourceRef(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	detachedPath := filepath.Join(t.TempDir(), "feature-detached-failure")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "--detach", detachedPath)
+	writeFileAndCommit(t, detachedPath, "detached-failure.txt", "detached failure\n", "feature detached failure")
+	runTestCommand(t, detachedPath, "git", "checkout", "--detach", "HEAD")
+	detachedSHA := trimNewline(runTestCommand(t, detachedPath, "git", "rev-parse", "HEAD"))
+
+	var submitStdout bytes.Buffer
+	var submitStderr bytes.Buffer
+	if err := runCLI([]string{"submit", "--repo", detachedPath, "--json"}, &submitStdout, &submitStderr); err != nil {
+		t.Fatalf("submit runCLI returned error: %v", err)
+	}
+
+	restoreFaults := setAppTestFaultHooks(testFaultHooks{
+		before: func(point string) error {
+			if point == "integration.rebase" {
+				return errors.New("synthetic rebase failure")
+			}
+			return nil
+		},
+	})
+	defer restoreFaults()
+
+	var runStdout bytes.Buffer
+	var runStderr bytes.Buffer
+	if err := runCLI([]string{"run-once", "--repo", repoRoot}, &runStdout, &runStderr); err != nil {
+		t.Fatalf("run-once runCLI returned error: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "20"}, &stdout, &stderr); err != nil {
+		t.Fatalf("events runCLI returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	foundFailed := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var event lifecycleEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("Unmarshal lifecycle event: %v", err)
+		}
+		if event.Event == "failed" {
+			foundFailed = true
+			if event.Branch != detachedSHA {
+				t.Fatalf("expected failed detached lifecycle branch %q, got %+v", detachedSHA, event)
+			}
+			if event.Error != "synthetic rebase failure" {
+				t.Fatalf("expected failure reason in lifecycle event, got %+v", event)
+			}
+		}
+	}
+	if !foundFailed {
+		t.Fatalf("expected failed lifecycle event in %q", stdout.String())
 	}
 }
 
