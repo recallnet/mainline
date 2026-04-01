@@ -23,6 +23,7 @@ func TestBranchStatusReportsExactAheadBehindCounts(t *testing.T) {
 	runGitCommand(t, repoRoot, "git", "commit", "-m", "initial")
 	runGitCommand(t, repoRoot, "git", "remote", "add", "origin", remoteDir)
 	runGitCommand(t, repoRoot, "git", "push", "-u", "origin", "main")
+	runGitCommand(t, remoteDir, "git", "symbolic-ref", "HEAD", "refs/heads/main")
 
 	peerClone := filepath.Join(t.TempDir(), "peer")
 	runGitCommand(t, t.TempDir(), "git", "clone", remoteDir, peerClone)
