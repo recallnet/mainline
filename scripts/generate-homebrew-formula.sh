@@ -38,7 +38,7 @@ fi
 
 sha_for() {
   local name="$1"
-  awk -v target="./${name}" '$2 == target { print $1 }' "${checksums}"
+  awk -v bare="${name}" -v dotted="./${name}" '$2 == bare || $2 == dotted { print $1; exit }' "${checksums}"
 }
 
 darwin_amd64_archive="mainline_${version}_darwin_amd64.tar.gz"

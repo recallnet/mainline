@@ -27,6 +27,13 @@ test -f "${output_dir}/SHA256SUMS"
 tar -tzf "${output_dir}/mainline_v0.0.0-test_linux_amd64.tar.gz" | grep -q 'mainline_v0.0.0-test_linux_amd64/mainline$'
 unzip -Z1 "${output_dir}/mainline_v0.0.0-test_windows_amd64.zip" | grep -q '^mainline_v0.0.0-test_windows_amd64/mainline.exe$'
 
+bare_checksums="${output_dir}/SHA256SUMS.bare"
+sed 's# \./# #g' "${output_dir}/SHA256SUMS" > "${bare_checksums}"
+"${repo_root}/scripts/generate-homebrew-formula.sh" --version v0.0.0-test --checksums "${bare_checksums}" --output "${output_dir}/mainline.rb"
+"${repo_root}/scripts/generate-release-manifest.sh" --version v0.0.0-test --checksums "${bare_checksums}" --output "${output_dir}/release-manifest.json"
+ruby -c "${output_dir}/mainline.rb" >/dev/null
+grep -q '"name": "mainline_v0.0.0-test_darwin_amd64.tar.gz"' "${output_dir}/release-manifest.json"
+
 host_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 host_arch="$(uname -m)"
 case "${host_arch}" in

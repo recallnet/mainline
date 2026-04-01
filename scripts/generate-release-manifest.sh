@@ -58,6 +58,11 @@ json_escape() {
   python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
 }
 
+sha_for() {
+  local name="$1"
+  awk -v bare="${name}" -v dotted="./${name}" '$2 == bare || $2 == dotted { print $1; exit }' "${checksums}"
+}
+
 {
   printf '{\n'
   printf '  "version": %s,\n' "$(json_escape "${version}")"
@@ -80,7 +85,7 @@ json_escape() {
     if [[ "${goos}" = "windows" ]]; then
       name="mainline_${version}_${goos}_${goarch}.zip"
     fi
-    sha="$(awk -v target="./${name}" '$2 == target { print $1 }' "${checksums}")"
+    sha="$(sha_for "${name}")"
     if [[ -z "${sha}" ]]; then
       echo "missing checksum for ${name}" >&2
       exit 1
