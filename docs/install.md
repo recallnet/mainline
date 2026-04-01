@@ -170,6 +170,9 @@ cd /path/to/repo-root
 mq repo init --repo .
 ```
 
+`mq repo init` writes `mainline.toml`. Make any repo-specific policy edits after
+that step, then commit the resulting file.
+
 Run it directly:
 
 ```bash
