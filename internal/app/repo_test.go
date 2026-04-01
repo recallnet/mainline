@@ -517,9 +517,16 @@ func TestStatusJSONWorksWhenCanonicalRootIsDirty(t *testing.T) {
 		t.Fatalf("WriteFile dirty-root.txt: %v", err)
 	}
 
-	result, err := collectStatus(repoRoot, 3)
+	var statusOut bytes.Buffer
+	var statusErr bytes.Buffer
+	if err := runStatus([]string{"--repo", repoRoot, "--json", "--events", "3"}, &statusOut, &statusErr); err != nil {
+		t.Fatalf("runStatus returned error: %v", err)
+	}
+
+	var result statusResult
+	err := json.Unmarshal(statusOut.Bytes(), &result)
 	if err != nil {
-		t.Fatalf("collectStatus returned error: %v", err)
+		t.Fatalf("Unmarshal: %v", err)
 	}
 	if result.RepositoryRoot == "" || result.ProtectedBranch != "main" {
 		t.Fatalf("unexpected status result: %+v", result)
