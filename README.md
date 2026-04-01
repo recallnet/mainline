@@ -198,7 +198,7 @@ Recommended first-time repo setup after install:
 
 ```bash
 cd /path/to/repo-root
-mq repo init --repo . --main-worktree .
+mq repo init --repo .
 git add mainline.toml
 git commit -m "Initialize mainline repo policy"
 ./scripts/install-hooks.sh
@@ -222,7 +222,7 @@ checkout is already clean and on the protected branch.
 Setup:
 
 ```bash
-mq repo init --repo /path/to/repo-root --main-worktree /path/to/repo-root
+mq repo init --repo /path/to/repo-root
 mq repo root --repo /path/to/repo-root --json
 mq repo audit --repo /path/to/repo-root --json
 mq config edit --repo /path/to/repo-root

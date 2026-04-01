@@ -421,6 +421,28 @@ func TestRepoInitFromLinkedWorktreeWritesSharedConfig(t *testing.T) {
 	}
 }
 
+func TestRepoInitCanonicalizesRelativeMainWorktreeToRepoRoot(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", "."}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	wantRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(repoRoot): %v", err)
+	}
+	if cfg.Repo.MainWorktree != wantRepoRoot {
+		t.Fatalf("expected relative main worktree to canonicalize to %q, got %q", wantRepoRoot, cfg.Repo.MainWorktree)
+	}
+}
+
 func TestRepoShowWarnsWhenRootCheckoutIsDirtyAndNonCanonical(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	featurePath := filepath.Join(t.TempDir(), "feature-root-warning")

@@ -177,6 +177,8 @@ Flags:
 	}
 	if mainWorktree == "" {
 		mainWorktree = defaultMainWorktree(layout)
+	} else if !filepath.IsAbs(mainWorktree) {
+		mainWorktree = filepath.Join(repoRoot, mainWorktree)
 	}
 
 	cfg.Repo.ProtectedBranch = protectedBranch

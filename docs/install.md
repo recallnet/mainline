@@ -56,7 +56,7 @@ Recommended first-time repo setup after install:
 
 ```bash
 cd /path/to/repo-root
-mq repo init --repo . --main-worktree .
+mq repo init --repo .
 git add mainline.toml
 git commit -m "Initialize mainline repo policy"
 ./scripts/install-hooks.sh
@@ -167,7 +167,7 @@ Register each repo once:
 
 ```bash
 cd /path/to/repo-root
-mq repo init --repo . --main-worktree .
+mq repo init --repo .
 ```
 
 Run it directly:
