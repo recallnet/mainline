@@ -8,6 +8,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +19,15 @@ import (
 	"github.com/recallnet/mainline/internal/state"
 	_ "modernc.org/sqlite"
 )
+
+func sortedJSONKeys(payload map[string]any) []string {
+	keys := make([]string, 0, len(payload))
+	for key := range payload {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 func TestCLIHelp(t *testing.T) {
 	var stdout bytes.Buffer
@@ -179,21 +190,19 @@ func TestStatusJSONContractContainsStableTopLevelFields(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	required := []string{
-		"repository_root",
-		"state_path",
-		"current_worktree",
+	wantKeys := []string{
+		"counts",
 		"current_branch",
+		"current_worktree",
 		"protected_branch",
 		"protected_branch_sha",
 		"protected_upstream",
-		"counts",
 		"recent_events",
+		"repository_root",
+		"state_path",
 	}
-	for _, key := range required {
-		if _, ok := payload[key]; !ok {
-			t.Fatalf("expected status json key %q in %+v", key, payload)
-		}
+	if gotKeys := sortedJSONKeys(payload); !slices.Equal(gotKeys, wantKeys) {
+		t.Fatalf("expected exact status json keys %v, got %v", wantKeys, gotKeys)
 	}
 }
 
@@ -227,17 +236,11 @@ func TestEventsLifecycleJSONContractContainsStableFields(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &payload); err != nil {
 			t.Fatalf("Unmarshal line %q: %v", line, err)
 		}
-		for _, key := range []string{"event", "repository_root", "timestamp"} {
-			if _, ok := payload[key]; !ok {
-				t.Fatalf("expected lifecycle key %q in %+v", key, payload)
-			}
-		}
 		if payload["event"] == "integrated" {
 			foundIntegrated = true
-			for _, key := range []string{"branch", "sha", "submission_id"} {
-				if _, ok := payload[key]; !ok {
-					t.Fatalf("expected integrated lifecycle key %q in %+v", key, payload)
-				}
+			wantKeys := []string{"branch", "event", "repository_root", "sha", "status", "submission_id", "timestamp"}
+			if gotKeys := sortedJSONKeys(payload); !slices.Equal(gotKeys, wantKeys) {
+				t.Fatalf("expected integrated lifecycle keys %v, got %v", wantKeys, gotKeys)
 			}
 		}
 	}
@@ -265,16 +268,20 @@ func TestDaemonJSONLogContractContainsStableFields(t *testing.T) {
 	if len(lines) < 2 {
 		t.Fatalf("expected daemon json log lines, got %q", stdout.String())
 	}
-	for _, line := range lines {
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(line), &payload); err != nil {
-			t.Fatalf("Unmarshal line %q: %v", line, err)
-		}
-		for _, key := range []string{"level", "event", "repo", "timestamp"} {
-			if _, ok := payload[key]; !ok {
-				t.Fatalf("expected daemon log key %q in %+v", key, payload)
-			}
-		}
+	var first map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
+		t.Fatalf("Unmarshal first line %q: %v", lines[0], err)
+	}
+	if gotKeys := sortedJSONKeys(first); !slices.Equal(gotKeys, []string{"event", "level", "message", "repo", "timestamp"}) {
+		t.Fatalf("unexpected daemon started json keys: %v", gotKeys)
+	}
+
+	var last map[string]any
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &last); err != nil {
+		t.Fatalf("Unmarshal last line %q: %v", lines[len(lines)-1], err)
+	}
+	if gotKeys := sortedJSONKeys(last); !slices.Equal(gotKeys, []string{"cycle", "event", "level", "message", "repo", "timestamp"}) {
+		t.Fatalf("unexpected daemon terminal json keys: %v", gotKeys)
 	}
 }
 
