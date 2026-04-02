@@ -1253,6 +1253,72 @@ func TestSubmitWaitTextWarnsWhenPublishModeIsManual(t *testing.T) {
 	}
 }
 
+func TestSubmitTextShowsRoundedEstimatedCompletion(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+
+	startedAt := time.Now().UTC().Add(-9 * time.Minute)
+	seedSubmission, err := store.CreateIntegrationSubmission(context.Background(), state.IntegrationSubmission{
+		RepoID:         repoRecord.ID,
+		BranchName:     "feature/estimate-first",
+		SourceRef:      "feature/estimate-first",
+		RefKind:        submissionRefKindBranch,
+		SourceWorktree: repoRoot,
+		SourceSHA:      "seed",
+		Status:         "succeeded",
+	})
+	if err != nil {
+		t.Fatalf("CreateIntegrationSubmission(seed): %v", err)
+	}
+	db, err := sql.Open("sqlite", state.DefaultPath(layout.GitDir))
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`
+		INSERT INTO events (repo_id, item_type, item_id, event_type, payload, created_at)
+		VALUES (?, 'integration_submission', ?, 'integration.started', ?, ?)
+	`, repoRecord.ID, seedSubmission.ID, []byte(`{"branch":"feature/estimate-first","protected_sha":"seed"}`), startedAt); err != nil {
+		t.Fatalf("insert integration.started: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO events (repo_id, item_type, item_id, event_type, payload, created_at)
+		VALUES (?, 'integration_submission', ?, 'integration.succeeded', ?, ?)
+	`, repoRecord.ID, seedSubmission.ID, []byte(`{"branch":"feature/estimate-first","protected_sha":"seed","landed_sha":"seed"}`), time.Now().UTC()); err != nil {
+		t.Fatalf("insert integration.succeeded: %v", err)
+	}
+
+	secondPath := filepath.Join(t.TempDir(), "feature-estimate-second")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/estimate-second", secondPath)
+	writeFileAndCommit(t, secondPath, "second.txt", "second\n", "feature estimate second")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", secondPath}, &submitOut, &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	text := submitOut.String()
+	if !strings.Contains(text, "Queue position: 1") {
+		t.Fatalf("expected queue position in text output, got %q", text)
+	}
+	if !strings.Contains(text, "Estimated completion: ~10m (integrated)") {
+		t.Fatalf("expected rounded estimated completion in text output, got %q", text)
+	}
+}
+
 func TestSubmitWaitReturnsBlockedExitCodeForConflict(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

@@ -374,6 +374,12 @@ Flags:
 	fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(queued.Submission))
 	fmt.Fprintf(stdout, "Worktree: %s\n", queued.Submission.SourceWorktree)
 	fmt.Fprintf(stdout, "Source SHA: %s\n", queued.Submission.SourceSHA)
+	if result.QueuePosition > 0 {
+		fmt.Fprintf(stdout, "Queue position: %d\n", result.QueuePosition)
+	}
+	if eta := humanEstimatedCompletion(result.EstimatedCompletionMS); eta != "" {
+		fmt.Fprintf(stdout, "Estimated completion: %s (%s)\n", eta, result.EstimateBasis)
+	}
 	if result.DrainResult != "" {
 		fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
 	}
@@ -845,6 +851,18 @@ func writeSubmitJSON(stdout io.Writer, result submitResult, cmdErr error) error 
 		return err
 	}
 	return cmdErr
+}
+
+func humanEstimatedCompletion(ms int64) string {
+	if ms <= 0 {
+		return ""
+	}
+	duration := time.Duration(ms) * time.Millisecond
+	minutes := int((duration + time.Minute - 1) / time.Minute)
+	if minutes < 1 {
+		minutes = 1
+	}
+	return fmt.Sprintf("~%dm", minutes)
 }
 
 func submitErrorCode(err error) string {
