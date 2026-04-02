@@ -135,6 +135,46 @@ func TestRepoRootReportsTrustworthyCanonicalCheckout(t *testing.T) {
 	}
 }
 
+func TestRepoRootIgnoresAstrochickenAuthoringSurfaceForTrust(t *testing.T) {
+	repoRoot, worktreePath := createTestRepo(t)
+	canonicalRoot := canonicalRegistryPath(repoRoot)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "init mainline")
+
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".astrochicken", "policies"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.astrochicken): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, ".astrochicken", "README.md"), []byte("local authoring\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(.astrochicken/README.md): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, ".astrochicken", "policies", "ingress-policy.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(.astrochicken/policies/ingress-policy.json): %v", err)
+	}
+
+	var rootOut bytes.Buffer
+	var rootErr bytes.Buffer
+	if err := runRepoRoot([]string{"--repo", repoRoot, "--json"}, &rootOut, &rootErr); err != nil {
+		t.Fatalf("runRepoRoot returned error: %v", err)
+	}
+
+	var result repoRootResult
+	if err := json.Unmarshal(rootOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.Trustworthy {
+		t.Fatalf("expected trustworthy root result with .astrochicken authoring surface, got %+v", result)
+	}
+	if result.RootCheckout.Path != canonicalRoot || !result.RootCheckout.Clean {
+		t.Fatalf("expected canonical clean root checkout, got %+v", result.RootCheckout)
+	}
+}
+
 func TestRepoRootAdoptsCleanRootAsCanonicalMainWorktree(t *testing.T) {
 	repoRoot, worktreePath := createTestRepo(t)
 	canonicalWorktree := canonicalRegistryPath(worktreePath)

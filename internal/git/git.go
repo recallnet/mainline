@@ -289,16 +289,30 @@ func (e Engine) StatusPorcelain(path string) (string, error) {
 
 // WorktreeIsClean reports whether a worktree has no staged or unstaged changes.
 func (e Engine) WorktreeIsClean(path string) (bool, error) {
-	status, err := e.StatusPorcelain(path)
+	status, err := e.filteredStatus(path)
 	if err != nil {
 		return false, err
 	}
 
-	return status == "", nil
+	return len(status) == 0, nil
 }
 
 // WorktreeDirtyPaths returns tracked and untracked paths that make a worktree dirty.
 func (e Engine) WorktreeDirtyPaths(path string) ([]string, error) {
+	status, err := e.filteredStatus(path)
+	if err != nil {
+		return nil, err
+	}
+
+	paths := make([]string, 0, len(status))
+	for filePath := range status {
+		paths = append(paths, filePath)
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func (e Engine) filteredStatus(path string) (gogit.Status, error) {
 	repo, err := openRepository(path)
 	if err != nil {
 		return nil, err
@@ -314,15 +328,28 @@ func (e Engine) WorktreeDirtyPaths(path string) ([]string, error) {
 		return nil, err
 	}
 
-	paths := make([]string, 0, len(status))
+	filtered := make(gogit.Status, len(status))
 	for filePath, fileStatus := range status {
 		if fileStatus.Staging == 0 && fileStatus.Worktree == 0 {
 			continue
 		}
-		paths = append(paths, filePath)
+		if isIgnorableUntrackedPath(filePath, fileStatus) {
+			continue
+		}
+		filtered[filePath] = fileStatus
 	}
-	sort.Strings(paths)
-	return paths, nil
+	return filtered, nil
+}
+
+func isIgnorableUntrackedPath(filePath string, fileStatus *gogit.FileStatus) bool {
+	if fileStatus == nil {
+		return false
+	}
+	if fileStatus.Staging != gogit.Untracked && fileStatus.Worktree != gogit.Untracked {
+		return false
+	}
+	cleanPath := filepath.Clean(filePath)
+	return cleanPath == ".astrochicken" || strings.HasPrefix(cleanPath, ".astrochicken"+string(filepath.Separator))
 }
 
 // CurrentBranchAtPath returns the checked-out branch for a specific worktree path.

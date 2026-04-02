@@ -274,6 +274,9 @@ the protected root checkout.
 Use `mq repo root --repo . --json` to verify that the root checkout is still
 trustworthy. Use `mq repo root --repo . --adopt-root` only when the root
 checkout is already clean and on the protected branch.
+Repo-local AstroChicken scaffolding under `.astrochicken/` is treated as
+tool-owned authoring surface, not protected-branch drift, so it does not by
+itself make the checkout untrustworthy.
 
 ## The Core Commands
 
