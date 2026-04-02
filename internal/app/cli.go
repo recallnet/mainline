@@ -103,7 +103,11 @@ func runCLIWithName(programName string, args []string, stdout io.Writer, stderr 
 		commandArgs = appendJSONFlag(commandArgs)
 	}
 
-	return handleCommand(command, commandArgs, stdout, stderr)
+	err := handleCommand(command, commandArgs, stdout, stderr)
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	return err
 }
 
 func printCLIHelp(w io.Writer, programName string) {

@@ -30,6 +30,7 @@ func runTestCommand(t *testing.T, dir string, name string, args ...string) strin
 
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null")
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -43,13 +44,20 @@ func runTestCommand(t *testing.T, dir string, name string, args ...string) strin
 	return stdout.String()
 }
 
+func configureTestGitRepo(t *testing.T, repoRoot string) {
+	t.Helper()
+	runTestCommand(t, repoRoot, "git", "config", "user.name", "Test User")
+	runTestCommand(t, repoRoot, "git", "config", "user.email", "test@example.com")
+	runTestCommand(t, repoRoot, "git", "config", "commit.gpgsign", "false")
+	runTestCommand(t, repoRoot, "git", "config", "tag.gpgsign", "false")
+}
+
 func createBareCloneWorktree(t *testing.T) (string, string) {
 	t.Helper()
 
 	seedRoot := t.TempDir()
 	runTestCommand(t, seedRoot, "git", "init", "-b", "main")
-	runTestCommand(t, seedRoot, "git", "config", "user.name", "Test User")
-	runTestCommand(t, seedRoot, "git", "config", "user.email", "test@example.com")
+	configureTestGitRepo(t, seedRoot)
 	runTestCommand(t, seedRoot, "git", "config", "core.hooksPath", ".git/hooks")
 
 	readme := filepath.Join(seedRoot, "README.md")
@@ -65,8 +73,7 @@ func createBareCloneWorktree(t *testing.T) (string, string) {
 
 	worktreePath := filepath.Join(t.TempDir(), "main-worktree")
 	runTestCommand(t, seedRoot, "git", "--git-dir", bareDir, "worktree", "add", worktreePath, "main")
-	runTestCommand(t, worktreePath, "git", "config", "user.name", "Test User")
-	runTestCommand(t, worktreePath, "git", "config", "user.email", "test@example.com")
+	configureTestGitRepo(t, worktreePath)
 
 	return bareDir, worktreePath
 }
@@ -79,8 +86,7 @@ func createTestRepoWithRemote(t *testing.T) (string, string) {
 
 	repoRoot := t.TempDir()
 	runTestCommand(t, repoRoot, "git", "init", "-b", "main")
-	runTestCommand(t, repoRoot, "git", "config", "user.name", "Test User")
-	runTestCommand(t, repoRoot, "git", "config", "user.email", "test@example.com")
+	configureTestGitRepo(t, repoRoot)
 	runTestCommand(t, repoRoot, "git", "config", "core.hooksPath", ".git/hooks")
 
 	readme := filepath.Join(repoRoot, "README.md")

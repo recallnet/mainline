@@ -1,5 +1,39 @@
 # Contributing
 
+## First-Time Orientation
+
+There are two different jobs people do in this repo. Keep them separate:
+
+- Developing `mainline` itself
+  - you are changing the `mainline` codebase in this checkout
+  - the local baseline is `make build`, `go test ./...`, and CLI help / repo-root inspection
+  - `mainline.toml` in this repo is committed policy, not proof that a fresh clone is already initialized as a managed queue target
+- Using `mainline` on some other repo
+  - you are in a target repo that `mq` should manage
+  - that repo needs its own `mq repo init`, committed `mainline.toml`, and repo-local state under `.git/mainline/`
+
+For a fresh clone of this source repo, start with:
+
+```bash
+make build
+go test ./...
+./bin/mq --help
+./bin/mq repo show --repo . --json
+./bin/mq repo root --repo . --json
+./bin/mq status --repo . --json
+```
+
+Interpretation:
+
+- build should succeed
+- tests should succeed even if your normal global Git config enforces commit signing; the test helpers neutralize global signing for temp repos
+- `mq repo root --repo . --json` tells you whether the current checkout is the canonical protected root checkout
+- `mq status --repo . --json` may fail in a fresh source clone until this repo is explicitly initialized as a managed target repo on that machine
+
+If you want the repo-local orientation flow encoded for an agent, use the
+onboarding skill at
+[.agents/skills/onboarding/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/onboarding/SKILL.md).
+
 ## Development Baseline
 
 - Go 1.25 or newer

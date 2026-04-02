@@ -1524,8 +1524,8 @@ func TestLogsHelpUsesLogsCommandName(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	err := runCLI([]string{"logs", "--help"}, &stdout, &stderr)
-	if err == nil {
-		t.Fatalf("expected help error for logs command")
+	if err != nil {
+		t.Fatalf("expected help success for logs command, got %v", err)
 	}
 	output := stderr.String()
 	if !strings.Contains(output, "mainline logs [flags]") {
@@ -1540,8 +1540,8 @@ func TestSubmitHelpMentionsAgentTurboPath(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	err := runCLIWithName("mq", []string{"submit", "--help"}, &stdout, &stderr)
-	if err == nil {
-		t.Fatalf("expected help error for submit command")
+	if err != nil {
+		t.Fatalf("expected help success for submit command, got %v", err)
 	}
 	output := stderr.String()
 	if !strings.Contains(output, "mq submit --wait --timeout 15m --json") {
@@ -1549,6 +1549,18 @@ func TestSubmitHelpMentionsAgentTurboPath(t *testing.T) {
 	}
 	if !strings.Contains(output, "Usage:\n  mq submit [flags]") {
 		t.Fatalf("expected submit help to use mq identity, got %q", output)
+	}
+}
+
+func TestRepoInitHelpExitsSuccessfully(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLIWithName("mq", []string{"repo", "init", "--help"}, &stdout, &stderr); err != nil {
+		t.Fatalf("expected help success for repo init, got %v", err)
+	}
+	output := stderr.String()
+	if !strings.Contains(output, "mq repo init [flags]") {
+		t.Fatalf("expected repo init help usage, got %q", output)
 	}
 }
 

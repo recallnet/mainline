@@ -215,6 +215,40 @@ go install github.com/recallnet/mainline/cmd/mq@latest
 Homebrew and Nix details are in
 [install.md](/Users/devrel/Projects/recallnet/mainline/docs/install.md).
 
+## Developing vs Using
+
+There are two valid ways to be here:
+
+- developing the `mainline` codebase itself
+- using `mainline` to manage some other repo
+
+Those are not the same thing.
+
+In this source checkout:
+
+- committed docs and policy files live here
+- `mq repo root --repo . --json` tells you whether this checkout is the
+  canonical protected root checkout
+- a fresh clone is not automatically an initialized managed repo just because
+  `mainline.toml` exists in Git
+- queue/state commands like `mq status --repo . --json` can still fail until
+  this checkout has been explicitly initialized on this machine
+
+If you are onboarding as a contributor to `mainline` itself, start with:
+
+```bash
+make build
+go test ./...
+./bin/mq --help
+./bin/mq repo show --repo . --json
+./bin/mq repo root --repo . --json
+```
+
+The contributor-specific flow is also summarized in
+[CONTRIBUTING.md](/Users/devrel/Projects/recallnet/mainline/CONTRIBUTING.md)
+and encoded for agents in
+[.agents/skills/onboarding/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/onboarding/SKILL.md).
+
 Recommended first-time repo setup after install:
 
 ```bash

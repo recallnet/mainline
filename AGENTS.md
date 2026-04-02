@@ -75,6 +75,8 @@ project is built to enforce.
 - Use `codecontext` before broad repo changes so you read the current local
   implementation and docs instead of relying on stale assumptions.
 - Prefer repo-aware discovery first, then change code and docs together.
+- For first-pass setup/orientation in this repo, use the onboarding skill at
+  [.agents/skills/onboarding/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/onboarding/SKILL.md).
 
 ## Docs Governance
 
