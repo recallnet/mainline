@@ -12,6 +12,11 @@ Do not use this as a substitute for first-time setup or repo orientation. If
 the user is new here, on a fresh clone, or asking what this checkout is and how
 to get started, use the `onboarding` skill first.
 
+If you hit DX friction, missing features, confusing docs, or real bugs while
+using `mq`, file them proactively in `recallnet/mainline` and then continue the
+task with the best safe workaround. Do not silently work around product gaps
+without capturing them.
+
 The goal is simple:
 
 - `main` stays clean

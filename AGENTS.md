@@ -83,6 +83,9 @@ project is built to enforce.
   request.
 - The worktree skill is for contributing safely after orientation. It does not
   replace onboarding, install, or baseline verification.
+- While using `mq`, file DX friction, feature requests, and bug reports
+  proactively to `recallnet/mainline`, then continue with the best safe
+  workaround instead of silently carrying the gap forward.
 
 ## Docs Governance
 
