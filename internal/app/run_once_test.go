@@ -96,6 +96,67 @@ func TestRunOnceRejectsDirtyCanonicalRootCheckout(t *testing.T) {
 	}
 }
 
+func TestRunOnceSupersedesOlderBlockedSubmissionForSameBranch(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Checks.PreIntegrate = []string{"sh -c '[ ! -f BLOCK_SUBMISSION ]'"}
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "configure blocked check")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-stale")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/stale", featurePath)
+	writeFileAndCommit(t, featurePath, "BLOCK_SUBMISSION", "block\n", "feature stale v1")
+	submitBranch(t, featurePath)
+
+	runOnce(t, repoRoot)
+
+	if err := os.Remove(filepath.Join(featurePath, "BLOCK_SUBMISSION")); err != nil {
+		t.Fatalf("Remove(BLOCK_SUBMISSION): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(featurePath, "stale.txt"), []byte("v2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(stale.txt): %v", err)
+	}
+	runTestCommand(t, featurePath, "git", "add", "-A")
+	runTestCommand(t, featurePath, "git", "commit", "-m", "feature stale v2")
+	submitBranch(t, featurePath)
+
+	runOnce(t, repoRoot)
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	if len(submissions) != 2 {
+		t.Fatalf("expected 2 submissions, got %+v", submissions)
+	}
+	if submissions[0].Status != "superseded" {
+		t.Fatalf("expected first submission superseded, got %+v", submissions[0])
+	}
+	if !strings.Contains(submissions[0].LastError, "superseded by submission") {
+		t.Fatalf("expected supersede reason, got %+v", submissions[0])
+	}
+	if submissions[1].Status != "succeeded" {
+		t.Fatalf("expected second submission succeeded, got %+v", submissions[1])
+	}
+}
+
 func TestRunOnceIntegratesHigherPriorityBranchesFirst(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)

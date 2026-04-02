@@ -14,11 +14,12 @@ import (
 type waitOutcome string
 
 const (
-	waitOutcomeSucceeded waitOutcome = "succeeded"
-	waitOutcomeBlocked   waitOutcome = "blocked"
-	waitOutcomeFailed    waitOutcome = "failed"
-	waitOutcomeCancelled waitOutcome = "cancelled"
-	waitOutcomeTimeout   waitOutcome = "timed_out"
+	waitOutcomeSucceeded  waitOutcome = "succeeded"
+	waitOutcomeBlocked    waitOutcome = "blocked"
+	waitOutcomeFailed     waitOutcome = "failed"
+	waitOutcomeCancelled  waitOutcome = "cancelled"
+	waitOutcomeSuperseded waitOutcome = "superseded"
+	waitOutcomeTimeout    waitOutcome = "timed_out"
 )
 
 type integrationWaitResult struct {
@@ -267,6 +268,15 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 				result.Error = "submission cancelled"
 			}
 			return result, exitWithCode(1, fmt.Errorf("submission %d cancelled", submission.ID))
+		case "superseded":
+			result.Outcome = waitOutcomeSuperseded
+			result.DurationMS = time.Since(start).Milliseconds()
+			if submission.LastError != "" {
+				result.Error = submission.LastError
+			} else {
+				result.Error = "submission superseded"
+			}
+			return result, exitWithCode(1, fmt.Errorf("submission %d superseded: %s", submission.ID, result.Error))
 		}
 
 		cycleResult, err := runOneCycle(queued.Config.Repo.MainWorktree)
@@ -345,6 +355,15 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 				result.Error = "submission cancelled"
 			}
 			return result, exitWithCode(1, fmt.Errorf("submission %d cancelled", submission.ID))
+		case "superseded":
+			result.Outcome = waitOutcomeSuperseded
+			result.DurationMS = time.Since(start).Milliseconds()
+			if submission.LastError != "" {
+				result.Error = submission.LastError
+			} else {
+				result.Error = "submission superseded"
+			}
+			return result, exitWithCode(1, fmt.Errorf("submission %d superseded: %s", submission.ID, result.Error))
 		case "succeeded":
 			protectedSHA, err := verifySubmissionReachable(ctx, queued.Store, queued.RepoRecord.ID, mainEngine, queued.Config, submission)
 			if err != nil {

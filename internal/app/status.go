@@ -410,6 +410,8 @@ func summarizeCounts(submissions []state.IntegrationSubmission, requests []state
 			counts.FailedSubmissions++
 		case "cancelled":
 			counts.CancelledSubmissions++
+		case "superseded":
+			// terminal and intentionally omitted from active queue counts
 		}
 	}
 	for _, request := range requests {

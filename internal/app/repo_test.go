@@ -638,6 +638,79 @@ func TestDoctorJSONIncludesProtectedDirtyPaths(t *testing.T) {
 	}
 }
 
+func TestDoctorFixSupersedesObsoleteBlockedSubmission(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-obsolete")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/obsolete", featurePath)
+	writeFileAndCommit(t, featurePath, "obsolete.txt", "v1\n", "obsolete v1")
+	firstSHA := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	firstSubmission, err := store.CreateIntegrationSubmission(context.Background(), state.IntegrationSubmission{
+		RepoID:         repoRecord.ID,
+		BranchName:     "feature/obsolete",
+		SourceRef:      "feature/obsolete",
+		RefKind:        submissionRefKindBranch,
+		SourceWorktree: featurePath,
+		SourceSHA:      firstSHA,
+		Status:         "blocked",
+		LastError:      "old conflict",
+	})
+	if err != nil {
+		t.Fatalf("CreateIntegrationSubmission(first): %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "obsolete.txt", "v2\n", "obsolete v2")
+	secondSHA := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+	secondSubmission, err := store.CreateIntegrationSubmission(context.Background(), state.IntegrationSubmission{
+		RepoID:         repoRecord.ID,
+		BranchName:     "feature/obsolete",
+		SourceRef:      "feature/obsolete",
+		RefKind:        submissionRefKindBranch,
+		SourceWorktree: featurePath,
+		SourceSHA:      secondSHA,
+		Status:         "succeeded",
+	})
+	if err != nil {
+		t.Fatalf("CreateIntegrationSubmission(second): %v", err)
+	}
+	if err := appendSubmissionEvent(context.Background(), store, repoRecord.ID, secondSubmission.ID, "integration.succeeded", map[string]string{
+		"branch":        "feature/obsolete",
+		"source_ref":    "feature/obsolete",
+		"ref_kind":      submissionRefKindBranch,
+		"protected_sha": secondSHA,
+	}); err != nil {
+		t.Fatalf("appendSubmissionEvent(integration.succeeded): %v", err)
+	}
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &out, &errOut); err != nil {
+		t.Fatalf("runDoctor --fix returned error: %v", err)
+	}
+
+	updated, err := store.GetIntegrationSubmission(context.Background(), firstSubmission.ID)
+	if err != nil {
+		t.Fatalf("GetIntegrationSubmission(first): %v", err)
+	}
+	if updated.Status != "superseded" {
+		t.Fatalf("expected obsolete blocked submission superseded, got %+v", updated)
+	}
+	if !strings.Contains(updated.LastError, fmt.Sprintf("superseded by submission %d", secondSubmission.ID)) {
+		t.Fatalf("expected supersede reason, got %+v", updated)
+	}
+}
+
 func TestStatusJSONWorksWhenCanonicalRootIsDirty(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

@@ -1129,6 +1129,19 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 		applied = append(applied, fmt.Sprintf("failed queued submission %d because branch %q no longer exists", submission.ID, submission.SourceRef))
 	}
 
+	allSubmissions, err := store.ListIntegrationSubmissions(ctx, repoRecord.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, landed := range allSubmissions {
+		if landed.Status != "succeeded" {
+			continue
+		}
+		if err := supersedeObsoleteSubmissions(ctx, store, repoRecord.ID, engine, landed, ""); err != nil {
+			return nil, nil, err
+		}
+	}
+
 	if cfg.Repo.MainWorktree != "" && engine.BranchExists(cfg.Repo.ProtectedBranch) {
 		if _, err := os.Stat(cfg.Repo.MainWorktree); err == nil {
 			operation, err := engine.InProgressOperation(cfg.Repo.MainWorktree)

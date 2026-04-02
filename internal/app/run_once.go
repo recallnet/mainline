@@ -326,6 +326,9 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 	}); err != nil {
 		return "", err
 	}
+	if err := supersedeObsoleteSubmissions(ctx, store, repoRecord.ID, mainEngine, submission, protectedHead); err != nil {
+		return "", err
+	}
 
 	if cfg.Publish.Mode == "auto" {
 		request, err := store.CreatePublishRequest(ctx, state.PublishRequest{
@@ -876,6 +879,51 @@ func recoverInterruptedIntegrationSubmissions(ctx context.Context, store state.S
 		recovered++
 	}
 	return recovered, nil
+}
+
+func supersedeObsoleteSubmissions(ctx context.Context, store state.Store, repoID int64, engine git.Engine, landed state.IntegrationSubmission, protectedSHA string) error {
+	if landed.SourceRef == "" {
+		return nil
+	}
+	submissions, err := store.ListIntegrationSubmissions(ctx, repoID)
+	if err != nil {
+		return err
+	}
+	for _, submission := range submissions {
+		if submission.ID == landed.ID {
+			continue
+		}
+		if submission.SourceRef != landed.SourceRef || submission.RefKind != landed.RefKind {
+			continue
+		}
+		if submission.Status != "queued" && submission.Status != "blocked" {
+			continue
+		}
+		descends, err := engine.IsAncestor(submission.SourceSHA, landed.SourceSHA)
+		if err != nil || !descends {
+			continue
+		}
+		reason := fmt.Sprintf("superseded by submission %d landing newer branch tip %s", landed.ID, landed.SourceSHA)
+		if protectedSHA != "" {
+			reason = fmt.Sprintf("%s at %s", reason, protectedSHA)
+		}
+		if _, err := store.UpdateIntegrationSubmissionStatus(ctx, submission.ID, "superseded", reason); err != nil {
+			return err
+		}
+		if err := appendSubmissionEvent(ctx, store, repoID, submission.ID, "submission.superseded", map[string]string{
+			"branch":               submissionDisplayRef(submission),
+			"source_ref":           submission.SourceRef,
+			"ref_kind":             submission.RefKind,
+			"source_sha":           submission.SourceSHA,
+			"superseded_by_id":     fmt.Sprintf("%d", landed.ID),
+			"superseded_by_source": landed.SourceSHA,
+			"superseded_protected": protectedSHA,
+			"reason":               reason,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func recoverInterruptedPublishRequests(ctx context.Context, store state.Store, repoID int64) (int, error) {

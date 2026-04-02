@@ -307,6 +307,12 @@ func (e *lifecycleEmitter) project(event state.EventRecord) (lifecycleEvent, boo
 		record.Status = "cancelled"
 		record.Branch = getRef()
 		return record, true, nil
+	case "submission.superseded":
+		record.Event = "superseded"
+		record.Status = "superseded"
+		record.Branch = getRef()
+		record.Error = getString("reason")
+		return record, true, nil
 	case "publish.requested":
 		record.Event = "publish_requested"
 		record.Status = "queued"
