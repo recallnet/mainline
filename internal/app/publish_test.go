@@ -498,6 +498,19 @@ func TestIsTransientPublishErrorRecognizesGitHTTPStatusShape(t *testing.T) {
 	}
 }
 
+func TestIsTransientPublishErrorRejectsHookAndGateFailures(t *testing.T) {
+	cases := []error{
+		errors.New("gate failed"),
+		errors.New("pre-push hook declined"),
+		errors.New("protected branch worktree /tmp/repo is dirty"),
+	}
+	for _, err := range cases {
+		if isTransientPublishError(err) {
+			t.Fatalf("expected non-transient publish error for %q", err)
+		}
+	}
+}
+
 func TestPublishRespectsHookPolicyBypassingPrePushHook(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

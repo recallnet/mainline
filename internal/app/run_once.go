@@ -635,6 +635,18 @@ func isTransientPublishError(err error) bool {
 		return false
 	}
 	text := strings.ToLower(err.Error())
+	nonTransientIndicators := []string{
+		"gate failed",
+		"pre-push hook",
+		"hook declined",
+		"protected branch worktree",
+		"rejected by hook",
+	}
+	for _, indicator := range nonTransientIndicators {
+		if strings.Contains(text, indicator) {
+			return false
+		}
+	}
 	transientIndicators := []string{
 		"connection reset",
 		"connection timed out",
