@@ -77,6 +77,12 @@ project is built to enforce.
 - Prefer repo-aware discovery first, then change code and docs together.
 - For first-pass setup/orientation in this repo, use the onboarding skill at
   [.agents/skills/onboarding/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/onboarding/SKILL.md).
+- Treat onboarding as the default first skill for new contributors, fresh
+  clones, setup questions, or any "what is this repo / what should I run
+  first?" prompt. Do not jump straight to the worktree skill for that class of
+  request.
+- The worktree skill is for contributing safely after orientation. It does not
+  replace onboarding, install, or baseline verification.
 
 ## Docs Governance
 

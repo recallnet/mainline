@@ -248,6 +248,10 @@ The contributor-specific flow is also summarized in
 [CONTRIBUTING.md](/Users/devrel/Projects/recallnet/mainline/CONTRIBUTING.md)
 and encoded for agents in
 [.agents/skills/onboarding/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/onboarding/SKILL.md).
+Use the onboarding skill before the worktree skill. Onboarding answers "what is
+this repo, what works in this checkout, and what should I run first?" The
+worktree skill answers "I already understand the setup, now how do I
+contribute safely through `mq`?"
 
 Recommended first-time repo setup after install:
 

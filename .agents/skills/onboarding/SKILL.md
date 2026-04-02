@@ -1,12 +1,16 @@
 ---
 name: onboarding
-description: First-pass orientation for contributors developing the mainline repo itself versus operators using mq on a target repo. Verifies the local baseline, explains canonical-root trust, and clarifies which commands should or should not work in this source checkout.
+description: First skill for new contributors, fresh clones, and setup questions in the mainline repo. Separates developing mainline from using mq on another repo, verifies the local baseline, explains canonical-root trust, and clarifies which commands should or should not work in this source checkout.
 ---
 
 # mainline onboarding
 
 Use this skill when someone is new to this repository and needs a reliable first
 pass through setup, baseline checks, and terminology.
+
+Use this before the `worktree` skill when the user is still figuring out what
+this repo is, how it is installed, or which commands are supposed to work in
+this checkout.
 
 ## Goal
 

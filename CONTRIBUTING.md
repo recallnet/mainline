@@ -33,6 +33,9 @@ Interpretation:
 If you want the repo-local orientation flow encoded for an agent, use the
 onboarding skill at
 [.agents/skills/onboarding/SKILL.md](/Users/devrel/Projects/recallnet/mainline/.agents/skills/onboarding/SKILL.md).
+Use that before the worktree skill. The onboarding skill is for first-pass
+setup and terminology; the worktree skill is for the contribution flow after
+that baseline is already understood.
 
 ## Development Baseline
 

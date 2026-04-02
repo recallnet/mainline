@@ -1,12 +1,16 @@
 ---
 name: worktree
-description: Work in a dedicated Git worktree, make all commits there, and land changes through `mq` instead of merging directly into `main`. Use when the user asks how to use worktrees for this repo, how agents should branch and commit, or how to dogfood `mq`.
+description: Work in a dedicated Git worktree, make all commits there, and land changes through `mq` instead of merging directly into `main`. Use after onboarding, once the user already understands the repo's setup and wants the contribution workflow.
 ---
 
 # Worktree
 
 Use this skill when working on `mainline` from a feature worktree and landing
 that work back through `mq`.
+
+Do not use this as a substitute for first-time setup or repo orientation. If
+the user is new here, on a fresh clone, or asking what this checkout is and how
+to get started, use the `onboarding` skill first.
 
 The goal is simple:
 
