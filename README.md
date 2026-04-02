@@ -327,6 +327,9 @@ manual helper mode, but it is not part of the default machine setup.
 
 For bare-clone layouts, queue state and locks live with shared Git storage so
 every worktree sees the same queue truth.
+The bare storage path is not a human-facing checkout, so `root_checkout.exists
+= false` is expected there. Point `mq repo init` at a clean local checkout on
+the protected branch, not at the bare storage directory itself.
 
 ## Architecture
 

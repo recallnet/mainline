@@ -506,6 +506,9 @@ func TestRepoInitRejectsDetachedProtectedWorktree(t *testing.T) {
 	if !strings.Contains(err.Error(), "detached HEAD") {
 		t.Fatalf("expected detached HEAD guidance, got %v", err)
 	}
+	if !strings.Contains(err.Error(), "git checkout --ignore-other-worktrees main") {
+		t.Fatalf("expected explicit checkout guidance, got %v", err)
+	}
 }
 
 func TestRepoInitRejectsNonDefaultProtectedBranchWithoutExplicitOverride(t *testing.T) {
@@ -521,6 +524,9 @@ func TestRepoInitRejectsNonDefaultProtectedBranchWithoutExplicitOverride(t *test
 	}
 	if !strings.Contains(err.Error(), `local branch "main"`) || !strings.Contains(err.Error(), `current branch is "protected-main"`) {
 		t.Fatalf("expected main-branch guidance, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "--protected-branch protected-main") {
+		t.Fatalf("expected explicit override guidance, got %v", err)
 	}
 }
 
@@ -869,8 +875,75 @@ func TestRepoShowReportsBareStorageTopologyForRootCheckout(t *testing.T) {
 	if result.RootCheckout.Topology != "bare-repository-storage" {
 		t.Fatalf("expected bare storage topology, got %+v", result.RootCheckout)
 	}
-	if !strings.Contains(strings.Join(result.Warnings, "\n"), "bare Git storage") {
+	joined := strings.Join(result.Warnings, "\n")
+	if !strings.Contains(joined, "bare Git storage") {
 		t.Fatalf("expected bare storage warning, got %#v", result.Warnings)
+	}
+	if !strings.Contains(joined, "root_checkout.exists = false") {
+		t.Fatalf("expected bare storage exists=false explanation, got %#v", result.Warnings)
+	}
+	if !strings.Contains(joined, "mq repo init --repo") {
+		t.Fatalf("expected explicit bare init guidance, got %#v", result.Warnings)
+	}
+}
+
+func TestDoctorWarnsWhenConfiguredMainWorktreeIsDetached(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	mainPath := filepath.Join(t.TempDir(), "detached-main")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "--detach", mainPath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--protected-branch", "main", "--main-worktree", mainPath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	var result doctorResult
+	if err := json.Unmarshal(doctorOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	joined := strings.Join(result.Warnings, "\n")
+	if !strings.Contains(joined, "configured main worktree") || !strings.Contains(joined, "detached") {
+		t.Fatalf("expected detached main worktree warning, got %#v", result.Warnings)
+	}
+	if !strings.Contains(joined, "git checkout --ignore-other-worktrees main") {
+		t.Fatalf("expected exact checkout guidance, got %#v", result.Warnings)
+	}
+}
+
+func TestDoctorWarnsWhenConfiguredMainWorktreeTracksWrongBranch(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	mainPath := filepath.Join(t.TempDir(), "wrong-main")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "protected-main", mainPath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--protected-branch", "main", "--main-worktree", mainPath}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	var result doctorResult
+	if err := json.Unmarshal(doctorOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	joined := strings.Join(result.Warnings, "\n")
+	if !strings.Contains(joined, "configured main worktree") || !strings.Contains(joined, "expected main") {
+		t.Fatalf("expected wrong-branch main worktree warning, got %#v", result.Warnings)
+	}
+	if !strings.Contains(joined, "--protected-branch main") {
+		t.Fatalf("expected explicit repo init correction guidance, got %#v", result.Warnings)
 	}
 }
 

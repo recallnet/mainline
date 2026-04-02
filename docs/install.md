@@ -83,6 +83,12 @@ branch but config drift points elsewhere, repair that with
 For bare-repository-plus-worktree layouts, there is no human-facing root
 checkout at the bare repo path. In that topology, trust the configured
 canonical protected worktree instead of expecting `root_checkout.exists = true`.
+`root_checkout.exists = false` is expected there. Initialize from a clean local
+checkout on `main`, for example:
+
+```bash
+mq repo init --repo /path/to/clean-main-worktree --protected-branch main --main-worktree /path/to/clean-main-worktree
+```
 
 State compatibility:
 

@@ -164,6 +164,7 @@ Flags:
 		return err
 	}
 	repoRoot := layout.RepositoryRoot
+	cfg := policy.DefaultFile()
 	defaultProtectedWorktree := defaultMainWorktree(layout)
 	if mainWorktree == "" {
 		mainWorktree = defaultProtectedWorktree
@@ -176,15 +177,14 @@ Flags:
 	currentBranch, err := engine.CurrentBranch()
 	if err != nil {
 		if protectedBranch == "" && mainWorktree == canonicalRegistryPath(layout.WorktreeRoot) {
-			return fmt.Errorf("repo init requires the protected worktree to be on a branch; detached HEAD is not supported")
+			return fmt.Errorf("repo init requires the protected worktree %s to be attached to local branch %q; current checkout is detached HEAD. Run `git checkout --ignore-other-worktrees %s` in %s, then retry `mq repo init --repo %s --protected-branch %s --main-worktree %s`", mainWorktree, cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch, mainWorktree, layout.WorktreeRoot, cfg.Repo.ProtectedBranch, mainWorktree)
 		}
 		currentBranch = ""
 	}
 
-	cfg := policy.DefaultFile()
 	if protectedBranch == "" {
 		if mainWorktree == canonicalRegistryPath(layout.WorktreeRoot) && currentBranch != cfg.Repo.ProtectedBranch {
-			return fmt.Errorf("repo init must run from local branch %q or pass --protected-branch explicitly; current branch is %q", cfg.Repo.ProtectedBranch, currentBranch)
+			return fmt.Errorf("repo init must run from local branch %q or pass --protected-branch explicitly; current branch is %q. For a normal repo, switch %s to %q and rerun `mq repo init --repo %s`. If you intentionally want to protect %q instead, rerun `mq repo init --repo %s --protected-branch %s --main-worktree %s`", cfg.Repo.ProtectedBranch, currentBranch, mainWorktree, cfg.Repo.ProtectedBranch, layout.WorktreeRoot, currentBranch, layout.WorktreeRoot, currentBranch, mainWorktree)
 		}
 		protectedBranch = cfg.Repo.ProtectedBranch
 	}
@@ -421,6 +421,7 @@ Flags:
 		BranchStatus:   branchStatus,
 	}
 	rootInfo, warnings := inspectCanonicalRootCheckout(cfg, layout)
+	warnings = appendMainWorktreeWarnings(engine, cfg, warnings)
 	result.RootCheckout = rootInfo
 	result.Warnings = warnings
 
@@ -588,6 +589,7 @@ func adoptRepositoryRoot(repoRoot string, layout git.RepositoryLayout, cfg *poli
 
 func buildRepoRootResult(repoRoot string, cfg policy.File, layout git.RepositoryLayout) repoRootResult {
 	rootInfo, warnings := inspectCanonicalRootCheckout(cfg, layout)
+	warnings = appendMainWorktreeWarnings(git.NewEngine(layout.WorktreeRoot), cfg, warnings)
 	recommended := recommendedRootActions(repoRoot, cfg, rootInfo)
 	canAdopt := canAdoptRootCheckout(cfg, rootInfo)
 	return repoRootResult{
@@ -838,6 +840,7 @@ Flags:
 		return err
 	}
 	rootInfo, rootWarnings := inspectCanonicalRootCheckout(cfg, layout)
+	rootWarnings = appendMainWorktreeWarnings(engine, cfg, rootWarnings)
 	report.Warnings = append(report.Warnings, rootWarnings...)
 
 	if cfg.Repo.WorktreeLayoutPolicy == "enforce-prefix" && cfg.Repo.WorktreeRootPrefix != "" {
@@ -896,6 +899,7 @@ Flags:
 			return err
 		}
 		rootInfo, rootWarnings = inspectCanonicalRootCheckout(cfg, layout)
+		rootWarnings = appendMainWorktreeWarnings(engine, cfg, rootWarnings)
 		report.Warnings = append(report.Warnings, rootWarnings...)
 		result.HealthReport = report
 		result.RootCheckout = rootInfo
@@ -991,6 +995,8 @@ func hasGitWorktreeMarker(path string) bool {
 
 func inspectCanonicalRootCheckout(cfg policy.File, layout git.RepositoryLayout) (rootCheckoutInfo, []string) {
 	if !hasGitWorktreeMarker(layout.RepositoryRoot) {
+		mainWorktree := canonicalRegistryPath(cfg.Repo.MainWorktree)
+		repoPath := canonicalRegistryPath(layout.WorktreeRoot)
 		info := rootCheckoutInfo{
 			Path:        canonicalRegistryPath(layout.RepositoryRoot),
 			Exists:      false,
@@ -998,7 +1004,8 @@ func inspectCanonicalRootCheckout(cfg policy.File, layout git.RepositoryLayout) 
 			Topology:    "bare-repository-storage",
 		}
 		return info, []string{
-			fmt.Sprintf("repository root %s is bare Git storage, not a checkout; trust the canonical protected worktree %s instead", info.Path, canonicalRegistryPath(cfg.Repo.MainWorktree)),
+			fmt.Sprintf("repository root %s is bare Git storage, not a checkout; `root_checkout.exists = false` is expected here. Trust the canonical protected worktree %s instead", info.Path, mainWorktree),
+			fmt.Sprintf("for bare-storage repos, initialize and operate from a clean checkout on %s, for example: `mq repo init --repo %s --protected-branch %s --main-worktree %s`", cfg.Repo.ProtectedBranch, repoPath, cfg.Repo.ProtectedBranch, mainWorktree),
 		}
 	}
 
@@ -1036,6 +1043,33 @@ func inspectCanonicalRootCheckout(cfg policy.File, layout git.RepositoryLayout) 
 	}
 
 	return info, warnings
+}
+
+func appendMainWorktreeWarnings(engine git.Engine, cfg policy.File, resultWarnings []string) []string {
+	mainWorktreePath := canonicalRegistryPath(cfg.Repo.MainWorktree)
+	if mainWorktreePath == "" {
+		return resultWarnings
+	}
+	if _, err := os.Stat(mainWorktreePath); err != nil {
+		return append(resultWarnings, fmt.Sprintf("configured main worktree %s is missing; re-run `mq repo init --repo %s --protected-branch %s --main-worktree %s` from a clean checkout on %s", mainWorktreePath, mainWorktreePath, cfg.Repo.ProtectedBranch, mainWorktreePath, cfg.Repo.ProtectedBranch))
+	}
+	worktrees, err := engine.ListWorktrees()
+	if err != nil {
+		return append(resultWarnings, fmt.Sprintf("could not inspect configured main worktree %s: %v", mainWorktreePath, err))
+	}
+	for _, wt := range worktrees {
+		if wt.Path != mainWorktreePath {
+			continue
+		}
+		if wt.IsDetached {
+			return append(resultWarnings, fmt.Sprintf("configured main worktree %s is detached; run `git checkout --ignore-other-worktrees %s` in %s, then re-run `mq repo init --repo %s --protected-branch %s --main-worktree %s`", mainWorktreePath, cfg.Repo.ProtectedBranch, mainWorktreePath, mainWorktreePath, cfg.Repo.ProtectedBranch, mainWorktreePath))
+		}
+		if wt.Branch != cfg.Repo.ProtectedBranch {
+			return append(resultWarnings, fmt.Sprintf("configured main worktree %s is on branch %s, expected %s; switch it with `git checkout --ignore-other-worktrees %s` or re-run `mq repo init --repo %s --protected-branch %s --main-worktree %s`", mainWorktreePath, wt.Branch, cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch, mainWorktreePath, cfg.Repo.ProtectedBranch, mainWorktreePath))
+		}
+		return resultWarnings
+	}
+	return append(resultWarnings, fmt.Sprintf("configured main worktree %s is not registered in the repository worktree list; re-run `mq repo init --repo %s --protected-branch %s --main-worktree %s` from a clean checkout on %s", mainWorktreePath, mainWorktreePath, cfg.Repo.ProtectedBranch, mainWorktreePath, cfg.Repo.ProtectedBranch))
 }
 
 func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockManager state.LockManager, store state.Store, repoRecord state.RepositoryRecord, hasRepoRecord bool) ([]string, []string, error) {
