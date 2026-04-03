@@ -148,8 +148,9 @@ func shouldTryDrainAfterMutation() bool {
 }
 
 func protectedWorktreeDirtyError(mainWorktree string, dirtyPaths []string) error {
+	queueBlockedGuidance := "; mainline is blocked until the protected root checkout is clean. Take ownership of the protected root checkout, run `mq doctor --repo " + mainWorktree + "`, then save, clean, or resolve the dirty state before retrying"
 	if len(dirtyPaths) == 0 {
-		return fmt.Errorf("protected branch worktree %s is dirty", mainWorktree)
+		return fmt.Errorf("protected branch worktree %s is dirty%s", mainWorktree, queueBlockedGuidance)
 	}
 	preview := dirtyPaths
 	if len(preview) > 5 {
@@ -159,7 +160,7 @@ func protectedWorktreeDirtyError(mainWorktree string, dirtyPaths []string) error
 	if len(dirtyPaths) > len(preview) {
 		message = fmt.Sprintf("%s and %d more", message, len(dirtyPaths)-len(preview))
 	}
-	return fmt.Errorf("%s; clean or commit those paths in the protected root checkout before retrying", message)
+	return fmt.Errorf("%s%s", message, queueBlockedGuidance)
 }
 
 func loadRepoContext(repoPath string) (git.RepositoryLayout, string, policy.File, state.RepositoryRecord, state.Store, error) {

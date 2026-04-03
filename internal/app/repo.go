@@ -911,6 +911,8 @@ Flags:
 			result.UnfinishedQueueItems = make([]string, count)
 		}
 	}
+	result.QueueBlocked = !result.ProtectedBranchClean
+	result.NextActions = doctorNextActions(result)
 	staleLocks, err := lockManager.InspectStale(time.Hour)
 	if err != nil {
 		return err
@@ -943,6 +945,12 @@ Flags:
 	fmt.Fprintf(stdout, "Protected branch clean: %s\n", yesNo(result.ProtectedBranchClean))
 	for _, dirtyPath := range result.ProtectedDirtyPaths {
 		fmt.Fprintf(stdout, "Protected dirty path: %s\n", dirtyPath)
+	}
+	if result.QueueBlocked {
+		fmt.Fprintln(stdout, "Queue blocked: yes")
+		for _, action := range result.NextActions {
+			fmt.Fprintf(stdout, "Next action: %s\n", action)
+		}
 	}
 	if result.HasUpstream {
 		fmt.Fprintf(stdout, "Upstream: %s\n", result.UpstreamRef)
@@ -977,8 +985,22 @@ Flags:
 type doctorResult struct {
 	git.HealthReport
 	RootCheckout rootCheckoutInfo `json:"root_checkout,omitempty"`
+	QueueBlocked bool             `json:"queue_blocked,omitempty"`
+	NextActions  []string         `json:"next_actions,omitempty"`
 	FixesApplied []string         `json:"fixes_applied,omitempty"`
 	FixesSkipped []string         `json:"fixes_skipped,omitempty"`
+}
+
+func doctorNextActions(result doctorResult) []string {
+	if result.ProtectedBranchClean {
+		return nil
+	}
+	return []string{
+		"mainline is blocked until the protected root checkout is clean",
+		"take ownership of the protected root checkout and inspect it with `mq doctor --repo " + result.RepositoryRoot + "`",
+		"save, clean, or commit local changes, or resolve any abnormal git state on the protected root checkout",
+		"retry the blocked operation after the protected root checkout is clean",
+	}
 }
 
 func defaultMainWorktree(layout git.RepositoryLayout) string {

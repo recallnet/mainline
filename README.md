@@ -290,6 +290,8 @@ mq config edit --repo /path/to/repo-root
 mq doctor --repo /path/to/repo-root --fix --json
 ```
 
+If protected `main` is dirty, `mq doctor` is the takeover command: it tells you the queue is blocked, shows the dirty paths, and tells you to save, clean, or resolve the protected root checkout before retrying.
+
 Submit and land:
 
 ```bash

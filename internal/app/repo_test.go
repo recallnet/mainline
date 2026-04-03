@@ -415,6 +415,9 @@ func TestDoctorDetectsDirtyProtectedBranch(t *testing.T) {
 	if !strings.Contains(output, "Main worktree exists: yes") {
 		t.Fatalf("expected main worktree report, got %q", output)
 	}
+	if !strings.Contains(output, "Queue blocked: yes") || !strings.Contains(output, "Next action: mainline is blocked until the protected root checkout is clean") {
+		t.Fatalf("expected queue blocked guidance, got %q", output)
+	}
 }
 
 func TestDoctorRepairsMissingRepositoryRecord(t *testing.T) {
@@ -681,6 +684,12 @@ func TestDoctorJSONIncludesProtectedDirtyPaths(t *testing.T) {
 	}
 	if len(result.ProtectedDirtyPaths) != 1 || result.ProtectedDirtyPaths[0] != "skills-lock.json" {
 		t.Fatalf("expected protected dirty path to include skills-lock.json, got %+v", result.ProtectedDirtyPaths)
+	}
+	if !result.QueueBlocked {
+		t.Fatalf("expected queue blocked flag, got %+v", result)
+	}
+	if len(result.NextActions) == 0 || !strings.Contains(strings.Join(result.NextActions, "\n"), "resolve any abnormal git state") {
+		t.Fatalf("expected cleanup actions, got %+v", result.NextActions)
 	}
 }
 

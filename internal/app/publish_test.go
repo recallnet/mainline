@@ -74,6 +74,9 @@ func TestPublishRejectsDirtyCanonicalRootCheckout(t *testing.T) {
 	if !strings.Contains(err.Error(), "DIRTY.txt") {
 		t.Fatalf("expected dirty file path in error, got %v", err)
 	}
+	if !strings.Contains(err.Error(), "mainline is blocked") || !strings.Contains(err.Error(), "mq doctor --repo") {
+		t.Fatalf("expected blocked queue guidance in error, got %v", err)
+	}
 }
 
 func TestPublishDrainsAndPublishesWithoutDaemon(t *testing.T) {

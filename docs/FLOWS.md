@@ -22,6 +22,8 @@ mq config edit --repo .
 mq doctor --repo .
 ```
 
+If protected `main` is dirty, start with `mq doctor --repo .`: it reports that the queue is blocked and tells you to take ownership of cleaning or resolving the protected root checkout before retrying.
+
 Use a topic worktree, then land it:
 
 ```bash
