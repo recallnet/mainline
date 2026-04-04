@@ -125,6 +125,66 @@ detached
 	}
 }
 
+func TestWorktreeIsCleanHonorsGitIgnore(t *testing.T) {
+	repoRoot := t.TempDir()
+	runGitCommand(t, repoRoot, "git", "init", "-b", "main")
+	runGitCommand(t, repoRoot, "git", "config", "user.name", "Test User")
+	runGitCommand(t, repoRoot, "git", "config", "user.email", "test@example.com")
+	runGitCommand(t, repoRoot, "git", "config", "core.hooksPath", ".git/hooks")
+
+	writeFile(t, filepath.Join(repoRoot, ".gitignore"), ".agents/skills/\n")
+	writeFile(t, filepath.Join(repoRoot, "README.md"), "# test\n")
+	runGitCommand(t, repoRoot, "git", "add", ".gitignore", "README.md")
+	runGitCommand(t, repoRoot, "git", "commit", "-m", "initial")
+
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".agents", "skills", "onboarding"), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	writeFile(t, filepath.Join(repoRoot, ".agents", "skills", "onboarding", "SKILL.md"), "generated\n")
+
+	clean, err := NewEngine(repoRoot).WorktreeIsClean(repoRoot)
+	if err != nil {
+		t.Fatalf("WorktreeIsClean: %v", err)
+	}
+	if !clean {
+		t.Fatalf("expected ignored generated skills to keep worktree clean")
+	}
+
+	paths, err := NewEngine(repoRoot).WorktreeDirtyPaths(repoRoot)
+	if err != nil {
+		t.Fatalf("WorktreeDirtyPaths: %v", err)
+	}
+	if len(paths) != 0 {
+		t.Fatalf("expected no dirty paths for ignored generated files, got %+v", paths)
+	}
+}
+
+func TestWorktreeIsCleanStillHonorsAstrochickenOverride(t *testing.T) {
+	repoRoot := t.TempDir()
+	runGitCommand(t, repoRoot, "git", "init", "-b", "main")
+	runGitCommand(t, repoRoot, "git", "config", "user.name", "Test User")
+	runGitCommand(t, repoRoot, "git", "config", "user.email", "test@example.com")
+	runGitCommand(t, repoRoot, "git", "config", "core.hooksPath", ".git/hooks")
+
+	writeFile(t, filepath.Join(repoRoot, "README.md"), "# test\n")
+	runGitCommand(t, repoRoot, "git", "add", "README.md")
+	runGitCommand(t, repoRoot, "git", "commit", "-m", "initial")
+
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".astrochicken", "policies"), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	writeFile(t, filepath.Join(repoRoot, ".astrochicken", "README.md"), "local\n")
+	writeFile(t, filepath.Join(repoRoot, ".astrochicken", "policies", "ingress-policy.json"), "{}\n")
+
+	clean, err := NewEngine(repoRoot).WorktreeIsClean(repoRoot)
+	if err != nil {
+		t.Fatalf("WorktreeIsClean: %v", err)
+	}
+	if !clean {
+		t.Fatalf("expected .astrochicken authoring surface to remain ignorable")
+	}
+}
+
 func runGitCommand(t *testing.T, dir string, name string, args ...string) string {
 	t.Helper()
 
