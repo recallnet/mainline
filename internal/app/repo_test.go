@@ -937,6 +937,44 @@ func TestRepoShowReportsBareStorageTopologyForRootCheckout(t *testing.T) {
 	}
 }
 
+func TestRepoShowAndStatusWorkForBareStorageReposWithMultipleWorktrees(t *testing.T) {
+	_, worktreePath := createBareCloneWorktree(t)
+	extraWorktree := filepath.Join(t.TempDir(), "feature-worktree")
+	runTestCommand(t, worktreePath, "git", "worktree", "add", "-b", "feature/test", extraWorktree)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", worktreePath, "--protected-branch", "main"}, &initOut, &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	var showOut bytes.Buffer
+	var showErr bytes.Buffer
+	if err := runRepoShow([]string{"--repo", worktreePath, "--json"}, &showOut, &showErr); err != nil {
+		t.Fatalf("runRepoShow returned error: %v", err)
+	}
+	var showResult repoShowResult
+	if err := json.Unmarshal(showOut.Bytes(), &showResult); err != nil {
+		t.Fatalf("Unmarshal(show): %v", err)
+	}
+	if len(showResult.Worktrees) < 3 {
+		t.Fatalf("expected multiple worktrees in show result, got %+v", showResult.Worktrees)
+	}
+
+	var statusOut bytes.Buffer
+	var statusErr bytes.Buffer
+	if err := runStatus([]string{"--repo", worktreePath, "--json"}, &statusOut, &statusErr); err != nil {
+		t.Fatalf("runStatus returned error: %v", err)
+	}
+	var statusResult statusResult
+	if err := json.Unmarshal(statusOut.Bytes(), &statusResult); err != nil {
+		t.Fatalf("Unmarshal(status): %v", err)
+	}
+	if statusResult.RepositoryRoot == "" || statusResult.ProtectedBranch != "main" {
+		t.Fatalf("unexpected status result: %+v", statusResult)
+	}
+}
+
 func TestDoctorWarnsWhenConfiguredMainWorktreeIsDetached(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	mainPath := filepath.Join(t.TempDir(), "detached-main")

@@ -226,45 +226,11 @@ func (e Engine) ListWorktrees() ([]Worktree, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	worktreePaths, err := discoverWorktreePaths(layout)
+	output, err := e.runGit(layout.WorktreeRoot, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
 	}
-
-	worktrees := make([]Worktree, 0, len(worktreePaths))
-	for _, wtPath := range worktreePaths {
-		if _, err := os.Stat(wtPath); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			return nil, err
-		}
-
-		repo, err := openRepository(wtPath)
-		if err != nil {
-			return nil, err
-		}
-
-		head, err := repo.Head()
-		if err != nil {
-			return nil, err
-		}
-
-		wt := Worktree{
-			Path:       normalizePath(wtPath),
-			HeadSHA:    head.Hash().String(),
-			IsDetached: !head.Name().IsBranch(),
-			IsCurrent:  normalizePath(wtPath) == layout.WorktreeRoot,
-		}
-		if head.Name().IsBranch() {
-			wt.Branch = head.Name().Short()
-		}
-
-		worktrees = append(worktrees, wt)
-	}
-
-	return worktrees, nil
+	return parseWorktreeListPorcelain(output, layout.WorktreeRoot), nil
 }
 
 // StatusPorcelain returns the repository status in a stable text format.
@@ -860,6 +826,51 @@ func discoverWorktreePaths(layout RepositoryLayout) ([]string, error) {
 	}
 
 	return paths, nil
+}
+
+func parseWorktreeListPorcelain(output string, currentWorktree string) []Worktree {
+	lines := strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n")
+	worktrees := make([]Worktree, 0, 8)
+	var current *Worktree
+	flush := func() {
+		if current == nil || current.Path == "" {
+			current = nil
+			return
+		}
+		current.Path = normalizePath(current.Path)
+		current.IsCurrent = current.Path == normalizePath(currentWorktree)
+		worktrees = append(worktrees, *current)
+		current = nil
+	}
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			flush()
+			continue
+		}
+		if strings.HasPrefix(line, "worktree ") {
+			flush()
+			current = &Worktree{Path: strings.TrimSpace(strings.TrimPrefix(line, "worktree "))}
+			continue
+		}
+		if current == nil {
+			continue
+		}
+		switch {
+		case line == "bare":
+			current.IsBare = true
+		case line == "detached":
+			current.IsDetached = true
+		case strings.HasPrefix(line, "HEAD "):
+			current.HeadSHA = strings.TrimSpace(strings.TrimPrefix(line, "HEAD "))
+		case strings.HasPrefix(line, "branch "):
+			ref := strings.TrimSpace(strings.TrimPrefix(line, "branch "))
+			current.Branch = strings.TrimPrefix(ref, "refs/heads/")
+			current.IsDetached = false
+		}
+	}
+	flush()
+	return worktrees
 }
 
 func hasDotGitMarker(dir string) bool {

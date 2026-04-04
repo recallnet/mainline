@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -49,6 +50,78 @@ func TestBranchStatusReportsExactAheadBehindCounts(t *testing.T) {
 	}
 	if status.AheadCount != 2 || status.BehindCount != 1 {
 		t.Fatalf("expected ahead=2 behind=1, got %+v", status)
+	}
+}
+
+func TestListWorktreesHandlesBareStorageRepos(t *testing.T) {
+	seedRoot := t.TempDir()
+	runGitCommand(t, seedRoot, "git", "init", "-b", "main")
+	runGitCommand(t, seedRoot, "git", "config", "user.name", "Test User")
+	runGitCommand(t, seedRoot, "git", "config", "user.email", "test@example.com")
+	runGitCommand(t, seedRoot, "git", "config", "core.hooksPath", ".git/hooks")
+	writeFile(t, filepath.Join(seedRoot, "README.md"), "# test\n")
+	runGitCommand(t, seedRoot, "git", "add", "README.md")
+	runGitCommand(t, seedRoot, "git", "commit", "-m", "initial")
+
+	bareDir := filepath.Join(t.TempDir(), "repo.git")
+	runGitCommand(t, t.TempDir(), "git", "clone", "--bare", seedRoot, bareDir)
+
+	mainWorktree := filepath.Join(t.TempDir(), "main-worktree")
+	runGitCommand(t, seedRoot, "git", "--git-dir", bareDir, "worktree", "add", mainWorktree, "main")
+	extraWorktree := filepath.Join(t.TempDir(), "feature-worktree")
+	runGitCommand(t, mainWorktree, "git", "worktree", "add", "-b", "feature/test", extraWorktree)
+
+	worktrees, err := NewEngine(mainWorktree).ListWorktrees()
+	if err != nil {
+		t.Fatalf("ListWorktrees: %v", err)
+	}
+	if len(worktrees) < 3 {
+		t.Fatalf("expected bare root, main worktree, and feature worktree, got %+v", worktrees)
+	}
+
+	seen := map[string]Worktree{}
+	for _, wt := range worktrees {
+		seen[wt.Path] = wt
+	}
+	mainPath := normalizePath(mainWorktree)
+	extraPath := normalizePath(extraWorktree)
+	barePath := normalizePath(bareDir)
+	if _, ok := seen[barePath]; !ok {
+		t.Fatalf("expected bare repository entry %q in %+v", barePath, worktrees)
+	}
+	if wt, ok := seen[mainPath]; !ok || wt.Branch != "main" {
+		t.Fatalf("expected main worktree entry for %q, got %+v", mainPath, seen[mainPath])
+	}
+	if wt, ok := seen[extraPath]; !ok || wt.Branch != "feature/test" {
+		t.Fatalf("expected feature worktree entry for %q, got %+v", extraPath, seen[extraPath])
+	}
+}
+
+func TestParseWorktreeListPorcelainHandlesBareAndLinkedEntries(t *testing.T) {
+	output := strings.TrimSpace(`
+worktree /repo.git
+bare
+
+worktree /repo-main
+HEAD 1111111111111111111111111111111111111111
+branch refs/heads/main
+
+worktree /repo-feature
+HEAD 2222222222222222222222222222222222222222
+detached
+`) + "\n"
+	worktrees := parseWorktreeListPorcelain(output, "/repo-main")
+	if len(worktrees) != 3 {
+		t.Fatalf("expected 3 worktrees, got %+v", worktrees)
+	}
+	if !worktrees[0].IsBare || worktrees[0].Path != "/repo.git" {
+		t.Fatalf("expected bare root entry first, got %+v", worktrees[0])
+	}
+	if worktrees[1].Branch != "main" || !worktrees[1].IsCurrent {
+		t.Fatalf("expected current main entry, got %+v", worktrees[1])
+	}
+	if !worktrees[2].IsDetached || worktrees[2].HeadSHA == "" {
+		t.Fatalf("expected detached feature entry, got %+v", worktrees[2])
 	}
 }
 
