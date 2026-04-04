@@ -1176,7 +1176,7 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 	}
 
 	if !protectedWorktreeCleanForPublish {
-		repaired, repairNote, repairErr := tryRepairCanonicalProtectedRoot(ctx, engine, cfg, store, repoRecord, hasRepoRecord)
+		repaired, repairNote, repairErr := tryRepairCanonicalProtectedRoot(ctx, engine, cfg, store, repoRecord, true)
 		if repairErr != nil {
 			skipped = append(skipped, repairNote)
 		} else if repaired {
@@ -1215,7 +1215,7 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 	return applied, skipped, nil
 }
 
-func tryRepairCanonicalProtectedRoot(ctx context.Context, engine git.Engine, cfg policy.File, store state.Store, repoRecord state.RepositoryRecord, hasRepoRecord bool) (bool, string, error) {
+func tryRepairCanonicalProtectedRoot(ctx context.Context, engine git.Engine, cfg policy.File, store state.Store, repoRecord state.RepositoryRecord, requireIdle bool) (bool, string, error) {
 	if cfg.Repo.MainWorktree == "" {
 		return false, "", nil
 	}
@@ -1235,15 +1235,14 @@ func tryRepairCanonicalProtectedRoot(ctx context.Context, engine git.Engine, cfg
 	if branch != cfg.Repo.ProtectedBranch {
 		return false, fmt.Sprintf("left protected root dirty because repository root is on %s, expected %s", branch, cfg.Repo.ProtectedBranch), nil
 	}
-	if !hasRepoRecord {
-		return false, "left protected root dirty because the repository is not initialized", nil
-	}
-	count, err := store.CountUnfinishedItems(ctx, repoRecord.ID)
-	if err != nil {
-		return false, "", err
-	}
-	if count != 0 {
-		return false, fmt.Sprintf("left protected root dirty because %d unfinished queue item(s) still need operator attention", count), nil
+	if requireIdle {
+		count, err := store.CountUnfinishedItems(ctx, repoRecord.ID)
+		if err != nil {
+			return false, "", err
+		}
+		if count != 0 {
+			return false, fmt.Sprintf("left protected root dirty because %d unfinished queue item(s) still need operator attention", count), nil
+		}
 	}
 	if cfg.Repo.RemoteName == "" {
 		return false, "left protected root dirty because no remote is configured for safe repair", nil

@@ -79,6 +79,33 @@ func TestPublishRejectsDirtyCanonicalRootCheckout(t *testing.T) {
 	}
 }
 
+func TestPublishAutoRecoversDirtyCanonicalRootCheckoutWhenSafe(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "1")
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "DIRTY.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(DIRTY.txt): %v", err)
+	}
+
+	var publishOut bytes.Buffer
+	var publishErr bytes.Buffer
+	if err := runPublish([]string{"--repo", repoRoot, "--json"}, &publishOut, &publishErr); err != nil {
+		t.Fatalf("expected publish to auto-repair safe dirty root, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, "DIRTY.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected DIRTY.txt to be removed by auto-repair, got %v", err)
+	}
+	clean, err := git.NewEngine(repoRoot).WorktreeIsClean(repoRoot)
+	if err != nil {
+		t.Fatalf("WorktreeIsClean: %v", err)
+	}
+	if !clean {
+		t.Fatalf("expected protected branch worktree clean after auto-repair")
+	}
+}
+
 func TestPublishDrainsAndPublishesWithoutDaemon(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

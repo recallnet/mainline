@@ -139,7 +139,7 @@ Flags:
 }
 
 func validateLandPreflight(repoPath string) error {
-	layout, repoRoot, cfg, _, _, err := loadRepoContext(repoPath)
+	layout, repoRoot, cfg, repoRecord, store, err := loadRepoContext(repoPath)
 	if err != nil {
 		return err
 	}
@@ -152,21 +152,15 @@ func validateLandPreflight(repoPath string) error {
 		return fmt.Errorf("main worktree %s does not belong to repository %s", cfg.Repo.MainWorktree, repoRoot)
 	}
 
-	report, err := git.NewEngine(mainLayout.WorktreeRoot).InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
-	if err != nil {
+	if _, err := ensureProtectedRootHealthy(
+		context.Background(),
+		git.NewEngine(mainLayout.WorktreeRoot),
+		cfg,
+		store,
+		repoRecord,
+		protectedRootRecoveryAllowQueued,
+	); err != nil {
 		return err
-	}
-	if !report.MainWorktreeExists {
-		return fmt.Errorf("main worktree %s is missing", cfg.Repo.MainWorktree)
-	}
-	if !report.ProtectedBranchExists {
-		return fmt.Errorf("protected branch %q does not exist", cfg.Repo.ProtectedBranch)
-	}
-	if !report.ProtectedBranchClean {
-		return protectedWorktreeDirtyError(cfg.Repo.MainWorktree, report.ProtectedDirtyPaths)
-	}
-	if report.HasDivergedUpstream {
-		return fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, report.UpstreamRef)
 	}
 
 	return nil

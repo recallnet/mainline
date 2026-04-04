@@ -99,6 +99,37 @@ func TestRunOnceRejectsDirtyCanonicalRootCheckout(t *testing.T) {
 	}
 }
 
+func TestRunOnceAutoRecoversDirtyCanonicalRootCheckoutWhenSafe(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-safe-repair")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/safe-repair", featurePath)
+	writeFileAndCommit(t, featurePath, "safe.txt", "safe\n", "safe repair change")
+	submitBranch(t, featurePath)
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "DIRTY.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(DIRTY.txt): %v", err)
+	}
+
+	runOnce(t, repoRoot)
+
+	if _, err := os.Stat(filepath.Join(repoRoot, "safe.txt")); err != nil {
+		t.Fatalf("expected safe.txt after integration: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, "DIRTY.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected DIRTY.txt to be removed by auto-repair, got %v", err)
+	}
+	clean, err := git.NewEngine(repoRoot).WorktreeIsClean(repoRoot)
+	if err != nil {
+		t.Fatalf("WorktreeIsClean: %v", err)
+	}
+	if !clean {
+		t.Fatalf("expected protected branch worktree clean after auto-repair")
+	}
+}
+
 func TestRunOnceSupersedesOlderBlockedSubmissionForSameBranch(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)
