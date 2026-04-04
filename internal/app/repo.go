@@ -68,64 +68,6 @@ type rootCheckoutInfo struct {
 	Topology    string `json:"topology,omitempty"`
 }
 
-func handleCommand(command string, args []string, stdout io.Writer, stderr io.Writer) error {
-	switch command {
-	case "land":
-		return runLand(args, stdout, stderr)
-	case "submit":
-		return runSubmit(args, stdout, stderr)
-	case "status":
-		return runStatus(args, stdout, stderr)
-	case "confidence":
-		return runConfidence(args, stdout, stderr)
-	case "run-once":
-		return runRunOnce(args, stdout, stderr)
-	case "wait":
-		return runWait(args, stdout, stderr)
-	case "retry":
-		return runRetry(args, stdout, stderr)
-	case "cancel":
-		return runCancel(args, stdout, stderr)
-	case "publish":
-		return runPublish(args, stdout, stderr)
-	case "logs":
-		return runLogs(args, stdout, stderr)
-	case "watch":
-		return runWatch(args, stdout, stderr)
-	case "events":
-		return runEvents(args, stdout, stderr)
-	case "completion":
-		return runCompletion(args, stdout, stderr)
-	case "config edit":
-		return runConfigEdit(args, stdout, stderr)
-	case "registry prune":
-		return runRegistryPrune(args, stdout, stderr)
-	case "repo audit":
-		return runRepoAudit(args, stdout, stderr)
-	case "repo init":
-		return runRepoInit(args, stdout, stderr)
-	case "repo root":
-		return runRepoRoot(args, stdout, stderr)
-	case "repo show":
-		return runRepoShow(args, stdout, stderr)
-	case "doctor":
-		return runDoctor(args, stdout, stderr)
-	default:
-		return runPlaceholderCommand(command, args, stdout)
-	}
-}
-
-func runPlaceholderCommand(command string, args []string, stdout io.Writer) error {
-	wiring := bootstrap()
-	fmt.Fprintf(stdout, "%s is not implemented yet.\n", command)
-	if len(args) > 0 {
-		fmt.Fprintf(stdout, "Received %d trailing argument(s) for future subcommand handling.\n", len(args))
-	}
-	fmt.Fprintf(stdout, "Protected branch default: %s\n", wiring.Policy.Repo.ProtectedBranch)
-	fmt.Fprintf(stdout, "Repository root: %s\n", wiring.Git.RepositoryRoot)
-	return nil
-}
-
 func runRepoInit(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" repo init", flag.ContinueOnError)
 	fs.SetOutput(stderr)

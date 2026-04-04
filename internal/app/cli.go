@@ -6,34 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
+
+	"github.com/spf13/cobra"
 )
 
 var activeCLIProgramName = "mainline"
-
-var cliCommands = []string{
-	"land",
-	"submit",
-	"status",
-	"confidence",
-	"run-once",
-	"wait",
-	"retry",
-	"cancel",
-	"publish",
-	"logs",
-	"watch",
-	"events",
-	"doctor",
-	"completion",
-	"version",
-	"config edit",
-	"registry prune",
-	"repo audit",
-	"repo init",
-	"repo root",
-	"repo show",
-}
 
 // RunCLI executes the mainline command-line interface.
 func RunCLI(args []string) error {
@@ -56,58 +33,143 @@ func runCLIWithName(programName string, args []string, stdout io.Writer, stderr 
 		activeCLIProgramName = previousProgramName
 	}()
 
-	fs := flag.NewFlagSet(programName, flag.ContinueOnError)
-	fs.SetOutput(stderr)
+	root := newCLICommandTree(programName, stdout, stderr)
+	root.SetArgs(args)
+	root.SetOut(stdout)
+	root.SetErr(stderr)
+	return root.Execute()
+}
 
-	var showHelp bool
-	var showVersion bool
+func newCLICommandTree(programName string, stdout io.Writer, stderr io.Writer) *cobra.Command {
 	var asJSON bool
-	fs.BoolVar(&showHelp, "help", false, "show help")
-	fs.BoolVar(&showHelp, "h", false, "show help")
-	fs.BoolVar(&showVersion, "version", false, "show version")
-	fs.BoolVar(&asJSON, "json", false, "output json where supported")
+	var showVersion bool
 
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+	root := &cobra.Command{
+		Use:              programName,
+		SilenceUsage:     true,
+		SilenceErrors:    true,
+		TraverseChildren: true,
+		Args:             cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if showVersion {
+				printVersion(stdout, programName, asJSON)
+				return nil
+			}
 			printCLIHelp(stdout, programName)
 			return nil
-		}
-		return err
+		},
 	}
-
-	if showHelp {
+	root.CompletionOptions.DisableDefaultCmd = true
+	root.SetHelpFunc(func(*cobra.Command, []string) {
 		printCLIHelp(stdout, programName)
-		return nil
-	}
-	if showVersion {
-		printVersion(stdout, programName, asJSON)
-		return nil
-	}
+	})
+	root.PersistentFlags().BoolVar(&asJSON, "json", false, "output json where supported")
+	root.Flags().BoolVar(&showVersion, "version", false, "show version")
 
-	remaining := fs.Args()
-	if len(remaining) == 0 {
-		printCLIHelp(stdout, programName)
-		return nil
-	}
+	root.AddCommand(
+		newLegacyCommand("land", "submit and wait for integrate plus publish", true, stdout, stderr, runLand),
+		newLegacyCommand("submit", "queue a topic worktree or detached sha", true, stdout, stderr, runSubmit),
+		newLegacyCommand("status", "show queue and protected-branch state", true, stdout, stderr, runStatus),
+		newLegacyCommand("confidence", "summarize evidence and promotion gates", true, stdout, stderr, runConfidence),
+		newLegacyCommand("run-once", "run one integration or publish cycle", true, stdout, stderr, runRunOnce),
+		newLegacyCommand("wait", "wait on a submission id for integration or landed outcome", true, stdout, stderr, runWait),
+		newLegacyCommand("retry", "requeue a blocked, failed, or cancelled item", false, stdout, stderr, runRetry),
+		newLegacyCommand("cancel", "cancel a queued, blocked, or failed item", false, stdout, stderr, runCancel),
+		newLegacyCommand("publish", "queue publish of the protected tip", true, stdout, stderr, runPublish),
+		newLegacyCommand("logs", "replay durable event history", false, stdout, stderr, runLogs),
+		newLegacyCommand("watch", "refresh status continuously", true, stdout, stderr, runWatch),
+		newLegacyCommand("events", "stream durable events or lifecycle envelopes", true, stdout, stderr, runEvents),
+		newLegacyCommand("doctor", "inspect and optionally repair stuck states", true, stdout, stderr, runDoctor),
+		newLegacyCommand("completion", "emit shell completion", true, stdout, stderr, runCompletion),
+		newVersionCommand(programName, stdout),
+		newConfigCommand(stdout, stderr),
+		newRegistryCommand(stdout, stderr),
+		newRepoCommand(stdout, stderr),
+	)
 
-	command, commandArgs := parseCLICommand(remaining)
-	if !isKnownCLICommand(command) {
-		return fmt.Errorf("unknown command %q\n\n%s", command, cliHelpText(programName))
-	}
-	if command == "version" {
-		printVersion(stdout, programName, asJSON)
-		return nil
-	}
+	return root
+}
 
-	if asJSON {
-		commandArgs = appendJSONFlag(commandArgs)
+func newLegacyCommand(use string, short string, supportsJSON bool, stdout io.Writer, stderr io.Writer, runner func([]string, io.Writer, io.Writer) error) *cobra.Command {
+	return &cobra.Command{
+		Use:                use,
+		Short:              short,
+		DisableFlagParsing: true,
+		Args:               cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if shouldForceJSON(cmd) {
+				if !supportsJSON {
+					return fmt.Errorf("unknown flag: --json")
+				}
+				args = appendJSONFlag(args)
+			}
+			err := runner(args, stdout, stderr)
+			if errors.Is(err, flag.ErrHelp) {
+				return nil
+			}
+			return err
+		},
 	}
+}
 
-	err := handleCommand(command, commandArgs, stdout, stderr)
-	if errors.Is(err, flag.ErrHelp) {
-		return nil
+func newVersionCommand(programName string, stdout io.Writer) *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "show build metadata",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			printVersion(stdout, programName, shouldForceJSON(cmd))
+			return nil
+		},
 	}
-	return err
+}
+
+func newConfigCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
+	config := &cobra.Command{
+		Use:   "config",
+		Short: "configuration commands",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	config.AddCommand(
+		newLegacyCommand("edit", "open mainline.toml in an editor", false, stdout, stderr, runConfigEdit),
+	)
+	return config
+}
+
+func newRegistryCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
+	registry := &cobra.Command{
+		Use:   "registry",
+		Short: "global registry commands",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	registry.AddCommand(
+		newLegacyCommand("prune", "remove stale repo entries from the global registry", true, stdout, stderr, runRegistryPrune),
+	)
+	return registry
+}
+
+func newRepoCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
+	repo := &cobra.Command{
+		Use:   "repo",
+		Short: "repository commands",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+	repo.AddCommand(
+		newLegacyCommand("audit", "list local branches not yet merged into protected main", true, stdout, stderr, runRepoAudit),
+		newLegacyCommand("init", "initialize repo config and durable state", true, stdout, stderr, runRepoInit),
+		newLegacyCommand("root", "inspect or adopt the canonical root checkout", true, stdout, stderr, runRepoRoot),
+		newLegacyCommand("show", "inspect repo config and worktrees", true, stdout, stderr, runRepoShow),
+	)
+	return repo
 }
 
 func printCLIHelp(w io.Writer, programName string) {
@@ -171,30 +233,6 @@ Use "%s <command> --help" for command-specific examples.
 `, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName)
 }
 
-func isKnownCLICommand(command string) bool {
-	for _, candidate := range cliCommands {
-		if candidate == command {
-			return true
-		}
-	}
-	return false
-}
-
-func parseCLICommand(args []string) (string, []string) {
-	if len(args) == 0 {
-		return "", nil
-	}
-
-	if args[0] == "repo" || args[0] == "config" || args[0] == "registry" {
-		if len(args) == 1 {
-			return args[0], nil
-		}
-		return strings.Join(args[:2], " "), args[2:]
-	}
-
-	return args[0], args[1:]
-}
-
 func appendJSONFlag(args []string) []string {
 	for _, arg := range args {
 		if arg == "--json" {
@@ -216,4 +254,9 @@ func currentCLIProgramName() string {
 		return "mainline"
 	}
 	return activeCLIProgramName
+}
+
+func shouldForceJSON(cmd *cobra.Command) bool {
+	flagValue := cmd.InheritedFlags().Lookup("json")
+	return flagValue != nil && flagValue.Changed && flagValue.Value.String() == "true"
 }
