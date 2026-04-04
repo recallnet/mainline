@@ -9,6 +9,13 @@ instructions.
   `main` checkout for this repo.
 - The root checkout must stay clean and on branch `main`. Humans inspect it,
   wrappers build from it, and docs refer to it.
+- If the canonical root checkout on `main` is ever dirty here, treat that as a
+  `mainline` bug, not normal repo state. The bug may be in merge-queue behavior
+  or in unclear agent/operator instructions. File it to `recallnet/mainline`
+  immediately, then use `mq doctor --repo /Users/devrel/Projects/recallnet/mainline`
+  to inspect and `mq doctor --repo /Users/devrel/Projects/recallnet/mainline --fix`
+  when the queue is idle and the root only needs to be restored to shipped
+  `main`.
 - Do not run local environment-mutating helpers like `npm skills` from that
   canonical protected root checkout. Run them in the topic worktree you are
   changing so generated lockfiles and cache drift do not block publish.
