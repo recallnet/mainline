@@ -1,10 +1,8 @@
 package app
 
-import "github.com/recallnet/mainline/internal/state"
-
-const (
-	submissionRefKindBranch = "branch"
-	submissionRefKindSHA    = "sha"
+import (
+	"github.com/recallnet/mainline/internal/domain"
+	"github.com/recallnet/mainline/internal/state"
 )
 
 func submissionDisplayRef(submission state.IntegrationSubmission) string {
@@ -26,3 +24,8 @@ func preparedSubmissionDisplayRef(prepared preparedSubmission) string {
 	}
 	return prepared.SourceSHA
 }
+
+const (
+	submissionRefKindBranch = domain.RefKindBranch
+	submissionRefKindSHA    = domain.RefKindSHA
+)

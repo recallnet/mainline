@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/state"
 )
@@ -28,44 +29,128 @@ type statusCounts struct {
 }
 
 type statusResult struct {
-	RepositoryRoot     string                 `json:"repository_root"`
-	StatePath          string                 `json:"state_path"`
-	CurrentWorktree    string                 `json:"current_worktree"`
-	CurrentBranch      string                 `json:"current_branch"`
-	ProtectedBranch    string                 `json:"protected_branch"`
-	ProtectedBranchSHA string                 `json:"protected_branch_sha"`
-	ProtectedUpstream  git.BranchStatus       `json:"protected_upstream"`
-	ExecutionEstimate  executionEstimate      `json:"execution_estimate"`
-	Counts             statusCounts           `json:"counts"`
-	LatestSubmission   *statusSubmission      `json:"latest_submission,omitempty"`
-	LatestPublish      *state.PublishRequest  `json:"latest_publish,omitempty"`
-	ActiveSubmissions  []statusSubmission     `json:"active_submissions,omitempty"`
-	ActivePublishes    []state.PublishRequest `json:"active_publishes,omitempty"`
-	IntegrationWorker  *state.LeaseMetadata   `json:"integration_worker,omitempty"`
-	PublishWorker      *state.LeaseMetadata   `json:"publish_worker,omitempty"`
-	RecentEvents       []state.EventRecord    `json:"recent_events"`
+	RepositoryRoot     string               `json:"repository_root"`
+	StatePath          string               `json:"state_path"`
+	CurrentWorktree    string               `json:"current_worktree"`
+	CurrentBranch      string               `json:"current_branch"`
+	ProtectedBranch    string               `json:"protected_branch"`
+	ProtectedBranchSHA string               `json:"protected_branch_sha"`
+	ProtectedUpstream  git.BranchStatus     `json:"protected_upstream"`
+	ExecutionEstimate  executionEstimate    `json:"execution_estimate"`
+	Counts             statusCounts         `json:"counts"`
+	LatestSubmission   *statusSubmission    `json:"latest_submission,omitempty"`
+	LatestPublish      *statusPublish       `json:"latest_publish,omitempty"`
+	ActiveSubmissions  []statusSubmission   `json:"active_submissions,omitempty"`
+	ActivePublishes    []statusPublish      `json:"active_publishes,omitempty"`
+	IntegrationWorker  *state.LeaseMetadata `json:"integration_worker,omitempty"`
+	PublishWorker      *state.LeaseMetadata `json:"publish_worker,omitempty"`
+	RecentEvents       []state.EventRecord  `json:"recent_events"`
 }
 
 type statusSubmission struct {
-	state.IntegrationSubmission
-	PublishRequestID      int64    `json:"publish_request_id,omitempty"`
-	PublishStatus         string   `json:"publish_status,omitempty"`
-	Outcome               string   `json:"outcome,omitempty"`
-	QueuePosition         int      `json:"queue_position,omitempty"`
-	EstimatedCompletionMS int64    `json:"estimated_completion_ms,omitempty"`
-	EstimateBasis         string   `json:"estimate_basis,omitempty"`
-	BlockedReason         string   `json:"blocked_reason,omitempty"`
-	ConflictFiles         []string `json:"conflict_files,omitempty"`
-	ProtectedTipSHA       string   `json:"protected_tip_sha,omitempty"`
-	RetryHint             string   `json:"retry_hint,omitempty"`
+	ID                    int64                    `json:"id"`
+	RepoID                int64                    `json:"repo_id"`
+	BranchName            string                   `json:"branch_name"`
+	SourceRef             string                   `json:"source_ref"`
+	RefKind               domain.RefKind           `json:"ref_kind"`
+	SourceWorktree        string                   `json:"source_worktree_path"`
+	SourceSHA             string                   `json:"source_sha"`
+	AllowNewerHead        bool                     `json:"allow_newer_head,omitempty"`
+	RequestedBy           string                   `json:"requested_by"`
+	Priority              string                   `json:"priority"`
+	Status                domain.SubmissionStatus  `json:"status"`
+	LastError             string                   `json:"last_error"`
+	CreatedAt             time.Time                `json:"created_at"`
+	UpdatedAt             time.Time                `json:"updated_at"`
+	PublishRequestID      int64                    `json:"publish_request_id,omitempty"`
+	PublishStatus         domain.PublishStatus     `json:"publish_status,omitempty"`
+	Outcome               domain.SubmissionOutcome `json:"outcome,omitempty"`
+	QueuePosition         int                      `json:"queue_position,omitempty"`
+	EstimatedCompletionMS int64                    `json:"estimated_completion_ms,omitempty"`
+	EstimateBasis         domain.SubmissionOutcome `json:"estimate_basis,omitempty"`
+	BlockedReason         domain.BlockedReason     `json:"blocked_reason,omitempty"`
+	ConflictFiles         []string                 `json:"conflict_files,omitempty"`
+	ProtectedTipSHA       string                   `json:"protected_tip_sha,omitempty"`
+	RetryHint             string                   `json:"retry_hint,omitempty"`
 }
 
 type blockedSubmissionDetails struct {
-	Error           string   `json:"error,omitempty"`
-	BlockedReason   string   `json:"blocked_reason,omitempty"`
-	ConflictFiles   []string `json:"conflict_files,omitempty"`
-	ProtectedTipSHA string   `json:"protected_tip_sha,omitempty"`
-	RetryHint       string   `json:"retry_hint,omitempty"`
+	Error           string               `json:"error,omitempty"`
+	BlockedReason   domain.BlockedReason `json:"blocked_reason,omitempty"`
+	ConflictFiles   []string             `json:"conflict_files,omitempty"`
+	ProtectedTipSHA string               `json:"protected_tip_sha,omitempty"`
+	RetryHint       string               `json:"retry_hint,omitempty"`
+}
+
+type statusPublish struct {
+	ID             int64                `json:"id"`
+	RepoID         int64                `json:"repo_id"`
+	TargetSHA      string               `json:"target_sha"`
+	Status         domain.PublishStatus `json:"status"`
+	AttemptCount   int                  `json:"attempt_count"`
+	NextAttemptAt  time.Time            `json:"next_attempt_at,omitempty"`
+	HasNextAttempt bool                 `json:"has_next_attempt,omitempty"`
+	SupersededBy   int64                `json:"superseded_by,omitempty"`
+	CreatedAt      time.Time            `json:"created_at"`
+	UpdatedAt      time.Time            `json:"updated_at"`
+}
+
+func newStatusSubmission(submission state.IntegrationSubmission) statusSubmission {
+	return statusSubmission{
+		ID:             submission.ID,
+		RepoID:         submission.RepoID,
+		BranchName:     submission.BranchName,
+		SourceRef:      submission.SourceRef,
+		RefKind:        submission.RefKind,
+		SourceWorktree: submission.SourceWorktree,
+		SourceSHA:      submission.SourceSHA,
+		AllowNewerHead: submission.AllowNewerHead,
+		RequestedBy:    submission.RequestedBy,
+		Priority:       submission.Priority,
+		Status:         submission.Status,
+		LastError:      submission.LastError,
+		CreatedAt:      submission.CreatedAt,
+		UpdatedAt:      submission.UpdatedAt,
+	}
+}
+
+func (s statusSubmission) integrationSubmission() state.IntegrationSubmission {
+	return state.IntegrationSubmission{
+		ID:             s.ID,
+		RepoID:         s.RepoID,
+		BranchName:     s.BranchName,
+		SourceRef:      s.SourceRef,
+		RefKind:        s.RefKind,
+		SourceWorktree: s.SourceWorktree,
+		SourceSHA:      s.SourceSHA,
+		AllowNewerHead: s.AllowNewerHead,
+		RequestedBy:    s.RequestedBy,
+		Priority:       s.Priority,
+		Status:         s.Status,
+		LastError:      s.LastError,
+		CreatedAt:      s.CreatedAt,
+		UpdatedAt:      s.UpdatedAt,
+	}
+}
+
+func newStatusPublish(request state.PublishRequest) statusPublish {
+	result := statusPublish{
+		ID:           request.ID,
+		RepoID:       request.RepoID,
+		TargetSHA:    request.TargetSHA,
+		Status:       request.Status,
+		AttemptCount: request.AttemptCount,
+		CreatedAt:    request.CreatedAt,
+		UpdatedAt:    request.UpdatedAt,
+	}
+	if request.NextAttemptAt.Valid {
+		result.HasNextAttempt = true
+		result.NextAttemptAt = request.NextAttemptAt.Time
+	}
+	if request.SupersededBy.Valid {
+		result.SupersededBy = request.SupersededBy.Int64
+	}
+	return result
 }
 
 func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -191,7 +276,8 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		result.LatestSubmission = &latest
 	}
 	if len(requests) > 0 {
-		result.LatestPublish = &requests[len(requests)-1]
+		latest := newStatusPublish(requests[len(requests)-1])
+		result.LatestPublish = &latest
 	}
 
 	return result, nil
@@ -232,7 +318,7 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 	if result.LatestSubmission != nil {
 		fmt.Fprintf(stdout, "Latest submission: #%d %s from %s (%s, priority=%s)\n",
 			result.LatestSubmission.ID,
-			submissionDisplayRef(result.LatestSubmission.IntegrationSubmission),
+			submissionDisplayRef(result.LatestSubmission.integrationSubmission()),
 			result.LatestSubmission.SourceWorktree,
 			result.LatestSubmission.Status,
 			result.LatestSubmission.Priority,
@@ -287,7 +373,7 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 	if len(result.ActiveSubmissions) > 0 {
 		fmt.Fprintln(stdout, "Active submissions:")
 		for _, submission := range result.ActiveSubmissions {
-			fmt.Fprintf(stdout, "  #%d %s (%s)\n", submission.ID, submissionDisplayRef(submission.IntegrationSubmission), submission.Status)
+			fmt.Fprintf(stdout, "  #%d %s (%s)\n", submission.ID, submissionDisplayRef(submission.integrationSubmission()), submission.Status)
 		}
 	}
 	if len(result.ActivePublishes) > 0 {
@@ -328,7 +414,7 @@ func activeSubmissions(submissions []statusSubmission) []statusSubmission {
 	var active []statusSubmission
 	for _, submission := range submissions {
 		switch submission.Status {
-		case "queued", "running", "blocked":
+		case domain.SubmissionStatusQueued, domain.SubmissionStatusRunning, domain.SubmissionStatusBlocked:
 			active = append(active, submission)
 		}
 	}
@@ -338,8 +424,8 @@ func activeSubmissions(submissions []statusSubmission) []statusSubmission {
 func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int64, submissions []state.IntegrationSubmission) ([]statusSubmission, error) {
 	enriched := make([]statusSubmission, 0, len(submissions))
 	for _, submission := range submissions {
-		item := statusSubmission{IntegrationSubmission: submission}
-		if submission.Status == "blocked" {
+		item := newStatusSubmission(submission)
+		if submission.Status == domain.SubmissionStatusBlocked {
 			details, err := latestBlockedSubmissionDetails(ctx, store, repoID, submission.ID)
 			if err != nil {
 				return nil, err
@@ -349,14 +435,14 @@ func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int6
 			item.ProtectedTipSHA = details.ProtectedTipSHA
 			item.RetryHint = details.RetryHint
 		}
-		if submission.Status == "succeeded" {
+		if submission.Status == domain.SubmissionStatusSucceeded {
 			info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission)
 			if err != nil {
 				return nil, err
 			}
 			item.ProtectedTipSHA = info.ProtectedSHA
 			item.PublishRequestID = info.PublishRequestID
-			item.PublishStatus = info.PublishStatus
+			item.PublishStatus = domain.PublishStatus(info.PublishStatus)
 			item.Outcome = info.Outcome
 		}
 		enriched = append(enriched, item)
@@ -365,12 +451,12 @@ func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int6
 }
 
 func latestBlockedSubmissionDetails(ctx context.Context, store state.Store, repoID int64, submissionID int64) (blockedSubmissionDetails, error) {
-	events, err := store.ListEventsForItem(ctx, repoID, "integration_submission", submissionID, 10)
+	events, err := store.ListEventsForItem(ctx, repoID, string(domain.ItemTypeIntegrationSubmission), submissionID, 10)
 	if err != nil {
 		return blockedSubmissionDetails{}, err
 	}
 	for i := len(events) - 1; i >= 0; i-- {
-		if events[i].EventType != "integration.blocked" {
+		if events[i].EventType != domain.EventTypeIntegrationBlocked {
 			continue
 		}
 		var details blockedSubmissionDetails
@@ -385,12 +471,12 @@ func latestBlockedSubmissionDetails(ctx context.Context, store state.Store, repo
 	return blockedSubmissionDetails{}, nil
 }
 
-func activePublishes(requests []state.PublishRequest) []state.PublishRequest {
-	var active []state.PublishRequest
+func activePublishes(requests []state.PublishRequest) []statusPublish {
+	var active []statusPublish
 	for _, request := range requests {
 		switch request.Status {
-		case "queued", "running":
-			active = append(active, request)
+		case domain.PublishStatusQueued, domain.PublishStatusRunning:
+			active = append(active, newStatusPublish(request))
 		}
 	}
 	return active
@@ -400,31 +486,31 @@ func summarizeCounts(submissions []state.IntegrationSubmission, requests []state
 	var counts statusCounts
 	for _, submission := range submissions {
 		switch submission.Status {
-		case "queued":
+		case domain.SubmissionStatusQueued:
 			counts.QueuedSubmissions++
-		case "running":
+		case domain.SubmissionStatusRunning:
 			counts.RunningSubmissions++
-		case "blocked":
+		case domain.SubmissionStatusBlocked:
 			counts.BlockSubmissions++
-		case "failed":
+		case domain.SubmissionStatusFailed:
 			counts.FailedSubmissions++
-		case "cancelled":
+		case domain.SubmissionStatusCancelled:
 			counts.CancelledSubmissions++
-		case "superseded":
+		case domain.SubmissionStatusSuperseded:
 			// terminal and intentionally omitted from active queue counts
 		}
 	}
 	for _, request := range requests {
 		switch request.Status {
-		case "queued":
+		case domain.PublishStatusQueued:
 			counts.QueuedPublishes++
-		case "running":
+		case domain.PublishStatusRunning:
 			counts.RunningPublishes++
-		case "failed":
+		case domain.PublishStatusFailed:
 			counts.FailedPublishes++
-		case "cancelled":
+		case domain.PublishStatusCancelled:
 			counts.CancelledPublishes++
-		case "succeeded":
+		case domain.PublishStatusSucceeded:
 			counts.SucceededPublishes++
 		}
 	}

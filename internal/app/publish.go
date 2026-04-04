@@ -10,20 +10,21 @@ import (
 	"os"
 	"strings"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
 )
 
 type publishResult struct {
-	OK               bool   `json:"ok"`
-	PublishRequestID int64  `json:"publish_request_id"`
-	RepositoryRoot   string `json:"repository_root"`
-	StatePath        string `json:"state_path"`
-	TargetSHA        string `json:"target_sha"`
-	Status           string `json:"status"`
-	DrainAttempted   bool   `json:"drain_attempted,omitempty"`
-	DrainResult      string `json:"drain_result,omitempty"`
+	OK               bool                 `json:"ok"`
+	PublishRequestID int64                `json:"publish_request_id"`
+	RepositoryRoot   string               `json:"repository_root"`
+	StatePath        string               `json:"state_path"`
+	TargetSHA        string               `json:"target_sha"`
+	Status           domain.PublishStatus `json:"status"`
+	DrainAttempted   bool                 `json:"drain_attempted,omitempty"`
+	DrainResult      string               `json:"drain_result,omitempty"`
 }
 
 func runPublish(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -85,7 +86,7 @@ Flags:
 	request, err := store.CreatePublishRequest(ctx, state.PublishRequest{
 		RepoID:    repoRecord.ID,
 		TargetSHA: targetSHA,
-		Status:    "queued",
+		Status:    domain.PublishStatusQueued,
 	})
 	if err != nil {
 		return err
@@ -93,13 +94,12 @@ Flags:
 
 	if err := appendStateEvent(ctx, store, state.EventRecord{
 		RepoID:    repoRecord.ID,
-		ItemType:  "publish_request",
+		ItemType:  domain.ItemTypePublishRequest,
 		ItemID:    state.NullInt64(request.ID),
-		EventType: "publish.requested",
-		Payload: mustJSON(map[string]string{
-			"target_sha": targetSHA,
-			"reason":     "manual",
-			"repo_root":  repoRoot,
+		EventType: domain.EventTypePublishRequested,
+		Payload: mustJSON(domain.PublishRequestedPayload{
+			TargetSHA: targetSHA,
+			Reason:    "manual",
 		}),
 	}); err != nil {
 		return err

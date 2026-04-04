@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/recallnet/mainline/internal/domain"
 	_ "modernc.org/sqlite"
 )
 
@@ -41,44 +42,44 @@ type RepositoryRecord struct {
 
 // IntegrationSubmission is the durable submission row.
 type IntegrationSubmission struct {
-	ID             int64     `json:"id"`
-	RepoID         int64     `json:"repo_id"`
-	BranchName     string    `json:"branch_name"`
-	SourceRef      string    `json:"source_ref"`
-	RefKind        string    `json:"ref_kind"`
-	SourceWorktree string    `json:"source_worktree_path"`
-	SourceSHA      string    `json:"source_sha"`
-	AllowNewerHead bool      `json:"allow_newer_head"`
-	RequestedBy    string    `json:"requested_by"`
-	Priority       string    `json:"priority"`
-	Status         string    `json:"status"`
-	LastError      string    `json:"last_error"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             int64                   `json:"id"`
+	RepoID         int64                   `json:"repo_id"`
+	BranchName     string                  `json:"branch_name"`
+	SourceRef      string                  `json:"source_ref"`
+	RefKind        domain.RefKind          `json:"ref_kind"`
+	SourceWorktree string                  `json:"source_worktree_path"`
+	SourceSHA      string                  `json:"source_sha"`
+	AllowNewerHead bool                    `json:"allow_newer_head"`
+	RequestedBy    string                  `json:"requested_by"`
+	Priority       string                  `json:"priority"`
+	Status         domain.SubmissionStatus `json:"status"`
+	LastError      string                  `json:"last_error"`
+	CreatedAt      time.Time               `json:"created_at"`
+	UpdatedAt      time.Time               `json:"updated_at"`
 }
 
 // PublishRequest is the durable publish row.
 type PublishRequest struct {
-	ID            int64         `json:"id"`
-	RepoID        int64         `json:"repo_id"`
-	TargetSHA     string        `json:"target_sha"`
-	Status        string        `json:"status"`
-	AttemptCount  int           `json:"attempt_count"`
-	NextAttemptAt sql.NullTime  `json:"next_attempt_at"`
-	SupersededBy  sql.NullInt64 `json:"superseded_by"`
-	CreatedAt     time.Time     `json:"created_at"`
-	UpdatedAt     time.Time     `json:"updated_at"`
+	ID            int64                `json:"id"`
+	RepoID        int64                `json:"repo_id"`
+	TargetSHA     string               `json:"target_sha"`
+	Status        domain.PublishStatus `json:"status"`
+	AttemptCount  int                  `json:"attempt_count"`
+	NextAttemptAt sql.NullTime         `json:"next_attempt_at"`
+	SupersededBy  sql.NullInt64        `json:"superseded_by"`
+	CreatedAt     time.Time            `json:"created_at"`
+	UpdatedAt     time.Time            `json:"updated_at"`
 }
 
 // EventRecord is the durable event row.
 type EventRecord struct {
-	ID        int64           `json:"id"`
-	RepoID    int64           `json:"repo_id"`
-	ItemType  string          `json:"item_type"`
-	ItemID    sql.NullInt64   `json:"item_id"`
-	EventType string          `json:"event_type"`
-	Payload   json.RawMessage `json:"payload"`
-	CreatedAt time.Time       `json:"created_at"`
+	ID        int64            `json:"id"`
+	RepoID    int64            `json:"repo_id"`
+	ItemType  domain.ItemType  `json:"item_type"`
+	ItemID    sql.NullInt64    `json:"item_id"`
+	EventType domain.EventType `json:"event_type"`
+	Payload   json.RawMessage  `json:"payload"`
+	CreatedAt time.Time        `json:"created_at"`
 }
 
 // NewStore returns a repo-local durable store.
@@ -193,10 +194,10 @@ func (s Store) CreateIntegrationSubmission(ctx context.Context, submission Integ
 	if submission.SourceRef == "" {
 		if submission.BranchName != "" {
 			submission.SourceRef = submission.BranchName
-			submission.RefKind = "branch"
+			submission.RefKind = domain.RefKindBranch
 		} else {
 			submission.SourceRef = submission.SourceSHA
-			submission.RefKind = "sha"
+			submission.RefKind = domain.RefKindSHA
 		}
 	}
 	db, err := s.open()
@@ -298,7 +299,7 @@ func (s Store) NextQueuedIntegrationSubmission(ctx context.Context, repoID int64
 }
 
 // UpdateIntegrationSubmissionStatus updates submission state and error text.
-func (s Store) UpdateIntegrationSubmissionStatus(ctx context.Context, submissionID int64, status string, lastError string) (IntegrationSubmission, error) {
+func (s Store) UpdateIntegrationSubmissionStatus(ctx context.Context, submissionID int64, status domain.SubmissionStatus, lastError string) (IntegrationSubmission, error) {
 	if err := applyTestFault("UpdateIntegrationSubmissionStatus"); err != nil {
 		return IntegrationSubmission{}, err
 	}
@@ -508,7 +509,7 @@ func (s Store) SupersedeOlderQueuedPublishRequests(ctx context.Context, repoID i
 }
 
 // UpdatePublishRequestStatus updates publish request state and superseded link.
-func (s Store) UpdatePublishRequestStatus(ctx context.Context, requestID int64, status string, supersededBy sql.NullInt64) (PublishRequest, error) {
+func (s Store) UpdatePublishRequestStatus(ctx context.Context, requestID int64, status domain.PublishStatus, supersededBy sql.NullInt64) (PublishRequest, error) {
 	if err := applyTestFault("UpdatePublishRequestStatus"); err != nil {
 		return PublishRequest{}, err
 	}
@@ -1079,7 +1080,7 @@ func (s Store) ListIntegrationSubmissions(ctx context.Context, repoID int64) ([]
 }
 
 // ListIntegrationSubmissionsByStatus returns submissions for a repo filtered by status.
-func (s Store) ListIntegrationSubmissionsByStatus(ctx context.Context, repoID int64, status string) ([]IntegrationSubmission, error) {
+func (s Store) ListIntegrationSubmissionsByStatus(ctx context.Context, repoID int64, status domain.SubmissionStatus) ([]IntegrationSubmission, error) {
 	db, err := s.open()
 	if err != nil {
 		return nil, err
@@ -1110,7 +1111,7 @@ func (s Store) ListIntegrationSubmissionsByStatus(ctx context.Context, repoID in
 }
 
 // ListPublishRequestsByStatus returns publish requests for a repo filtered by status.
-func (s Store) ListPublishRequestsByStatus(ctx context.Context, repoID int64, status string) ([]PublishRequest, error) {
+func (s Store) ListPublishRequestsByStatus(ctx context.Context, repoID int64, status domain.PublishStatus) ([]PublishRequest, error) {
 	db, err := s.open()
 	if err != nil {
 		return nil, err

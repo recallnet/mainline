@@ -4,33 +4,34 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/state"
 )
 
 const (
-	submissionOutcomeIntegrated = "integrated"
-	submissionOutcomeLanded     = "landed"
+	submissionOutcomeIntegrated = domain.SubmissionOutcomeIntegrated
+	submissionOutcomeLanded     = domain.SubmissionOutcomeLanded
 )
 
 type submissionPublishInfo struct {
 	ProtectedSHA     string
 	PublishRequestID int64
 	PublishStatus    string
-	Outcome          string
+	Outcome          domain.SubmissionOutcome
 }
 
 func resolveSubmissionPublishInfo(ctx context.Context, store state.Store, repoID int64, submission state.IntegrationSubmission) (submissionPublishInfo, error) {
 	info := submissionPublishInfo{}
-	if submission.Status != "succeeded" {
+	if submission.Status != domain.SubmissionStatusSucceeded {
 		return info, nil
 	}
 
-	events, err := store.ListEventsForItem(ctx, repoID, "integration_submission", submission.ID, 20)
+	events, err := store.ListEventsForItem(ctx, repoID, string(domain.ItemTypeIntegrationSubmission), submission.ID, 20)
 	if err != nil {
 		return info, err
 	}
 	for i := len(events) - 1; i >= 0; i-- {
-		if events[i].EventType != "integration.succeeded" {
+		if events[i].EventType != domain.EventTypeIntegrationSucceeded {
 			continue
 		}
 		var payload struct {
@@ -58,11 +59,11 @@ func resolveSubmissionPublishInfo(ctx context.Context, store state.Store, repoID
 			continue
 		}
 		info.PublishRequestID = requests[i].ID
-		info.PublishStatus = requests[i].Status
+		info.PublishStatus = string(requests[i].Status)
 		break
 	}
 
-	if info.PublishStatus == "succeeded" {
+	if info.PublishStatus == string(domain.PublishStatusSucceeded) {
 		info.Outcome = submissionOutcomeLanded
 	} else {
 		info.Outcome = submissionOutcomeIntegrated

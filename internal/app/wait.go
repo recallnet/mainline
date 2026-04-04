@@ -8,6 +8,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
 )
 
@@ -23,21 +24,21 @@ const (
 )
 
 type integrationWaitResult struct {
-	SubmissionID     int64       `json:"submission_id"`
-	Branch           string      `json:"branch"`
-	SourceRef        string      `json:"source_ref,omitempty"`
-	RefKind          string      `json:"ref_kind,omitempty"`
-	SourceWorktree   string      `json:"source_worktree"`
-	SourceSHA        string      `json:"source_sha"`
-	RepositoryRoot   string      `json:"repository_root"`
-	ProtectedBranch  string      `json:"protected_branch"`
-	SubmissionStatus string      `json:"submission_status"`
-	PublishRequestID int64       `json:"publish_request_id,omitempty"`
-	PublishStatus    string      `json:"publish_status,omitempty"`
-	Outcome          waitOutcome `json:"outcome"`
-	DurationMS       int64       `json:"duration_ms"`
-	LastWorkerResult string      `json:"last_worker_result,omitempty"`
-	Error            string      `json:"error,omitempty"`
+	SubmissionID     int64                   `json:"submission_id"`
+	Branch           string                  `json:"branch"`
+	SourceRef        string                  `json:"source_ref,omitempty"`
+	RefKind          domain.RefKind          `json:"ref_kind,omitempty"`
+	SourceWorktree   string                  `json:"source_worktree"`
+	SourceSHA        string                  `json:"source_sha"`
+	RepositoryRoot   string                  `json:"repository_root"`
+	ProtectedBranch  string                  `json:"protected_branch"`
+	SubmissionStatus domain.SubmissionStatus `json:"submission_status"`
+	PublishRequestID int64                   `json:"publish_request_id,omitempty"`
+	PublishStatus    domain.PublishStatus    `json:"publish_status,omitempty"`
+	Outcome          waitOutcome             `json:"outcome"`
+	DurationMS       int64                   `json:"duration_ms"`
+	LastWorkerResult string                  `json:"last_worker_result,omitempty"`
+	Error            string                  `json:"error,omitempty"`
 }
 
 type waitTarget string
@@ -48,22 +49,22 @@ const (
 )
 
 type submissionWaitResult struct {
-	SubmissionID     int64       `json:"submission_id"`
-	Branch           string      `json:"branch"`
-	SourceRef        string      `json:"source_ref,omitempty"`
-	RefKind          string      `json:"ref_kind,omitempty"`
-	SourceWorktree   string      `json:"source_worktree"`
-	SourceSHA        string      `json:"source_sha"`
-	RepositoryRoot   string      `json:"repository_root"`
-	ProtectedBranch  string      `json:"protected_branch"`
-	ProtectedSHA     string      `json:"protected_sha,omitempty"`
-	SubmissionStatus string      `json:"submission_status"`
-	PublishRequestID int64       `json:"publish_request_id,omitempty"`
-	PublishStatus    string      `json:"publish_status,omitempty"`
-	Outcome          waitOutcome `json:"outcome"`
-	DurationMS       int64       `json:"duration_ms"`
-	LastWorkerResult string      `json:"last_worker_result,omitempty"`
-	Error            string      `json:"error,omitempty"`
+	SubmissionID     int64                   `json:"submission_id"`
+	Branch           string                  `json:"branch"`
+	SourceRef        string                  `json:"source_ref,omitempty"`
+	RefKind          domain.RefKind          `json:"ref_kind,omitempty"`
+	SourceWorktree   string                  `json:"source_worktree"`
+	SourceSHA        string                  `json:"source_sha"`
+	RepositoryRoot   string                  `json:"repository_root"`
+	ProtectedBranch  string                  `json:"protected_branch"`
+	ProtectedSHA     string                  `json:"protected_sha,omitempty"`
+	SubmissionStatus domain.SubmissionStatus `json:"submission_status"`
+	PublishRequestID int64                   `json:"publish_request_id,omitempty"`
+	PublishStatus    domain.PublishStatus    `json:"publish_status,omitempty"`
+	Outcome          waitOutcome             `json:"outcome"`
+	DurationMS       int64                   `json:"duration_ms"`
+	LastWorkerResult string                  `json:"last_worker_result,omitempty"`
+	Error            string                  `json:"error,omitempty"`
 }
 
 func runWait(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -220,8 +221,8 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 				return result, err
 			}
 			result.PublishRequestID = info.PublishRequestID
-			result.PublishStatus = info.PublishStatus
-			if queued.Config.Publish.Mode == "auto" && info.PublishRequestID != 0 && info.PublishStatus == "queued" {
+			result.PublishStatus = domain.PublishStatus(info.PublishStatus)
+			if queued.Config.Publish.Mode == "auto" && info.PublishRequestID != 0 && info.PublishStatus == string(domain.PublishStatusQueued) {
 				cycleResult, cycleErr := runOneCycle(queued.Config.Repo.MainWorktree)
 				if cycleResult != "" {
 					result.LastWorkerResult = cycleResult
@@ -239,7 +240,7 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 					return result, err
 				}
 				result.PublishRequestID = info.PublishRequestID
-				result.PublishStatus = info.PublishStatus
+				result.PublishStatus = domain.PublishStatus(info.PublishStatus)
 				if info.Outcome == submissionOutcomeLanded {
 					result.Outcome = waitOutcome("landed")
 					result.DurationMS = time.Since(start).Milliseconds()
@@ -384,9 +385,9 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 				result.ProtectedSHA = info.ProtectedSHA
 			}
 			result.PublishRequestID = info.PublishRequestID
-			result.PublishStatus = info.PublishStatus
+			result.PublishStatus = domain.PublishStatus(info.PublishStatus)
 
-			if target == waitTargetIntegrated && queued.Config.Publish.Mode == "auto" && info.PublishRequestID != 0 && info.PublishStatus == "queued" {
+			if target == waitTargetIntegrated && queued.Config.Publish.Mode == "auto" && info.PublishRequestID != 0 && info.PublishStatus == string(domain.PublishStatusQueued) {
 				cycleResult, cycleErr := runOneCycle(queued.Config.Repo.MainWorktree)
 				if cycleResult != "" {
 					result.LastWorkerResult = cycleResult
@@ -406,7 +407,7 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 					result.ProtectedSHA = info.ProtectedSHA
 				}
 				result.PublishRequestID = info.PublishRequestID
-				result.PublishStatus = info.PublishStatus
+				result.PublishStatus = domain.PublishStatus(info.PublishStatus)
 				if info.Outcome == submissionOutcomeLanded {
 					result.Outcome = waitOutcome("landed")
 					result.DurationMS = time.Since(start).Milliseconds()

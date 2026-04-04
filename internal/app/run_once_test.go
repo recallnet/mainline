@@ -830,7 +830,7 @@ func TestRunOnceSyncsExternalProtectedAdvanceBeforeNextQueuedSubmission(t *testi
 	events := readRecentEvents(t, repoRoot, 20)
 	eventTypes := make([]string, 0, len(events))
 	for _, event := range events {
-		eventTypes = append(eventTypes, event.EventType)
+		eventTypes = append(eventTypes, string(event.EventType))
 	}
 	sort.Strings(eventTypes)
 	if !slices.Contains(eventTypes, "protected.synced_from_upstream") {

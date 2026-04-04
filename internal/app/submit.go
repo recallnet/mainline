@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
@@ -52,7 +53,7 @@ type preparedSubmission struct {
 	Store        state.Store
 	Branch       string
 	SourceRef    string
-	RefKind      string
+	RefKind      domain.RefKind
 	WorktreePath string
 	SourceSHA    string
 	AllowNewer   bool
@@ -71,33 +72,33 @@ type queuedSubmission struct {
 }
 
 type submitResult struct {
-	OK                    bool   `json:"ok"`
-	Checked               bool   `json:"checked"`
-	Queued                bool   `json:"queued"`
-	Waited                bool   `json:"waited"`
-	DrainAttempted        bool   `json:"drain_attempted,omitempty"`
-	SubmissionID          int64  `json:"submission_id,omitempty"`
-	Branch                string `json:"branch,omitempty"`
-	SourceRef             string `json:"source_ref,omitempty"`
-	RefKind               string `json:"ref_kind,omitempty"`
-	SourceWorktree        string `json:"source_worktree,omitempty"`
-	SourceSHA             string `json:"source_sha,omitempty"`
-	AllowNewerHead        bool   `json:"allow_newer_head,omitempty"`
-	RepositoryRoot        string `json:"repository_root,omitempty"`
-	RequestedBy           string `json:"requested_by,omitempty"`
-	Priority              string `json:"priority,omitempty"`
-	SubmissionStatus      string `json:"submission_status,omitempty"`
-	Outcome               string `json:"outcome,omitempty"`
-	PublishRequestID      int64  `json:"publish_request_id,omitempty"`
-	PublishStatus         string `json:"publish_status,omitempty"`
-	QueuePosition         int    `json:"queue_position,omitempty"`
-	EstimatedCompletionMS int64  `json:"estimated_completion_ms,omitempty"`
-	EstimateBasis         string `json:"estimate_basis,omitempty"`
-	DurationMS            int64  `json:"duration_ms,omitempty"`
-	DrainResult           string `json:"drain_result,omitempty"`
-	LastWorkerResult      string `json:"last_worker_result,omitempty"`
-	ErrorCode             string `json:"error_code,omitempty"`
-	Error                 string `json:"error,omitempty"`
+	OK                    bool                     `json:"ok"`
+	Checked               bool                     `json:"checked"`
+	Queued                bool                     `json:"queued"`
+	Waited                bool                     `json:"waited"`
+	DrainAttempted        bool                     `json:"drain_attempted,omitempty"`
+	SubmissionID          int64                    `json:"submission_id,omitempty"`
+	Branch                string                   `json:"branch,omitempty"`
+	SourceRef             string                   `json:"source_ref,omitempty"`
+	RefKind               domain.RefKind           `json:"ref_kind,omitempty"`
+	SourceWorktree        string                   `json:"source_worktree,omitempty"`
+	SourceSHA             string                   `json:"source_sha,omitempty"`
+	AllowNewerHead        bool                     `json:"allow_newer_head,omitempty"`
+	RepositoryRoot        string                   `json:"repository_root,omitempty"`
+	RequestedBy           string                   `json:"requested_by,omitempty"`
+	Priority              string                   `json:"priority,omitempty"`
+	SubmissionStatus      domain.SubmissionStatus  `json:"submission_status,omitempty"`
+	Outcome               domain.SubmissionOutcome `json:"outcome,omitempty"`
+	PublishRequestID      int64                    `json:"publish_request_id,omitempty"`
+	PublishStatus         domain.PublishStatus     `json:"publish_status,omitempty"`
+	QueuePosition         int                      `json:"queue_position,omitempty"`
+	EstimatedCompletionMS int64                    `json:"estimated_completion_ms,omitempty"`
+	EstimateBasis         string                   `json:"estimate_basis,omitempty"`
+	DurationMS            int64                    `json:"duration_ms,omitempty"`
+	DrainResult           string                   `json:"drain_result,omitempty"`
+	LastWorkerResult      string                   `json:"last_worker_result,omitempty"`
+	ErrorCode             string                   `json:"error_code,omitempty"`
+	Error                 string                   `json:"error,omitempty"`
 }
 
 func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
@@ -287,7 +288,7 @@ Flags:
 	if estimate, queuePosition, estimateErr := submissionQueueEstimate(context.Background(), queued); estimateErr == nil {
 		result.QueuePosition = queuePosition
 		result.EstimatedCompletionMS = estimate.AvgExecutionMS * int64(queuePosition)
-		result.EstimateBasis = estimate.Basis
+		result.EstimateBasis = string(estimate.Basis)
 	}
 	if waitForResult {
 		target := waitTarget(opts.waitTarget)
@@ -298,7 +299,7 @@ Flags:
 		result.OK = waitErr == nil
 		result.Waited = true
 		result.SubmissionStatus = waitResult.SubmissionStatus
-		result.Outcome = string(waitResult.Outcome)
+		result.Outcome = domain.SubmissionOutcome(waitResult.Outcome)
 		result.PublishRequestID = waitResult.PublishRequestID
 		result.PublishStatus = waitResult.PublishStatus
 		result.DurationMS = waitResult.DurationMS
@@ -352,11 +353,11 @@ Flags:
 			submission, loadErr := queued.Store.GetIntegrationSubmission(context.Background(), queued.Submission.ID)
 			if loadErr == nil {
 				result.SubmissionStatus = submission.Status
-				if submission.Status == "succeeded" {
+				if submission.Status == domain.SubmissionStatusSucceeded {
 					info, infoErr := resolveSubmissionPublishInfo(context.Background(), queued.Store, queued.RepoRecord.ID, submission)
 					if infoErr == nil {
 						result.PublishRequestID = info.PublishRequestID
-						result.PublishStatus = info.PublishStatus
+						result.PublishStatus = domain.PublishStatus(info.PublishStatus)
 						result.Outcome = info.Outcome
 					}
 					if result.Outcome == "" {
@@ -764,7 +765,7 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 		payload, err := json.Marshal(map[string]string{
 			"branch":            prepared.Branch,
 			"source_ref":        prepared.SourceRef,
-			"ref_kind":          prepared.RefKind,
+			"ref_kind":          string(prepared.RefKind),
 			"source_worktree":   prepared.WorktreePath,
 			"source_sha":        prepared.SourceSHA,
 			"allow_newer_head":  fmt.Sprintf("%t", prepared.AllowNewer),
@@ -777,9 +778,9 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 		}
 		if _, err := prepared.Store.AppendEvent(ctx, state.EventRecord{
 			RepoID:    repoRecord.ID,
-			ItemType:  "integration_submission",
+			ItemType:  domain.ItemTypeIntegrationSubmission,
 			ItemID:    state.NullInt64(submission.ID),
-			EventType: "submission.reprioritized",
+			EventType: domain.EventTypeSubmissionReprioritized,
 			Payload:   payload,
 		}); err != nil {
 			return queuedSubmission{}, err
@@ -805,7 +806,7 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 		AllowNewerHead: prepared.AllowNewer,
 		RequestedBy:    prepared.RequestedBy,
 		Priority:       prepared.Priority,
-		Status:         "queued",
+		Status:         domain.SubmissionStatusQueued,
 	})
 	if err != nil {
 		return queuedSubmission{}, err
@@ -814,7 +815,7 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 	payload, err := json.Marshal(map[string]string{
 		"branch":           prepared.Branch,
 		"source_ref":       prepared.SourceRef,
-		"ref_kind":         prepared.RefKind,
+		"ref_kind":         string(prepared.RefKind),
 		"source_worktree":  prepared.WorktreePath,
 		"source_sha":       prepared.SourceSHA,
 		"allow_newer_head": fmt.Sprintf("%t", prepared.AllowNewer),
@@ -826,9 +827,9 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 	}
 	if _, err := prepared.Store.AppendEvent(ctx, state.EventRecord{
 		RepoID:    repoRecord.ID,
-		ItemType:  "integration_submission",
+		ItemType:  domain.ItemTypeIntegrationSubmission,
 		ItemID:    state.NullInt64(submission.ID),
-		EventType: "submission.created",
+		EventType: domain.EventTypeSubmissionCreated,
 		Payload:   payload,
 	}); err != nil {
 		return queuedSubmission{}, err

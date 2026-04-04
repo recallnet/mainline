@@ -8,30 +8,31 @@ import (
 	"io"
 	"time"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/state"
 )
 
 type landResult struct {
-	SubmissionID     int64  `json:"submission_id"`
-	PublishRequestID int64  `json:"publish_request_id,omitempty"`
-	Branch           string `json:"branch"`
-	SourceRef        string `json:"source_ref,omitempty"`
-	RefKind          string `json:"ref_kind,omitempty"`
-	SourceWorktree   string `json:"source_worktree"`
-	SourceSHA        string `json:"source_sha"`
-	AllowNewerHead   bool   `json:"allow_newer_head,omitempty"`
-	Priority         string `json:"priority,omitempty"`
-	RepositoryRoot   string `json:"repository_root"`
-	MainWorktree     string `json:"main_worktree"`
-	ProtectedBranch  string `json:"protected_branch"`
-	ProtectedSHA     string `json:"protected_sha,omitempty"`
-	SubmissionStatus string `json:"submission_status"`
-	PublishStatus    string `json:"publish_status,omitempty"`
-	Published        bool   `json:"published"`
-	DurationMS       int64  `json:"duration_ms"`
-	LastWorkerResult string `json:"last_worker_result,omitempty"`
-	Error            string `json:"error,omitempty"`
+	SubmissionID     int64                   `json:"submission_id"`
+	PublishRequestID int64                   `json:"publish_request_id,omitempty"`
+	Branch           string                  `json:"branch"`
+	SourceRef        string                  `json:"source_ref,omitempty"`
+	RefKind          domain.RefKind          `json:"ref_kind,omitempty"`
+	SourceWorktree   string                  `json:"source_worktree"`
+	SourceSHA        string                  `json:"source_sha"`
+	AllowNewerHead   bool                    `json:"allow_newer_head,omitempty"`
+	Priority         string                  `json:"priority,omitempty"`
+	RepositoryRoot   string                  `json:"repository_root"`
+	MainWorktree     string                  `json:"main_worktree"`
+	ProtectedBranch  string                  `json:"protected_branch"`
+	ProtectedSHA     string                  `json:"protected_sha,omitempty"`
+	SubmissionStatus domain.SubmissionStatus `json:"submission_status"`
+	PublishStatus    domain.PublishStatus    `json:"publish_status,omitempty"`
+	Published        bool                    `json:"published"`
+	DurationMS       int64                   `json:"duration_ms"`
+	LastWorkerResult string                  `json:"last_worker_result,omitempty"`
+	Error            string                  `json:"error,omitempty"`
 }
 
 func runLand(args []string, stdout io.Writer, stderr io.Writer) error {

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
@@ -1168,17 +1169,16 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 		if engine.BranchExists(submission.SourceRef) {
 			continue
 		}
-		if _, err := store.UpdateIntegrationSubmissionStatus(ctx, submission.ID, "failed", fmt.Sprintf("source branch %q no longer exists; resubmit from a live worktree", submission.SourceRef)); err != nil {
+		if _, err := store.UpdateIntegrationSubmissionStatus(ctx, submission.ID, domain.SubmissionStatusFailed, fmt.Sprintf("source branch %q no longer exists; resubmit from a live worktree", submission.SourceRef)); err != nil {
 			return nil, nil, err
 		}
-		if err := appendSubmissionEvent(ctx, store, repoRecord.ID, submission.ID, "integration.failed", map[string]string{
-			"branch":          submissionDisplayRef(submission),
-			"source_ref":      submission.SourceRef,
-			"ref_kind":        submission.RefKind,
-			"source_sha":      submission.SourceSHA,
-			"source_worktree": submission.SourceWorktree,
-			"error":           fmt.Sprintf("source branch %q no longer exists; resubmit from a live worktree", submission.SourceRef),
-			"reason":          "source_branch_missing",
+		if err := appendSubmissionLifecycleEvent(ctx, store, repoRecord.ID, submission.ID, domain.EventTypeIntegrationFailed, domain.SubmissionLifecyclePayload{
+			Branch:         submissionDisplayRef(submission),
+			SourceRef:      submission.SourceRef,
+			RefKind:        submission.RefKind,
+			SourceWorktree: submission.SourceWorktree,
+			SourceSHA:      submission.SourceSHA,
+			Error:          fmt.Sprintf("source branch %q no longer exists; resubmit from a live worktree", submission.SourceRef),
 		}); err != nil {
 			return nil, nil, err
 		}
@@ -1190,7 +1190,7 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 		return nil, nil, err
 	}
 	for _, landed := range allSubmissions {
-		if landed.Status != "succeeded" {
+		if landed.Status != domain.SubmissionStatusSucceeded {
 			continue
 		}
 		if err := supersedeObsoleteSubmissions(ctx, store, repoRecord.ID, engine, landed, ""); err != nil {

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
@@ -739,10 +740,10 @@ func TestDoctorFixSupersedesObsoleteBlockedSubmission(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateIntegrationSubmission(second): %v", err)
 	}
-	if err := appendSubmissionEvent(context.Background(), store, repoRecord.ID, secondSubmission.ID, "integration.succeeded", map[string]string{
+	if err := appendSubmissionEvent(context.Background(), store, repoRecord.ID, secondSubmission.ID, domain.EventTypeIntegrationSucceeded, map[string]string{
 		"branch":        "feature/obsolete",
 		"source_ref":    "feature/obsolete",
-		"ref_kind":      submissionRefKindBranch,
+		"ref_kind":      string(submissionRefKindBranch),
 		"protected_sha": secondSHA,
 	}); err != nil {
 		t.Fatalf("appendSubmissionEvent(integration.succeeded): %v", err)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/state"
 )
 
@@ -85,18 +86,18 @@ func controlSubmission(ctx context.Context, action string, repoPath string, stor
 
 	switch action {
 	case "retry":
-		if submission.Status != "blocked" && submission.Status != "failed" && submission.Status != "cancelled" {
+		if submission.Status != domain.SubmissionStatusBlocked && submission.Status != domain.SubmissionStatusFailed && submission.Status != domain.SubmissionStatusCancelled {
 			return fmt.Errorf("submission %d is %q; only blocked, failed, or cancelled submissions can be retried", submissionID, submission.Status)
 		}
-		updated, err := store.UpdateIntegrationSubmissionStatus(ctx, submissionID, "queued", "")
+		updated, err := store.UpdateIntegrationSubmissionStatus(ctx, submissionID, domain.SubmissionStatusQueued, "")
 		if err != nil {
 			return err
 		}
-		if err := appendSubmissionEvent(ctx, store, repoID, submissionID, "submission.retried", map[string]string{
-			"from_status": submission.Status,
+		if err := appendSubmissionEvent(ctx, store, repoID, submissionID, domain.EventType("submission.retried"), map[string]string{
+			"from_status": string(submission.Status),
 			"branch":      submissionDisplayRef(submission),
 			"source_ref":  submission.SourceRef,
-			"ref_kind":    submission.RefKind,
+			"ref_kind":    string(submission.RefKind),
 		}); err != nil {
 			return err
 		}
@@ -106,7 +107,7 @@ func controlSubmission(ctx context.Context, action string, repoPath string, stor
 			ItemType: "submission",
 			ID:       updated.ID,
 			Branch:   submissionDisplayRef(updated),
-			Status:   updated.Status,
+			Status:   string(updated.Status),
 		}
 		if shouldTryDrainAfterMutation() {
 			result.DrainAttempted = true
@@ -118,7 +119,7 @@ func controlSubmission(ctx context.Context, action string, repoPath string, stor
 				return drainErr
 			}
 			if refreshed, loadErr := store.GetIntegrationSubmission(ctx, submissionID); loadErr == nil {
-				result.Status = refreshed.Status
+				result.Status = string(refreshed.Status)
 			}
 		}
 		if asJSON {
@@ -132,18 +133,18 @@ func controlSubmission(ctx context.Context, action string, repoPath string, stor
 		}
 		return nil
 	case "cancel":
-		if submission.Status != "queued" && submission.Status != "blocked" && submission.Status != "failed" {
+		if submission.Status != domain.SubmissionStatusQueued && submission.Status != domain.SubmissionStatusBlocked && submission.Status != domain.SubmissionStatusFailed {
 			return fmt.Errorf("submission %d is %q; only queued, blocked, or failed submissions can be cancelled", submissionID, submission.Status)
 		}
-		updated, err := store.UpdateIntegrationSubmissionStatus(ctx, submissionID, "cancelled", submission.LastError)
+		updated, err := store.UpdateIntegrationSubmissionStatus(ctx, submissionID, domain.SubmissionStatusCancelled, submission.LastError)
 		if err != nil {
 			return err
 		}
-		if err := appendSubmissionEvent(ctx, store, repoID, submissionID, "submission.cancelled", map[string]string{
-			"from_status": submission.Status,
+		if err := appendSubmissionEvent(ctx, store, repoID, submissionID, domain.EventType("submission.cancelled"), map[string]string{
+			"from_status": string(submission.Status),
 			"branch":      submissionDisplayRef(submission),
 			"source_ref":  submission.SourceRef,
-			"ref_kind":    submission.RefKind,
+			"ref_kind":    string(submission.RefKind),
 		}); err != nil {
 			return err
 		}
@@ -153,7 +154,7 @@ func controlSubmission(ctx context.Context, action string, repoPath string, stor
 			ItemType: "submission",
 			ID:       updated.ID,
 			Branch:   submissionDisplayRef(updated),
-			Status:   updated.Status,
+			Status:   string(updated.Status),
 		}
 		if shouldTryDrainAfterMutation() {
 			result.DrainAttempted = true
@@ -165,7 +166,7 @@ func controlSubmission(ctx context.Context, action string, repoPath string, stor
 				return drainErr
 			}
 			if refreshed, loadErr := store.GetIntegrationSubmission(ctx, submissionID); loadErr == nil {
-				result.Status = refreshed.Status
+				result.Status = string(refreshed.Status)
 			}
 		}
 		if asJSON {
@@ -194,7 +195,7 @@ func controlPublish(ctx context.Context, action string, repoPath string, store s
 
 	switch action {
 	case "retry":
-		if request.Status != "failed" && request.Status != "cancelled" {
+		if request.Status != domain.PublishStatusFailed && request.Status != domain.PublishStatusCancelled {
 			return fmt.Errorf("publish request %d is %q; only failed or cancelled publishes can be retried", publishID, request.Status)
 		}
 		updated, err := store.ResetPublishRequestForRetry(ctx, publishID)
@@ -203,11 +204,11 @@ func controlPublish(ctx context.Context, action string, repoPath string, store s
 		}
 		if err := appendStateEvent(ctx, store, state.EventRecord{
 			RepoID:    repoID,
-			ItemType:  "publish_request",
+			ItemType:  domain.ItemTypePublishRequest,
 			ItemID:    state.NullInt64(publishID),
-			EventType: "publish.retried",
+			EventType: domain.EventTypePublishRetried,
 			Payload: mustJSON(map[string]string{
-				"from_status": request.Status,
+				"from_status": string(request.Status),
 				"target_sha":  request.TargetSHA,
 			}),
 		}); err != nil {
@@ -219,7 +220,7 @@ func controlPublish(ctx context.Context, action string, repoPath string, store s
 			ItemType:  "publish_request",
 			ID:        updated.ID,
 			TargetSHA: updated.TargetSHA,
-			Status:    updated.Status,
+			Status:    string(updated.Status),
 		}
 		if shouldTryDrainAfterMutation() {
 			result.DrainAttempted = true
@@ -231,7 +232,7 @@ func controlPublish(ctx context.Context, action string, repoPath string, store s
 				return drainErr
 			}
 			if refreshed, loadErr := store.GetPublishRequest(ctx, publishID); loadErr == nil {
-				result.Status = refreshed.Status
+				result.Status = string(refreshed.Status)
 			}
 		}
 		if asJSON {
@@ -245,20 +246,20 @@ func controlPublish(ctx context.Context, action string, repoPath string, store s
 		}
 		return nil
 	case "cancel":
-		if request.Status != "queued" && request.Status != "failed" {
+		if request.Status != domain.PublishStatusQueued && request.Status != domain.PublishStatusFailed {
 			return fmt.Errorf("publish request %d is %q; only queued or failed publishes can be cancelled", publishID, request.Status)
 		}
-		updated, err := store.UpdatePublishRequestStatus(ctx, publishID, "cancelled", request.SupersededBy)
+		updated, err := store.UpdatePublishRequestStatus(ctx, publishID, domain.PublishStatusCancelled, request.SupersededBy)
 		if err != nil {
 			return err
 		}
 		if err := appendStateEvent(ctx, store, state.EventRecord{
 			RepoID:    repoID,
-			ItemType:  "publish_request",
+			ItemType:  domain.ItemTypePublishRequest,
 			ItemID:    state.NullInt64(publishID),
-			EventType: "publish.cancelled",
+			EventType: domain.EventTypePublishCancelled,
 			Payload: mustJSON(map[string]string{
-				"from_status": request.Status,
+				"from_status": string(request.Status),
 				"target_sha":  request.TargetSHA,
 			}),
 		}); err != nil {
@@ -270,7 +271,7 @@ func controlPublish(ctx context.Context, action string, repoPath string, store s
 			ItemType:  "publish_request",
 			ID:        updated.ID,
 			TargetSHA: updated.TargetSHA,
-			Status:    updated.Status,
+			Status:    string(updated.Status),
 		}
 		if shouldTryDrainAfterMutation() {
 			result.DrainAttempted = true
@@ -282,7 +283,7 @@ func controlPublish(ctx context.Context, action string, repoPath string, store s
 				return drainErr
 			}
 			if refreshed, loadErr := store.GetPublishRequest(ctx, publishID); loadErr == nil {
-				result.Status = refreshed.Status
+				result.Status = string(refreshed.Status)
 			}
 		}
 		if asJSON {

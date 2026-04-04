@@ -323,7 +323,7 @@ func assertEventPresent(t *testing.T, events []state.EventRecord, eventType stri
 	t.Helper()
 
 	for _, event := range events {
-		if event.EventType == eventType {
+		if string(event.EventType) == eventType {
 			return
 		}
 	}

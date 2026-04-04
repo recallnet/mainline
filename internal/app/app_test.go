@@ -253,7 +253,7 @@ func TestStatusAndSubmitJSONIncludeRollingExecutionEstimate(t *testing.T) {
 	if err := json.Unmarshal(submitOut.Bytes(), &submit); err != nil {
 		t.Fatalf("Unmarshal submit: %v", err)
 	}
-	if submit.QueuePosition != 1 || submit.EstimatedCompletionMS <= 0 || submit.EstimateBasis != submissionOutcomeLanded {
+	if submit.QueuePosition != 1 || submit.EstimatedCompletionMS <= 0 || submit.EstimateBasis != string(submissionOutcomeLanded) {
 		t.Fatalf("unexpected submit estimate: %+v", submit)
 	}
 

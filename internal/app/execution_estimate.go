@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
 )
@@ -13,12 +14,12 @@ import (
 const executionEstimateWindow = 24 * time.Hour
 
 type executionEstimate struct {
-	WindowHours      int    `json:"window_hours"`
-	Basis            string `json:"basis"`
-	SampleCount      int    `json:"sample_count"`
-	AvgExecutionMS   int64  `json:"avg_execution_ms,omitempty"`
-	AvgIntegrationMS int64  `json:"avg_integration_ms,omitempty"`
-	AvgLandedMS      int64  `json:"avg_landed_ms,omitempty"`
+	WindowHours      int                      `json:"window_hours"`
+	Basis            domain.SubmissionOutcome `json:"basis"`
+	SampleCount      int                      `json:"sample_count"`
+	AvgExecutionMS   int64                    `json:"avg_execution_ms,omitempty"`
+	AvgIntegrationMS int64                    `json:"avg_integration_ms,omitempty"`
+	AvgLandedMS      int64                    `json:"avg_landed_ms,omitempty"`
 }
 
 func collectExecutionEstimate(ctx context.Context, store state.Store, repoID int64, cfg policy.File, submissions []state.IntegrationSubmission) (executionEstimate, error) {
@@ -27,11 +28,11 @@ func collectExecutionEstimate(ctx context.Context, store state.Store, repoID int
 	var landedDurations []int64
 
 	for _, submission := range submissions {
-		if submission.Status != "succeeded" {
+		if submission.Status != domain.SubmissionStatusSucceeded {
 			continue
 		}
 
-		submissionEvents, err := store.ListEventsForItem(ctx, repoID, "integration_submission", submission.ID, 20)
+		submissionEvents, err := store.ListEventsForItem(ctx, repoID, string(domain.ItemTypeIntegrationSubmission), submission.ID, 20)
 		if err != nil {
 			return executionEstimate{}, err
 		}
@@ -45,11 +46,11 @@ func collectExecutionEstimate(ctx context.Context, store state.Store, repoID int
 		if err != nil {
 			return executionEstimate{}, err
 		}
-		if info.PublishRequestID == 0 || info.PublishStatus != "succeeded" || startedAt.IsZero() {
+		if info.PublishRequestID == 0 || info.PublishStatus != string(domain.PublishStatusSucceeded) || startedAt.IsZero() {
 			continue
 		}
 
-		publishEvents, err := store.ListEventsForItem(ctx, repoID, "publish_request", info.PublishRequestID, 20)
+		publishEvents, err := store.ListEventsForItem(ctx, repoID, string(domain.ItemTypePublishRequest), info.PublishRequestID, 20)
 		if err != nil {
 			return executionEstimate{}, err
 		}
@@ -84,14 +85,14 @@ func annotateQueueEstimates(submissions []statusSubmission, estimate executionEs
 
 	activeIndexes := make([]int, 0, len(submissions))
 	for i, submission := range submissions {
-		if submission.Status == "queued" || submission.Status == "running" {
+		if submission.Status == domain.SubmissionStatusQueued || submission.Status == domain.SubmissionStatusRunning {
 			activeIndexes = append(activeIndexes, i)
 		}
 	}
 	sort.SliceStable(activeIndexes, func(i, j int) bool {
 		left := submissions[activeIndexes[i]]
 		right := submissions[activeIndexes[j]]
-		return compareQueueOrder(left.IntegrationSubmission, right.IntegrationSubmission) < 0
+		return compareQueueOrder(left.integrationSubmission(), right.integrationSubmission()) < 0
 	})
 	for position, idx := range activeIndexes {
 		submissions[idx].QueuePosition = position + 1
@@ -119,11 +120,11 @@ func submissionQueueEstimate(ctx context.Context, queued queuedSubmission) (exec
 		if submission.ID == queued.Submission.ID {
 			seenQueuedSubmission = true
 		}
-		if submission.Status == "queued" || submission.Status == "running" {
+		if submission.Status == domain.SubmissionStatusQueued || submission.Status == domain.SubmissionStatusRunning {
 			active = append(active, submission)
 		}
 	}
-	if !seenQueuedSubmission && (queued.Submission.Status == "queued" || queued.Submission.Status == "running") {
+	if !seenQueuedSubmission && (queued.Submission.Status == domain.SubmissionStatusQueued || queued.Submission.Status == domain.SubmissionStatusRunning) {
 		active = append(active, queued.Submission)
 	}
 	sort.SliceStable(active, func(i, j int) bool {
@@ -138,10 +139,10 @@ func submissionQueueEstimate(ctx context.Context, queued queuedSubmission) (exec
 }
 
 func compareQueueOrder(left state.IntegrationSubmission, right state.IntegrationSubmission) int {
-	if left.Status == "running" && right.Status != "running" {
+	if left.Status == domain.SubmissionStatusRunning && right.Status != domain.SubmissionStatusRunning {
 		return -1
 	}
-	if right.Status == "running" && left.Status != "running" {
+	if right.Status == domain.SubmissionStatusRunning && left.Status != domain.SubmissionStatusRunning {
 		return 1
 	}
 
@@ -187,9 +188,9 @@ func integrationEventBounds(events []state.EventRecord) (time.Time, time.Time) {
 	slices.Reverse(events)
 	for _, event := range events {
 		switch event.EventType {
-		case "integration.started":
+		case domain.EventTypeIntegrationStarted:
 			startedAt = event.CreatedAt
-		case "integration.succeeded":
+		case domain.EventTypeIntegrationSucceeded:
 			succeededAt = event.CreatedAt
 		}
 	}
@@ -199,7 +200,7 @@ func integrationEventBounds(events []state.EventRecord) (time.Time, time.Time) {
 func publishCompletedAt(events []state.EventRecord) time.Time {
 	slices.Reverse(events)
 	for _, event := range events {
-		if event.EventType == "publish.completed" {
+		if event.EventType == domain.EventTypePublishCompleted {
 			return event.CreatedAt
 		}
 	}

@@ -350,7 +350,7 @@ func assertStoreEventPresent(t *testing.T, store state.Store, repoID int64, even
 		t.Fatalf("ListEvents: %v", err)
 	}
 	for _, event := range events {
-		if event.EventType == eventType {
+		if string(event.EventType) == eventType {
 			return
 		}
 	}
