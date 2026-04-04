@@ -1317,6 +1317,9 @@ func TestSubmitTextShowsRoundedEstimatedCompletion(t *testing.T) {
 	if !strings.Contains(text, "Estimated completion: ~10m (integrated)") {
 		t.Fatalf("expected rounded estimated completion in text output, got %q", text)
 	}
+	if !strings.Contains(text, "Follow: mq wait --submission ") {
+		t.Fatalf("expected follow guidance in text output, got %q", text)
+	}
 }
 
 func TestSubmitWaitReturnsBlockedExitCodeForConflict(t *testing.T) {

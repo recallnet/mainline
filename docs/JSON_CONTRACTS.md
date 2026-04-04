@@ -76,6 +76,8 @@ Returns one JSON object with these stable top-level keys:
 - `state_path`
 - `current_worktree`
 - `current_branch`
+- `state`
+- `queue_length`
 - `protected_branch`
 - `protected_branch_sha`
 - `protected_upstream`
@@ -91,6 +93,17 @@ Optional top-level keys:
 - `integration_worker`
 - `publish_worker`
 - `execution_estimate`
+
+`state` is the operator summary for the repo right now:
+
+- `idle`
+- `queued`
+- `integrating`
+- `publishing`
+- `blocked`
+
+`queue_length` is the current unfinished queue depth across queued/running/
+blocked submissions and queued/running publishes.
 
 `protected_upstream` is a `git.BranchStatus` object with:
 

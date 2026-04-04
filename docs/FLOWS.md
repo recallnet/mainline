@@ -30,15 +30,14 @@ Use a topic worktree, then land it:
 git worktree add ../feature-login -b feature/login main
 cd ../feature-login
 # edit, test, commit
-mq submit
+mq submit --json
+mq wait --submission 42 --for landed --json --timeout 30m
 mq repo audit --repo /path/to/protected-worktree --json
 mq status --repo . --json
-mq run-once --repo /path/to/protected-worktree
-mq publish --repo /path/to/protected-worktree
-mq watch --repo /path/to/protected-worktree
-mq logs --repo /path/to/protected-worktree --follow
-mq events --repo /path/to/protected-worktree --follow
 ```
+
+Use `mq wait --submission ...` as the normal follow path. `mq logs`,
+`mq events`, and `mq watch` are for audit/debugging when you need more detail.
 
 ## Worktree-Heavy Repo
 
@@ -74,11 +73,10 @@ Use the daemonless default flow and let agents submit directly:
 ```bash
 cd /path/to/agent-worktree
 mq submit --check-only --json
-mq submit --wait --timeout 15m --json
+mq submit --wait --for landed --timeout 30m --json
 mq repo audit --repo /path/to/main --json
-mq events --repo /path/to/main --follow --json --lifecycle
 mq confidence --repo /path/to/main
-mq watch --repo /path/to/main
+mq status --repo /path/to/main --json
 ```
 
 For unattended agent repos, set `[publish].Mode = 'auto'`. Otherwise
@@ -103,11 +101,10 @@ That skill is now expected to use the real end-to-end flow:
 ```bash
 cd /path/to/topic-worktree
 mq submit --check-only --json
-mq submit --wait --timeout 15m --json
+mq submit --json
+mq wait --submission 42 --for landed --json --timeout 30m
 mq repo audit --repo /path/to/main --json
 mq status --repo /path/to/main --json
-mq watch --repo /path/to/main
-mq events --repo /path/to/main --follow --json --lifecycle
 ```
 
 For wrappers and factories, prefer a durable submission-id flow:
@@ -155,6 +152,9 @@ cd /path/to/topic-worktree
 mq submit --json
 mq wait --submission 42 --for landed --json --timeout 30m
 ```
+
+Use `mq logs`, `mq events`, and `mq watch` only when you need audit/debug
+detail beyond the submission-id flow.
 
 If a factory keeps appending commits to the same queued branch and wants the
 newest descendant tip instead of a hard failure on head drift, submit with:

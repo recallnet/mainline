@@ -96,6 +96,10 @@ mq submit --json
 mq wait --submission 42 --for landed --json --timeout 30m
 ```
 
+That is the primary follow path. Use the returned `submission_id` and wait on it.
+Treat `mq logs` and `mq events` as audit/debug surfaces, not the normal way to
+decide whether your land finished.
+
 If the wrapper expects remote landing as part of the same job, prefer:
 
 ```bash

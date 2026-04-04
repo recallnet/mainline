@@ -33,6 +33,8 @@ type statusResult struct {
 	StatePath          string               `json:"state_path"`
 	CurrentWorktree    string               `json:"current_worktree"`
 	CurrentBranch      string               `json:"current_branch"`
+	State              string               `json:"state"`
+	QueueLength        int                  `json:"queue_length"`
 	ProtectedBranch    string               `json:"protected_branch"`
 	ProtectedBranchSHA string               `json:"protected_branch_sha"`
 	ProtectedUpstream  git.BranchStatus     `json:"protected_upstream"`
@@ -264,6 +266,7 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		ActivePublishes:    activePublishes(requests),
 		RecentEvents:       events,
 	}
+	result.State, result.QueueLength = summarizeQueueState(result.Counts)
 	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
 	if metadata, ok := readActiveLease(lockManager, state.IntegrationLock); ok {
 		result.IntegrationWorker = &metadata
@@ -287,6 +290,8 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
 	fmt.Fprintf(stdout, "Current worktree: %s\n", result.CurrentWorktree)
 	fmt.Fprintf(stdout, "Current branch: %s\n", result.CurrentBranch)
+	fmt.Fprintf(stdout, "State: %s\n", result.State)
+	fmt.Fprintf(stdout, "Queue length: %d\n", result.QueueLength)
 	fmt.Fprintf(stdout, "Protected branch: %s\n", result.ProtectedBranch)
 	if result.ProtectedBranchSHA != "" {
 		fmt.Fprintf(stdout, "Protected SHA: %s\n", result.ProtectedBranchSHA)
@@ -515,4 +520,24 @@ func summarizeCounts(submissions []state.IntegrationSubmission, requests []state
 		}
 	}
 	return counts
+}
+
+func summarizeQueueState(counts statusCounts) (string, int) {
+	queueLength := counts.QueuedSubmissions +
+		counts.RunningSubmissions +
+		counts.BlockSubmissions +
+		counts.QueuedPublishes +
+		counts.RunningPublishes
+	switch {
+	case counts.BlockSubmissions > 0:
+		return "blocked", queueLength
+	case counts.RunningPublishes > 0:
+		return "publishing", queueLength
+	case counts.RunningSubmissions > 0:
+		return "integrating", queueLength
+	case counts.QueuedSubmissions > 0 || counts.QueuedPublishes > 0:
+		return "queued", queueLength
+	default:
+		return "idle", 0
+	}
 }

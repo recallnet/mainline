@@ -387,6 +387,9 @@ Flags:
 	if result.Error != "" && !waitForResult {
 		fmt.Fprintf(stdout, "Drain error: %s\n", result.Error)
 	}
+	if !waitForResult {
+		fmt.Fprintf(stdout, "Follow: mq wait --submission %d --for landed --json --timeout 30m\n", queued.Submission.ID)
+	}
 	if waitForResult {
 		fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
 		if result.Outcome != "" {

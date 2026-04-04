@@ -205,8 +205,10 @@ func TestStatusJSONContractContainsStableTopLevelFields(t *testing.T) {
 		"protected_branch",
 		"protected_branch_sha",
 		"protected_upstream",
+		"queue_length",
 		"recent_events",
 		"repository_root",
+		"state",
 		"state_path",
 	}
 	gotKeys := sortedJSONKeys(payload)
@@ -214,6 +216,34 @@ func TestStatusJSONContractContainsStableTopLevelFields(t *testing.T) {
 		if !slices.Contains(gotKeys, key) {
 			t.Fatalf("expected status json to contain key %q, got %v", key, gotKeys)
 		}
+	}
+}
+
+func TestStatusJSONIncludesOperatorSummaryFields(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-status-summary")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/status-summary", featurePath)
+	writeFileAndCommit(t, featurePath, "summary.txt", "summary\n", "status summary")
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+	submitBranch(t, featurePath)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var status statusResult
+	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if status.State != "queued" {
+		t.Fatalf("expected queued state, got %+v", status)
+	}
+	if status.QueueLength != 1 {
+		t.Fatalf("expected queue length 1, got %+v", status)
 	}
 }
 
