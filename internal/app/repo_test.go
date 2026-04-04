@@ -1303,6 +1303,92 @@ func TestDoctorFixDoesNotQueuePublishWhenProtectedWorktreeIsDirty(t *testing.T) 
 	}
 }
 
+func TestDoctorFixRestoresCanonicalRootToUpstreamWhenQueueIsIdle(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+
+	upstreamClone := filepath.Join(t.TempDir(), "upstream-clone")
+	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
+	configureTestGitRepo(t, upstreamClone)
+	writeFileAndCommit(t, upstreamClone, "remote.txt", "remote\n", "remote advance")
+	runTestCommand(t, upstreamClone, "git", "push", "origin", "main")
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "DIRTY.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(DIRTY.txt): %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	var result doctorResult
+	if err := json.Unmarshal(doctorOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	joinedApplied := strings.Join(result.FixesApplied, "\n")
+	if !strings.Contains(joinedApplied, "restored canonical protected root checkout") {
+		t.Fatalf("expected canonical root repair in applied fixes, got applied=%#v skipped=%#v", result.FixesApplied, result.FixesSkipped)
+	}
+	clean, err := git.NewEngine(repoRoot).WorktreeIsClean(repoRoot)
+	if err != nil {
+		t.Fatalf("WorktreeIsClean: %v", err)
+	}
+	if !clean {
+		t.Fatalf("expected repo root clean after doctor fix")
+	}
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if localHead != remoteHead {
+		t.Fatalf("expected repaired root head %q to match upstream %q", localHead, remoteHead)
+	}
+}
+
+func TestDoctorFixSkipsCanonicalRootRepairWhenQueueNotIdle(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-queued")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/queued", featurePath)
+	writeFileAndCommit(t, featurePath, "queued.txt", "queued\n", "queued work")
+	submitBranch(t, featurePath)
+
+	upstreamClone := filepath.Join(t.TempDir(), "upstream-clone")
+	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
+	configureTestGitRepo(t, upstreamClone)
+	writeFileAndCommit(t, upstreamClone, "remote.txt", "remote\n", "remote advance")
+	runTestCommand(t, upstreamClone, "git", "push", "origin", "main")
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "DIRTY.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(DIRTY.txt): %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	var result doctorResult
+	if err := json.Unmarshal(doctorOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	joinedSkipped := strings.Join(result.FixesSkipped, "\n")
+	if !strings.Contains(joinedSkipped, "unfinished queue item") {
+		t.Fatalf("expected queue-idle skip reason, got %#v", result.FixesSkipped)
+	}
+	clean, err := git.NewEngine(repoRoot).WorktreeIsClean(repoRoot)
+	if err != nil {
+		t.Fatalf("WorktreeIsClean: %v", err)
+	}
+	if clean {
+		t.Fatalf("expected repo root to remain dirty when doctor fix skips repair")
+	}
+}
+
 func TestConfigEditScaffoldsMissingConfigAndInvokesEditor(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	editorPath := filepath.Join(t.TempDir(), "editor.sh")

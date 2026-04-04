@@ -941,7 +941,8 @@ func doctorNextActions(result doctorResult) []string {
 	return []string{
 		"mainline is blocked until the protected root checkout is clean",
 		"take ownership of the protected root checkout and inspect it with `mq doctor --repo " + result.RepositoryRoot + "`",
-		"save, clean, or commit local changes, or resolve any abnormal git state on the protected root checkout",
+		"if the queue is idle and the root only needs to be restored to shipped main, run `mq doctor --repo " + result.RepositoryRoot + " --fix`",
+		"otherwise save, clean, or commit local changes, or resolve any abnormal git state on the protected root checkout",
 		"retry the blocked operation after the protected root checkout is clean",
 	}
 }
@@ -1174,6 +1175,18 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 		}
 	}
 
+	if !protectedWorktreeCleanForPublish {
+		repaired, repairNote, repairErr := tryRepairCanonicalProtectedRoot(ctx, engine, cfg, store, repoRecord, hasRepoRecord)
+		if repairErr != nil {
+			skipped = append(skipped, repairNote)
+		} else if repaired {
+			applied = append(applied, repairNote)
+			protectedWorktreeCleanForPublish = true
+		} else if repairNote != "" {
+			skipped = append(skipped, repairNote)
+		}
+	}
+
 	if cfg.Repo.RemoteName != "" && cfg.Repo.MainWorktree != "" && protectedWorktreeCleanForPublish {
 		if _, err := os.Stat(cfg.Repo.MainWorktree); err == nil {
 			if err := engine.FetchRemote(cfg.Repo.MainWorktree, cfg.Repo.RemoteName); err != nil {
@@ -1200,6 +1213,61 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 		}
 	}
 	return applied, skipped, nil
+}
+
+func tryRepairCanonicalProtectedRoot(ctx context.Context, engine git.Engine, cfg policy.File, store state.Store, repoRecord state.RepositoryRecord, hasRepoRecord bool) (bool, string, error) {
+	if cfg.Repo.MainWorktree == "" {
+		return false, "", nil
+	}
+	layout, err := git.DiscoverRepositoryLayout(cfg.Repo.MainWorktree)
+	if err != nil {
+		return false, fmt.Sprintf("left protected root dirty because main worktree %s could not be inspected", cfg.Repo.MainWorktree), nil
+	}
+	rootPath := canonicalRegistryPath(layout.RepositoryRoot)
+	mainPath := canonicalRegistryPath(cfg.Repo.MainWorktree)
+	if rootPath != mainPath {
+		return false, "left protected worktree dirty because doctor only auto-repairs the canonical repository root checkout", nil
+	}
+	branch, err := git.NewEngine(rootPath).CurrentBranch()
+	if err != nil {
+		return false, fmt.Sprintf("left protected root dirty because repository root is not on a local branch: %v", err), nil
+	}
+	if branch != cfg.Repo.ProtectedBranch {
+		return false, fmt.Sprintf("left protected root dirty because repository root is on %s, expected %s", branch, cfg.Repo.ProtectedBranch), nil
+	}
+	if !hasRepoRecord {
+		return false, "left protected root dirty because the repository is not initialized", nil
+	}
+	count, err := store.CountUnfinishedItems(ctx, repoRecord.ID)
+	if err != nil {
+		return false, "", err
+	}
+	if count != 0 {
+		return false, fmt.Sprintf("left protected root dirty because %d unfinished queue item(s) still need operator attention", count), nil
+	}
+	if cfg.Repo.RemoteName == "" {
+		return false, "left protected root dirty because no remote is configured for safe repair", nil
+	}
+	if err := engine.FetchRemote(cfg.Repo.MainWorktree, cfg.Repo.RemoteName); err != nil {
+		return false, fmt.Sprintf("left protected root dirty because upstream fetch failed: %v", err), nil
+	}
+	branchStatus, err := engine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
+	if err != nil {
+		return false, "", err
+	}
+	if !branchStatus.HasUpstream {
+		return false, "left protected root dirty because the protected branch has no upstream to restore from", nil
+	}
+	if branchStatus.HasUpstream && branchStatus.AheadCount > 0 && branchStatus.BehindCount > 0 {
+		return false, fmt.Sprintf("left protected root dirty because %s has diverged from %s", cfg.Repo.ProtectedBranch, branchStatus.Upstream), nil
+	}
+	if branchStatus.AheadCount > 0 {
+		return false, fmt.Sprintf("left protected root dirty because %s is ahead of %s; publish or reconcile it first", cfg.Repo.ProtectedBranch, branchStatus.Upstream), nil
+	}
+	if err := engine.ResetHardClean(cfg.Repo.MainWorktree, branchStatus.Upstream); err != nil {
+		return false, "", err
+	}
+	return true, fmt.Sprintf("restored canonical protected root checkout %s to %s", cfg.Repo.MainWorktree, branchStatus.Upstream), nil
 }
 
 func yesNo(v bool) string {

@@ -148,7 +148,7 @@ func shouldTryDrainAfterMutation() bool {
 }
 
 func protectedWorktreeDirtyError(mainWorktree string, dirtyPaths []string) error {
-	queueBlockedGuidance := "; mainline is blocked until the protected root checkout is clean. Take ownership of the protected root checkout, run `mq doctor --repo " + mainWorktree + "`, then save, clean, or resolve the dirty state before retrying"
+	queueBlockedGuidance := "; mainline is blocked until the protected root checkout is clean. Take ownership of the protected root checkout, run `mq doctor --repo " + mainWorktree + "`, and if the queue is idle use `mq doctor --repo " + mainWorktree + " --fix` to restore shipped main. Otherwise save, clean, or resolve the dirty state before retrying"
 	if len(dirtyPaths) == 0 {
 		return fmt.Errorf("protected branch worktree %s is dirty%s", mainWorktree, queueBlockedGuidance)
 	}

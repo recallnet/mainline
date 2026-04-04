@@ -483,6 +483,16 @@ func (e Engine) FetchRemote(worktreePath string, remote string) error {
 	return err
 }
 
+// ResetHardClean resets the current branch in a worktree to targetRef and removes
+// untracked files. Intended for explicit repair flows on protected worktrees.
+func (e Engine) ResetHardClean(worktreePath string, targetRef string) error {
+	if _, err := e.runGit(worktreePath, "reset", "--hard", targetRef); err != nil {
+		return err
+	}
+	_, err := e.runGit(worktreePath, "clean", "-fd")
+	return err
+}
+
 // RebaseCurrentBranch rebases the checked-out branch in a worktree onto upstreamRef.
 func (e Engine) RebaseCurrentBranch(worktreePath string, upstreamRef string) error {
 	output, err := e.runGit(worktreePath, "rebase", upstreamRef)
