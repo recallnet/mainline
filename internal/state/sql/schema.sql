@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS publish_requests (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	repo_id INTEGER NOT NULL,
 	target_sha TEXT NOT NULL,
+	priority TEXT NOT NULL DEFAULT 'normal',
 	status TEXT NOT NULL,
 	attempt_count INTEGER NOT NULL DEFAULT 0,
 	next_attempt_at DATETIME,

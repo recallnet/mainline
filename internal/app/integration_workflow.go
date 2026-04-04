@@ -186,6 +186,7 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 		request, err := store.CreatePublishRequest(ctx, state.PublishRequest{
 			RepoID:    repoRecord.ID,
 			TargetSHA: protectedHead,
+			Priority:  submission.Priority,
 			Status:    domain.PublishStatusQueued,
 		})
 		if err != nil {
@@ -199,6 +200,7 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 			Payload: mustJSON(domain.PublishRequestedPayload{
 				TargetSHA: protectedHead,
 				Reason:    "integration_succeeded",
+				Priority:  submission.Priority,
 				Branch:    submissionDisplayRef(submission),
 				SourceRef: submission.SourceRef,
 				RefKind:   submission.RefKind,

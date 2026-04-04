@@ -200,7 +200,7 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 		return "", err
 	}
 	if currentProtectedSHA != request.TargetSHA {
-		replacement, created, err := ensureLatestPublishRequestRecord(ctx, store, repoRecord.ID, currentProtectedSHA)
+		replacement, created, err := ensureLatestPublishRequestRecord(ctx, store, repoRecord.ID, currentProtectedSHA, request.Priority)
 		if err != nil {
 			return "", err
 		}
@@ -311,7 +311,7 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 	}
 
 	if latestProtectedSHA != request.TargetSHA {
-		replacement, created, err := ensureLatestPublishRequestRecord(ctx, store, repoRecord.ID, latestProtectedSHA)
+		replacement, created, err := ensureLatestPublishRequestRecord(ctx, store, repoRecord.ID, latestProtectedSHA, request.Priority)
 		if err != nil {
 			return "", err
 		}
@@ -433,14 +433,14 @@ func maybeRequestPublishPreemption(ctx context.Context, store state.Store, repoR
 	if err != nil {
 		return "Publish worker busy.", nil
 	}
-	if latest.ID == running.ID || latest.TargetSHA == running.TargetSHA {
+	if !shouldPreemptPublish(running, latest) {
 		return "Publish worker busy.", nil
 	}
 
 	if err := git.InterruptProcess(metadata.PID); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Requested publish preemption for newer target %s", latest.TargetSHA), nil
+	return fmt.Sprintf("Requested publish preemption for %s priority target %s over running %s priority target %s", latest.Priority, latest.TargetSHA, running.Priority, running.TargetSHA), nil
 }
 
 func markPublishFailed(ctx context.Context, store state.Store, repoID int64, requestID int64, targetSHA string, cause error) (string, error) {
@@ -472,10 +472,10 @@ func latestReplacementPublishRequest(ctx context.Context, store state.Store, rep
 		if request.Status != "queued" {
 			continue
 		}
-		if request.ID == running.ID || request.TargetSHA == running.TargetSHA {
+		if !shouldPreemptPublish(running, request) {
 			continue
 		}
-		if replacement.ID == 0 || request.ID > replacement.ID {
+		if replacement.ID == 0 || publishPriorityRank(request.Priority) < publishPriorityRank(replacement.Priority) || (request.Priority == replacement.Priority && request.ID > replacement.ID) {
 			replacement = request
 		}
 	}
@@ -485,7 +485,7 @@ func latestReplacementPublishRequest(ctx context.Context, store state.Store, rep
 	return replacement, nil
 }
 
-func ensureLatestPublishRequestRecord(ctx context.Context, store state.Store, repoID int64, targetSHA string) (state.PublishRequest, bool, error) {
+func ensureLatestPublishRequestRecord(ctx context.Context, store state.Store, repoID int64, targetSHA string, priority string) (state.PublishRequest, bool, error) {
 	requests, err := store.ListPublishRequests(ctx, repoID)
 	if err != nil {
 		return state.PublishRequest{}, false, err
@@ -499,6 +499,7 @@ func ensureLatestPublishRequestRecord(ctx context.Context, store state.Store, re
 	request, err := store.CreatePublishRequest(ctx, state.PublishRequest{
 		RepoID:    repoID,
 		TargetSHA: targetSHA,
+		Priority:  priority,
 		Status:    "queued",
 	})
 	if err != nil {
@@ -512,6 +513,7 @@ func ensureLatestPublishRequestRecord(ctx context.Context, store state.Store, re
 		Payload: mustJSON(map[string]string{
 			"target_sha": targetSHA,
 			"reason":     "protected_branch_advanced_after_publish",
+			"priority":   priority,
 		}),
 	}); err != nil {
 		return state.PublishRequest{}, false, err

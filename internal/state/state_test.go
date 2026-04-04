@@ -259,6 +259,97 @@ func TestEnsureSchemaMigratesLegacyVersionThreePublishRetryColumns(t *testing.T)
 	}
 }
 
+func TestEnsureSchemaMigratesLegacyVersionFivePublishPriority(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitDir := filepath.Join(repoRoot, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	store := NewStore(DefaultPath(gitDir))
+	ctx := context.Background()
+	if err := os.MkdirAll(filepath.Dir(store.Path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(state dir): %v", err)
+	}
+
+	db, err := sql.Open("sqlite", store.Path)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		CREATE TABLE repositories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			canonical_path TEXT NOT NULL UNIQUE,
+			protected_branch TEXT NOT NULL,
+			remote_name TEXT NOT NULL,
+			main_worktree_path TEXT NOT NULL,
+			policy_version TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE integration_submissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			repo_id INTEGER NOT NULL,
+			branch_name TEXT NOT NULL,
+			source_ref TEXT NOT NULL DEFAULT '',
+			ref_kind TEXT NOT NULL DEFAULT 'branch',
+			source_worktree_path TEXT NOT NULL,
+			source_sha TEXT NOT NULL,
+			allow_newer_head INTEGER NOT NULL DEFAULT 0,
+			requested_by TEXT NOT NULL,
+			priority TEXT NOT NULL DEFAULT 'normal',
+			status TEXT NOT NULL,
+			last_error TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE publish_requests (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			repo_id INTEGER NOT NULL,
+			target_sha TEXT NOT NULL,
+			status TEXT NOT NULL,
+			attempt_count INTEGER NOT NULL DEFAULT 0,
+			next_attempt_at DATETIME,
+			superseded_by INTEGER,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE TABLE events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			repo_id INTEGER NOT NULL,
+			item_type TEXT NOT NULL,
+			item_id INTEGER,
+			event_type TEXT NOT NULL,
+			payload BLOB NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`); err != nil {
+		t.Fatalf("create legacy v5 schema: %v", err)
+	}
+	if _, err := db.Exec(`PRAGMA user_version = 5;`); err != nil {
+		t.Fatalf("set user_version: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO publish_requests (repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by)
+		VALUES (1, 'abc123', 'queued', 0, NULL, NULL)
+	`); err != nil {
+		t.Fatalf("insert publish request: %v", err)
+	}
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("EnsureSchema: %v", err)
+	}
+
+	request, err := store.GetPublishRequest(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetPublishRequest: %v", err)
+	}
+	if request.Priority != "normal" {
+		t.Fatalf("expected migrated publish priority normal, got %+v", request)
+	}
+}
+
 func TestLockManagerEnforcesExclusivityAndReportsStale(t *testing.T) {
 	repoRoot := t.TempDir()
 	gitDir := filepath.Join(repoRoot, ".git")

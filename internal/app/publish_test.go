@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
@@ -772,6 +774,209 @@ func TestRunOnceCanPreemptInFlightPublishForNewerTarget(t *testing.T) {
 	}
 	if requests[0].Status != "superseded" {
 		t.Fatalf("expected first request superseded, got %q", requests[0].Status)
+	}
+}
+
+func TestRunOnceDoesNotPreemptHighPriorityInFlightPublishForLowerPriorityTarget(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	hookPIDPath := filepath.Join(t.TempDir(), "pre-push.pid")
+	hookPath := filepath.Join(hooksDirForRepo(t, repoRoot), "pre-push")
+	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\necho $$ > "+hookPIDPath+"\nsleep 5\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Publish.Mode = "auto"
+	cfg.Publish.InterruptInflight = true
+	cfg.Repo.HookPolicy = "inherit"
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "enable priority-aware publish preemption")
+
+	highPath := filepath.Join(t.TempDir(), "feature-high")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/high", highPath)
+	writeFileAndCommit(t, highPath, "high.txt", "high\n", "high priority change")
+	submitBranchWithArgs(t, highPath, "--priority", submissionPriorityHigh)
+	runOnce(t, repoRoot)
+
+	resultCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		result, err := runOneCycle(repoRoot)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		resultCh <- result
+	}()
+
+	hookPID := waitForHookPID(t, hookPIDPath)
+
+	lowPath := filepath.Join(t.TempDir(), "feature-low")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/low", lowPath)
+	writeFileAndCommit(t, lowPath, "low.txt", "low\n", "low priority change")
+	submitBranchWithArgs(t, lowPath, "--priority", submissionPriorityLow)
+	runOnce(t, repoRoot)
+
+	preemptResult, err := runOneCycle(repoRoot)
+	if err != nil {
+		t.Fatalf("third runOneCycle returned error: %v", err)
+	}
+	if preemptResult != "Publish worker busy." {
+		t.Fatalf("expected lower-priority publish not to preempt high-priority push, got %q", preemptResult)
+	}
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("high-priority publish returned error: %v", err)
+	case result := <-resultCh:
+		if strings.Contains(result, "Preempted publish request") {
+			t.Fatalf("expected high-priority publish not to be preempted, got %q", result)
+		}
+		if !strings.Contains(result, "Published request") && !strings.Contains(result, "Superseded older publish requests") {
+			t.Fatalf("expected high-priority publish to complete or queue a follow-up, got %q", result)
+		}
+	case <-time.After(6 * time.Second):
+		t.Fatalf("timed out waiting for high-priority publish cycle")
+	}
+	waitForProcessExit(t, hookPID)
+
+	if _, err := runOneCycle(repoRoot); err != nil {
+		t.Fatalf("final runOneCycle returned error: %v", err)
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+}
+
+func TestWaitForLandedReturnsSupersededWhenPublishWasOvertaken(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
+	hookPIDPath := filepath.Join(t.TempDir(), "pre-push.pid")
+	hookPath := filepath.Join(hooksDirForRepo(t, repoRoot), "pre-push")
+	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\necho $$ > "+hookPIDPath+"\nsleep 15\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Publish.Mode = "auto"
+	cfg.Publish.InterruptInflight = true
+	cfg.Repo.HookPolicy = "inherit"
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "enable auto publish preemption")
+
+	firstPath := filepath.Join(t.TempDir(), "feature-first")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/first", firstPath)
+	writeFileAndCommit(t, firstPath, "first.txt", "first\n", "first change")
+	var firstOut bytes.Buffer
+	var firstErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", firstPath, "--json"}, &firstOut, &firstErr); err != nil {
+		t.Fatalf("runSubmit(first) returned error: %v", err)
+	}
+	var firstSubmit submitResult
+	if err := json.Unmarshal(firstOut.Bytes(), &firstSubmit); err != nil {
+		t.Fatalf("Unmarshal(first): %v", err)
+	}
+	runOnce(t, repoRoot)
+
+	resultCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		result, err := runOneCycle(repoRoot)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		resultCh <- result
+	}()
+	hookPID := waitForHookPID(t, hookPIDPath)
+
+	secondPath := filepath.Join(t.TempDir(), "feature-second")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/second", secondPath)
+	writeFileAndCommit(t, secondPath, "second.txt", "second\n", "second change")
+	var secondOut bytes.Buffer
+	var secondErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", secondPath, "--json"}, &secondOut, &secondErr); err != nil {
+		t.Fatalf("runSubmit(second) returned error: %v", err)
+	}
+	runOnce(t, repoRoot)
+
+	preemptResult, err := runOneCycle(repoRoot)
+	if err != nil {
+		t.Fatalf("preempting runOneCycle returned error: %v", err)
+	}
+	if !strings.Contains(preemptResult, "Requested publish preemption") {
+		t.Fatalf("expected publish preemption request, got %q", preemptResult)
+	}
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("first publish cycle returned error: %v", err)
+	case result := <-resultCh:
+		if !strings.Contains(result, "Preempted publish request") {
+			t.Fatalf("expected interrupted publish result, got %q", result)
+		}
+	case <-time.After(6 * time.Second):
+		t.Fatalf("timed out waiting for interrupted publish cycle")
+	}
+	waitForProcessExit(t, hookPID)
+
+	if _, err := runOneCycle(repoRoot); err != nil {
+		t.Fatalf("final runOneCycle returned error: %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submission, err := store.GetIntegrationSubmission(context.Background(), firstSubmit.SubmissionID)
+	if err != nil {
+		t.Fatalf("GetIntegrationSubmission: %v", err)
+	}
+	queued := queuedSubmission{
+		Layout:     layout,
+		RepoRoot:   repoRoot,
+		Config:     cfg,
+		Store:      store,
+		RepoRecord: repoRecord,
+		Submission: submission,
+	}
+
+	result, waitErr := waitForSubmissionTarget(queued, waitTargetLanded, 2*time.Second, 10*time.Millisecond)
+	if waitErr == nil {
+		t.Fatalf("expected landed wait to terminate with superseded result")
+	}
+	if result.Outcome != waitOutcomeSuperseded {
+		t.Fatalf("expected superseded outcome, got %+v", result)
+	}
+	if result.PublishStatus != domain.PublishStatusSuperseded {
+		t.Fatalf("expected superseded publish status, got %+v", result)
+	}
+	if !strings.Contains(result.Error, "superseded by newer protected tip") {
+		t.Fatalf("expected superseded error, got %+v", result)
 	}
 }
 

@@ -80,6 +80,7 @@ Flags:
 	request, err := store.CreatePublishRequest(ctx, state.PublishRequest{
 		RepoID:    repoRecord.ID,
 		TargetSHA: targetSHA,
+		Priority:  submissionPriorityNormal,
 		Status:    domain.PublishStatusQueued,
 	})
 	if err != nil {
@@ -94,6 +95,7 @@ Flags:
 		Payload: mustJSON(domain.PublishRequestedPayload{
 			TargetSHA: targetSHA,
 			Reason:    "manual",
+			Priority:  submissionPriorityNormal,
 		}),
 	}); err != nil {
 		return err

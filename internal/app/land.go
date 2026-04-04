@@ -211,7 +211,7 @@ func waitForLandedPublish(queued queuedSubmission, timeout time.Duration, pollIn
 			}
 			result.ProtectedSHA = protectedSHA
 
-			request, err := ensureLandPublishRequest(context.Background(), queued.Store, queued.RepoRecord.ID, queued.RepoRoot, protectedSHA)
+			request, err := ensureLandPublishRequest(context.Background(), queued.Store, queued.RepoRecord.ID, queued.RepoRoot, protectedSHA, queued.Submission.Priority)
 			if err != nil {
 				result.Error = err.Error()
 				return result, err
@@ -251,7 +251,7 @@ func waitForLandedPublish(queued queuedSubmission, timeout time.Duration, pollIn
 				} else if result.PublishStatus == "succeeded" {
 					result.Published = true
 					return result, nil
-				} else if result.PublishStatus == "failed" || result.PublishStatus == "cancelled" {
+				} else if result.PublishStatus == "failed" || result.PublishStatus == "cancelled" || result.PublishStatus == "superseded" {
 					result.Error = fmt.Sprintf("publish request %d %s", result.PublishRequestID, result.PublishStatus)
 					return result, fmt.Errorf("publish request %d %s", result.PublishRequestID, result.PublishStatus)
 				}
@@ -275,7 +275,7 @@ func waitForLandedPublish(queued queuedSubmission, timeout time.Duration, pollIn
 	}
 }
 
-func ensureLandPublishRequest(ctx context.Context, store state.Store, repoID int64, repoRoot string, targetSHA string) (state.PublishRequest, error) {
+func ensureLandPublishRequest(ctx context.Context, store state.Store, repoID int64, repoRoot string, targetSHA string, priority string) (state.PublishRequest, error) {
 	requests, err := store.ListPublishRequests(ctx, repoID)
 	if err != nil {
 		return state.PublishRequest{}, err
@@ -294,6 +294,7 @@ func ensureLandPublishRequest(ctx context.Context, store state.Store, repoID int
 	request, err := store.CreatePublishRequest(ctx, state.PublishRequest{
 		RepoID:    repoID,
 		TargetSHA: targetSHA,
+		Priority:  priority,
 		Status:    "queued",
 	})
 	if err != nil {
@@ -307,6 +308,7 @@ func ensureLandPublishRequest(ctx context.Context, store state.Store, repoID int
 		Payload: mustJSON(map[string]string{
 			"target_sha": targetSHA,
 			"reason":     "land_requested",
+			"priority":   priority,
 			"repo_root":  repoRoot,
 		}),
 	}); err != nil {

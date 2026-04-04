@@ -41,6 +41,7 @@ type IntegrationBlockedPayload struct {
 type PublishRequestedPayload struct {
 	TargetSHA string  `json:"target_sha"`
 	Reason    string  `json:"reason"`
+	Priority  string  `json:"priority,omitempty"`
 	Branch    string  `json:"branch,omitempty"`
 	SourceRef string  `json:"source_ref,omitempty"`
 	RefKind   RefKind `json:"ref_kind,omitempty"`

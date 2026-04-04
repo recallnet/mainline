@@ -20,7 +20,7 @@ import (
 const (
 	defaultDirName       = "mainline"
 	defaultDBName        = "state.db"
-	currentSchemaVersion = 5
+	currentSchemaVersion = 6
 )
 
 var ErrUnsupportedSchemaVersion = errors.New("unsupported state schema version")
@@ -65,6 +65,7 @@ type PublishRequest struct {
 	ID            int64                `json:"id"`
 	RepoID        int64                `json:"repo_id"`
 	TargetSHA     string               `json:"target_sha"`
+	Priority      string               `json:"priority"`
 	Status        domain.PublishStatus `json:"status"`
 	AttemptCount  int                  `json:"attempt_count"`
 	NextAttemptAt sql.NullTime         `json:"next_attempt_at"`
@@ -87,6 +88,11 @@ type EventRecord struct {
 // NewStore returns a repo-local durable store.
 func NewStore(path string) Store {
 	return Store{Path: path}
+}
+
+// CurrentSchemaVersionForTest exposes the latest schema version to black-box tests.
+func CurrentSchemaVersionForTest() int {
+	return currentSchemaVersion
 }
 
 // DefaultPath returns the default SQLite path under shared git storage.
@@ -299,6 +305,9 @@ func (s Store) CreatePublishRequest(ctx context.Context, request PublishRequest)
 	if err := applyTestFault("CreatePublishRequest"); err != nil {
 		return PublishRequest{}, err
 	}
+	if request.Priority == "" {
+		request.Priority = "normal"
+	}
 	db, err := s.open()
 	if err != nil {
 		return PublishRequest{}, err
@@ -308,6 +317,7 @@ func (s Store) CreatePublishRequest(ctx context.Context, request PublishRequest)
 	created, err := sqlcgen.New(db).CreatePublishRequest(ctx, sqlcgen.CreatePublishRequestParams{
 		RepoID:        request.RepoID,
 		TargetSha:     request.TargetSHA,
+		Priority:      request.Priority,
 		Status:        string(request.Status),
 		AttemptCount:  int64(request.AttemptCount),
 		NextAttemptAt: request.NextAttemptAt,
@@ -808,6 +818,7 @@ func fromSQLCPublishRequest(row sqlcgen.PublishRequest) PublishRequest {
 		ID:            row.ID,
 		RepoID:        row.RepoID,
 		TargetSHA:     row.TargetSha,
+		Priority:      row.Priority,
 		Status:        domain.PublishStatus(row.Status),
 		AttemptCount:  int(row.AttemptCount),
 		NextAttemptAt: row.NextAttemptAt,

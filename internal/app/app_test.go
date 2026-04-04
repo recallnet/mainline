@@ -1186,8 +1186,8 @@ func TestStatusUpgradesExistingLegacyStateSchema(t *testing.T) {
 	`).Scan(&version); err != nil {
 		t.Fatalf("read goose version: %v", err)
 	}
-	if version != 5 {
-		t.Fatalf("expected schema version 5 after status upgrade, got %d", version)
+	if version != state.CurrentSchemaVersionForTest() {
+		t.Fatalf("expected schema version %d after status upgrade, got %d", state.CurrentSchemaVersionForTest(), version)
 	}
 }
 

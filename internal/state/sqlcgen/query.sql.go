@@ -176,6 +176,7 @@ const createPublishRequest = `-- name: CreatePublishRequest :one
 INSERT INTO publish_requests (
 	repo_id,
 	target_sha,
+	priority,
 	status,
 	attempt_count,
 	next_attempt_at,
@@ -186,14 +187,16 @@ INSERT INTO publish_requests (
 	?3,
 	?4,
 	?5,
-	?6
+	?6,
+	?7
 )
-RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+RETURNING id, repo_id, target_sha, priority, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 `
 
 type CreatePublishRequestParams struct {
 	RepoID        int64         `json:"repo_id"`
 	TargetSha     string        `json:"target_sha"`
+	Priority      string        `json:"priority"`
 	Status        string        `json:"status"`
 	AttemptCount  int64         `json:"attempt_count"`
 	NextAttemptAt sql.NullTime  `json:"next_attempt_at"`
@@ -204,6 +207,7 @@ func (q *Queries) CreatePublishRequest(ctx context.Context, arg CreatePublishReq
 	row := q.db.QueryRowContext(ctx, createPublishRequest,
 		arg.RepoID,
 		arg.TargetSha,
+		arg.Priority,
 		arg.Status,
 		arg.AttemptCount,
 		arg.NextAttemptAt,
@@ -214,6 +218,7 @@ func (q *Queries) CreatePublishRequest(ctx context.Context, arg CreatePublishReq
 		&i.ID,
 		&i.RepoID,
 		&i.TargetSha,
+		&i.Priority,
 		&i.Status,
 		&i.AttemptCount,
 		&i.NextAttemptAt,
@@ -253,7 +258,7 @@ func (q *Queries) GetIntegrationSubmission(ctx context.Context, id int64) (Integ
 }
 
 const getPublishRequest = `-- name: GetPublishRequest :one
-SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+SELECT id, repo_id, target_sha, priority, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 FROM publish_requests
 WHERE id = ?1
 `
@@ -265,6 +270,7 @@ func (q *Queries) GetPublishRequest(ctx context.Context, id int64) (PublishReque
 		&i.ID,
 		&i.RepoID,
 		&i.TargetSha,
+		&i.Priority,
 		&i.Status,
 		&i.AttemptCount,
 		&i.NextAttemptAt,
@@ -298,10 +304,18 @@ func (q *Queries) GetRepositoryByPath(ctx context.Context, canonicalPath string)
 }
 
 const latestQueuedPublishRequest = `-- name: LatestQueuedPublishRequest :one
-SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+SELECT id, repo_id, target_sha, priority, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 FROM publish_requests
 WHERE repo_id = ?1 AND status = 'queued'
-ORDER BY created_at DESC, id DESC
+ORDER BY
+	CASE priority
+		WHEN 'high' THEN 0
+		WHEN 'normal' THEN 1
+		WHEN 'low' THEN 2
+		ELSE 1
+	END ASC,
+	created_at DESC,
+	id DESC
 LIMIT 1
 `
 
@@ -312,6 +326,7 @@ func (q *Queries) LatestQueuedPublishRequest(ctx context.Context, repoID int64) 
 		&i.ID,
 		&i.RepoID,
 		&i.TargetSha,
+		&i.Priority,
 		&i.Status,
 		&i.AttemptCount,
 		&i.NextAttemptAt,
@@ -323,12 +338,20 @@ func (q *Queries) LatestQueuedPublishRequest(ctx context.Context, repoID int64) 
 }
 
 const latestReadyQueuedPublishRequest = `-- name: LatestReadyQueuedPublishRequest :one
-SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+SELECT id, repo_id, target_sha, priority, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 FROM publish_requests
 WHERE repo_id = ?1
   AND status = 'queued'
   AND (next_attempt_at IS NULL OR next_attempt_at <= ?2)
-ORDER BY created_at DESC, id DESC
+ORDER BY
+	CASE priority
+		WHEN 'high' THEN 0
+		WHEN 'normal' THEN 1
+		WHEN 'low' THEN 2
+		ELSE 1
+	END ASC,
+	created_at DESC,
+	id DESC
 LIMIT 1
 `
 
@@ -344,6 +367,7 @@ func (q *Queries) LatestReadyQueuedPublishRequest(ctx context.Context, arg Lates
 		&i.ID,
 		&i.RepoID,
 		&i.TargetSha,
+		&i.Priority,
 		&i.Status,
 		&i.AttemptCount,
 		&i.NextAttemptAt,
@@ -592,7 +616,7 @@ func (q *Queries) ListIntegrationSubmissionsByStatus(ctx context.Context, arg Li
 }
 
 const listPublishRequests = `-- name: ListPublishRequests :many
-SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+SELECT id, repo_id, target_sha, priority, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 FROM publish_requests
 WHERE repo_id = ?1
 ORDER BY created_at ASC, id ASC
@@ -611,6 +635,7 @@ func (q *Queries) ListPublishRequests(ctx context.Context, repoID int64) ([]Publ
 			&i.ID,
 			&i.RepoID,
 			&i.TargetSha,
+			&i.Priority,
 			&i.Status,
 			&i.AttemptCount,
 			&i.NextAttemptAt,
@@ -632,7 +657,7 @@ func (q *Queries) ListPublishRequests(ctx context.Context, repoID int64) ([]Publ
 }
 
 const listPublishRequestsByStatus = `-- name: ListPublishRequestsByStatus :many
-SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+SELECT id, repo_id, target_sha, priority, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 FROM publish_requests
 WHERE repo_id = ?1 AND status = ?2
 ORDER BY created_at ASC, id ASC
@@ -656,6 +681,7 @@ func (q *Queries) ListPublishRequestsByStatus(ctx context.Context, arg ListPubli
 			&i.ID,
 			&i.RepoID,
 			&i.TargetSha,
+			&i.Priority,
 			&i.Status,
 			&i.AttemptCount,
 			&i.NextAttemptAt,
@@ -677,7 +703,7 @@ func (q *Queries) ListPublishRequestsByStatus(ctx context.Context, arg ListPubli
 }
 
 const nextDelayedQueuedPublishRequest = `-- name: NextDelayedQueuedPublishRequest :one
-SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+SELECT id, repo_id, target_sha, priority, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 FROM publish_requests
 WHERE repo_id = ?1
   AND status = 'queued'
@@ -699,6 +725,7 @@ func (q *Queries) NextDelayedQueuedPublishRequest(ctx context.Context, arg NextD
 		&i.ID,
 		&i.RepoID,
 		&i.TargetSha,
+		&i.Priority,
 		&i.Status,
 		&i.AttemptCount,
 		&i.NextAttemptAt,
@@ -755,7 +782,7 @@ SET status = 'queued',
 	superseded_by = NULL,
 	updated_at = CURRENT_TIMESTAMP
 WHERE id = ?1
-RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+RETURNING id, repo_id, target_sha, priority, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 `
 
 func (q *Queries) ResetPublishRequestForRetry(ctx context.Context, id int64) (PublishRequest, error) {
@@ -765,6 +792,7 @@ func (q *Queries) ResetPublishRequestForRetry(ctx context.Context, id int64) (Pu
 		&i.ID,
 		&i.RepoID,
 		&i.TargetSha,
+		&i.Priority,
 		&i.Status,
 		&i.AttemptCount,
 		&i.NextAttemptAt,
@@ -783,7 +811,7 @@ SET status = 'queued',
 	superseded_by = NULL,
 	updated_at = CURRENT_TIMESTAMP
 WHERE id = ?3
-RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+RETURNING id, repo_id, target_sha, priority, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 `
 
 type SchedulePublishRetryParams struct {
@@ -799,6 +827,7 @@ func (q *Queries) SchedulePublishRetry(ctx context.Context, arg SchedulePublishR
 		&i.ID,
 		&i.RepoID,
 		&i.TargetSha,
+		&i.Priority,
 		&i.Status,
 		&i.AttemptCount,
 		&i.NextAttemptAt,
@@ -898,7 +927,7 @@ const updatePublishRequestStatus = `-- name: UpdatePublishRequestStatus :one
 UPDATE publish_requests
 SET status = ?1, superseded_by = ?2, next_attempt_at = NULL, updated_at = CURRENT_TIMESTAMP
 WHERE id = ?3
-RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
+RETURNING id, repo_id, target_sha, priority, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
 `
 
 type UpdatePublishRequestStatusParams struct {
@@ -914,6 +943,7 @@ func (q *Queries) UpdatePublishRequestStatus(ctx context.Context, arg UpdatePubl
 		&i.ID,
 		&i.RepoID,
 		&i.TargetSha,
+		&i.Priority,
 		&i.Status,
 		&i.AttemptCount,
 		&i.NextAttemptAt,

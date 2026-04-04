@@ -101,6 +101,7 @@ ORDER BY created_at ASC, id ASC;
 INSERT INTO publish_requests (
 	repo_id,
 	target_sha,
+	priority,
 	status,
 	attempt_count,
 	next_attempt_at,
@@ -108,6 +109,7 @@ INSERT INTO publish_requests (
 ) VALUES (
 	sqlc.arg(repo_id),
 	sqlc.arg(target_sha),
+	sqlc.arg(priority),
 	sqlc.arg(status),
 	sqlc.arg(attempt_count),
 	sqlc.narg(next_attempt_at),
@@ -124,7 +126,15 @@ WHERE id = sqlc.arg(id);
 SELECT *
 FROM publish_requests
 WHERE repo_id = sqlc.arg(repo_id) AND status = 'queued'
-ORDER BY created_at DESC, id DESC
+ORDER BY
+	CASE priority
+		WHEN 'high' THEN 0
+		WHEN 'normal' THEN 1
+		WHEN 'low' THEN 2
+		ELSE 1
+	END ASC,
+	created_at DESC,
+	id DESC
 LIMIT 1;
 
 -- name: LatestReadyQueuedPublishRequest :one
@@ -133,7 +143,15 @@ FROM publish_requests
 WHERE repo_id = sqlc.arg(repo_id)
   AND status = 'queued'
   AND (next_attempt_at IS NULL OR next_attempt_at <= sqlc.arg(now_utc))
-ORDER BY created_at DESC, id DESC
+ORDER BY
+	CASE priority
+		WHEN 'high' THEN 0
+		WHEN 'normal' THEN 1
+		WHEN 'low' THEN 2
+		ELSE 1
+	END ASC,
+	created_at DESC,
+	id DESC
 LIMIT 1;
 
 -- name: NextDelayedQueuedPublishRequest :one

@@ -1201,7 +1201,7 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 					if err != nil {
 						return nil, nil, err
 					}
-					request, created, err := ensureLatestPublishRequestRecord(ctx, store, repoRecord.ID, protectedSHA)
+					request, created, err := ensureLatestPublishRequestRecord(ctx, store, repoRecord.ID, protectedSHA, submissionPriorityNormal)
 					if err != nil {
 						return nil, nil, err
 					}

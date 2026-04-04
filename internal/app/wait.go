@@ -436,6 +436,11 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 				result.DurationMS = time.Since(start).Milliseconds()
 				result.Error = fmt.Sprintf("publish request %d cancelled", info.PublishRequestID)
 				return result, exitWithCode(1, fmt.Errorf("publish request %d cancelled", info.PublishRequestID))
+			case "superseded":
+				result.Outcome = waitOutcomeSuperseded
+				result.DurationMS = time.Since(start).Milliseconds()
+				result.Error = fmt.Sprintf("publish request %d superseded by newer protected tip", info.PublishRequestID)
+				return result, exitWithCode(1, fmt.Errorf("publish request %d superseded by newer protected tip", info.PublishRequestID))
 			}
 		}
 

@@ -40,6 +40,7 @@ type PublishRequest struct {
 	ID            int64         `json:"id"`
 	RepoID        int64         `json:"repo_id"`
 	TargetSha     string        `json:"target_sha"`
+	Priority      string        `json:"priority"`
 	Status        string        `json:"status"`
 	AttemptCount  int64         `json:"attempt_count"`
 	NextAttemptAt sql.NullTime  `json:"next_attempt_at"`
