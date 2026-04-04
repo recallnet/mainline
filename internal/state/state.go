@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
+	"github.com/pressly/goose/v3"
 	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/state/sqlcgen"
 	_ "modernc.org/sqlite"
@@ -582,7 +583,7 @@ func (s Store) open() (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("configure sqlite busy timeout: %w", err)
 	}
-	version, err := schemaVersion(db)
+	version, err := schemaVersion(context.Background(), db)
 	if err != nil {
 		db.Close()
 		return nil, err
@@ -595,15 +596,23 @@ func (s Store) open() (*sql.DB, error) {
 	return db, nil
 }
 
-func schemaVersion(db *sql.DB) (int, error) {
-	var version int
+func schemaVersion(ctx context.Context, db *sql.DB) (int, error) {
+	version, err := effectiveSchemaVersion(ctx, db)
+	if err != nil {
+		return 0, err
+	}
+	return int(version), nil
+}
+
+func legacySchemaVersion(db *sql.DB) (int64, error) {
+	var version int64
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
 		return 0, fmt.Errorf("read sqlite schema version: %w", err)
 	}
 	return version, nil
 }
 
-func setSchemaVersion(ctx context.Context, db *sql.DB, version int) error {
+func setLegacySchemaVersion(ctx context.Context, db *sql.DB, version int64) error {
 	if _, err := db.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d;`, version)); err != nil {
 		return fmt.Errorf("set sqlite schema version: %w", err)
 	}
@@ -611,109 +620,135 @@ func setSchemaVersion(ctx context.Context, db *sql.DB, version int) error {
 }
 
 func ensureSchemaVersion(ctx context.Context, db *sql.DB) error {
-	version, err := schemaVersion(db)
+	version, err := effectiveSchemaVersion(ctx, db)
 	if err != nil {
 		return err
 	}
 	if version > currentSchemaVersion {
 		return fmt.Errorf("%w: found version %d, binary supports up to %d", ErrUnsupportedSchemaVersion, version, currentSchemaVersion)
 	}
-
-	tx, err := db.BeginTx(ctx, nil)
+	if err := bootstrapLegacySchemaVersion(ctx, db); err != nil {
+		return err
+	}
+	provider, err := newMigrationProvider(db)
 	if err != nil {
-		return fmt.Errorf("begin schema transaction: %w", err)
+		return err
 	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(ctx, schemaSQL); err != nil {
-		return fmt.Errorf("ensure state schema: %w", err)
+	defer provider.Close()
+	if _, err := provider.Up(ctx); err != nil {
+		return fmt.Errorf("apply state migrations: %w", err)
 	}
-	migrated := false
-	if version < 2 {
-		if _, err := tx.ExecContext(ctx, `
-			ALTER TABLE integration_submissions
-			ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'
-		`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
-			return fmt.Errorf("add integration submission priority column: %w", err)
-		}
-		version = 2
-		migrated = true
-	}
-	if version < 3 {
-		if _, err := tx.ExecContext(ctx, `
-			ALTER TABLE integration_submissions
-			ADD COLUMN source_ref TEXT NOT NULL DEFAULT ''
-		`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
-			return fmt.Errorf("add integration submission source_ref column: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, `
-			ALTER TABLE integration_submissions
-			ADD COLUMN ref_kind TEXT NOT NULL DEFAULT 'branch'
-		`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
-			return fmt.Errorf("add integration submission ref_kind column: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE integration_submissions
-			SET source_ref = CASE
-				WHEN source_ref <> '' THEN source_ref
-				WHEN branch_name <> '' THEN branch_name
-				ELSE source_sha
-			END,
-			    ref_kind = CASE
-				WHEN ref_kind <> '' THEN ref_kind
-				WHEN branch_name <> '' THEN 'branch'
-				ELSE 'sha'
-			END
-		`); err != nil {
-			return fmt.Errorf("backfill integration submission source refs: %w", err)
-		}
-		version = 3
-		migrated = true
-	}
-	if version < 4 {
-		if _, err := tx.ExecContext(ctx, `
-			ALTER TABLE publish_requests
-			ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0
-		`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
-			return fmt.Errorf("add publish request attempt_count column: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, `
-			ALTER TABLE publish_requests
-			ADD COLUMN next_attempt_at DATETIME
-		`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
-			return fmt.Errorf("add publish request next_attempt_at column: %w", err)
-		}
-		version = 4
-		migrated = true
-	}
-	if version < 5 {
-		if _, err := tx.ExecContext(ctx, `
-			ALTER TABLE integration_submissions
-			ADD COLUMN allow_newer_head INTEGER NOT NULL DEFAULT 0
-		`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
-			return fmt.Errorf("add integration submission allow_newer_head column: %w", err)
-		}
-		version = 5
-		migrated = true
-	}
-	if migrated && version < currentSchemaVersion {
-		version = currentSchemaVersion
-	}
-	if migrated {
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d;`, version)); err != nil {
-			return fmt.Errorf("set sqlite schema version: %w", err)
-		}
-	}
-	if !migrated && version == 0 {
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d;`, currentSchemaVersion)); err != nil {
-			return fmt.Errorf("set sqlite schema version: %w", err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit schema transaction: %w", err)
-	}
-
 	return nil
+}
+
+func effectiveSchemaVersion(ctx context.Context, db *sql.DB) (int64, error) {
+	if gooseVersionTableExists(ctx, db) {
+		version, err := goose.GetDBVersionContext(ctx, db)
+		if err != nil {
+			return 0, fmt.Errorf("read goose schema version: %w", err)
+		}
+		return version, nil
+	}
+	return legacySchemaVersion(db)
+}
+
+func gooseVersionTableExists(ctx context.Context, db *sql.DB) bool {
+	var count int
+	err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM sqlite_master
+		WHERE type = 'table' AND name = ?
+	`, goose.DefaultTablename).Scan(&count)
+	return err == nil && count > 0
+}
+
+func hasManagedStateTables(ctx context.Context, db *sql.DB) (bool, error) {
+	var count int
+	err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM sqlite_master
+		WHERE type = 'table' AND name IN ('repositories', 'integration_submissions', 'publish_requests', 'events')
+	`).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("inspect managed state tables: %w", err)
+	}
+	return count > 0, nil
+}
+
+func bootstrapLegacySchemaVersion(ctx context.Context, db *sql.DB) error {
+	if gooseVersionTableExists(ctx, db) {
+		return nil
+	}
+
+	legacyVersion, err := legacySchemaVersion(db)
+	if err != nil {
+		return err
+	}
+	if legacyVersion > currentSchemaVersion {
+		return fmt.Errorf("%w: found version %d, binary supports up to %d", ErrUnsupportedSchemaVersion, legacyVersion, currentSchemaVersion)
+	}
+
+	bootstrapVersion := legacyVersion
+	if legacyVersion == 0 {
+		hasTables, err := hasManagedStateTables(ctx, db)
+		if err != nil {
+			return err
+		}
+		if hasTables {
+			bootstrapVersion = currentSchemaVersion
+		}
+	}
+
+	if err := ensureGooseVersionTable(ctx, db); err != nil {
+		return err
+	}
+	for version := int64(1); version <= bootstrapVersion; version++ {
+		if _, err := db.ExecContext(ctx, `
+			INSERT INTO goose_db_version (version_id, is_applied)
+			VALUES (?, 1)
+		`, version); err != nil {
+			return fmt.Errorf("bootstrap goose schema version %d: %w", version, err)
+		}
+	}
+	if err := setLegacySchemaVersion(ctx, db, 0); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ensureGooseVersionTable(ctx context.Context, db *sql.DB) error {
+	if gooseVersionTableExists(ctx, db) {
+		return nil
+	}
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE goose_db_version (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			version_id INTEGER NOT NULL,
+			is_applied INTEGER NOT NULL,
+			tstamp TIMESTAMP DEFAULT (datetime('now'))
+		)
+	`); err != nil {
+		return fmt.Errorf("create goose version table: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO goose_db_version (version_id, is_applied)
+		VALUES (0, 1)
+	`); err != nil {
+		return fmt.Errorf("seed goose version table: %w", err)
+	}
+	return nil
+}
+
+func newMigrationProvider(db *sql.DB) (*goose.Provider, error) {
+	migrationFiles, err := fs.Sub(migrationsFS, "migrations")
+	if err != nil {
+		return nil, fmt.Errorf("open embedded migrations: %w", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrationFiles)
+	if err != nil {
+		return nil, fmt.Errorf("create migration provider: %w", err)
+	}
+	return provider, nil
 }
 
 // NullInt64 returns a valid sql.NullInt64.

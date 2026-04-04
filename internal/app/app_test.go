@@ -1179,8 +1179,12 @@ func TestStatusUpgradesExistingLegacyStateSchema(t *testing.T) {
 	defer db.Close()
 
 	var version int
-	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
-		t.Fatalf("read user_version: %v", err)
+	if err := db.QueryRow(`
+		SELECT MAX(version_id)
+		FROM goose_db_version
+		WHERE is_applied = 1
+	`).Scan(&version); err != nil {
+		t.Fatalf("read goose version: %v", err)
 	}
 	if version != 5 {
 		t.Fatalf("expected schema version 5 after status upgrade, got %d", version)

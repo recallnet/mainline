@@ -381,7 +381,7 @@ func TestEnsureSchemaMigratesLegacyVersionZeroState(t *testing.T) {
 		t.Fatalf("EnsureSchema: %v", err)
 	}
 
-	version, err := schemaVersion(db)
+	version, err := schemaVersion(ctx, db)
 	if err != nil {
 		t.Fatalf("schemaVersion: %v", err)
 	}

@@ -42,6 +42,7 @@ that baseline is already understood.
 - Go 1.25 or newer
 - run `make fmt`, `make lint`, `make test`, and `make build` before sending changes
 - run `make sqlc` after editing `internal/state/sql/schema.sql` or `internal/state/sql/query.sql`
+- if you change `internal/state/migrations/`, keep `internal/state/sql/schema.sql` in sync with the post-migration schema snapshot before regenerating sqlc
 - run `make install-hooks` once per clone so local commit and push gates mirror CI
 - keep edits ASCII unless the file already requires Unicode
 
