@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/recallnet/mainline/internal/domain"
+	"github.com/recallnet/mainline/internal/state/sqlcgen"
 	_ "modernc.org/sqlite"
 )
 
@@ -132,30 +133,17 @@ func (s Store) UpsertRepository(ctx context.Context, record RepositoryRecord) (R
 		return RepositoryRecord{}, err
 	}
 
-	row := db.QueryRowContext(ctx, `
-		INSERT INTO repositories (
-			canonical_path,
-			protected_branch,
-			remote_name,
-			main_worktree_path,
-			policy_version
-		) VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(canonical_path) DO UPDATE SET
-			protected_branch = excluded.protected_branch,
-			remote_name = excluded.remote_name,
-			main_worktree_path = excluded.main_worktree_path,
-			policy_version = excluded.policy_version,
-			updated_at = CURRENT_TIMESTAMP
-		RETURNING id, canonical_path, protected_branch, remote_name, main_worktree_path, policy_version, created_at, updated_at
-	`,
-		record.CanonicalPath,
-		record.ProtectedBranch,
-		record.RemoteName,
-		record.MainWorktree,
-		record.PolicyVersion,
-	)
-
-	return scanRepositoryRecord(row)
+	repo, err := sqlcgen.New(db).UpsertRepository(ctx, sqlcgen.UpsertRepositoryParams{
+		CanonicalPath:    record.CanonicalPath,
+		ProtectedBranch:  record.ProtectedBranch,
+		RemoteName:       record.RemoteName,
+		MainWorktreePath: record.MainWorktree,
+		PolicyVersion:    record.PolicyVersion,
+	})
+	if err != nil {
+		return RepositoryRecord{}, err
+	}
+	return fromSQLCRepository(repo), nil
 }
 
 // GetRepositoryByPath returns a repository record by canonical path.
@@ -166,13 +154,7 @@ func (s Store) GetRepositoryByPath(ctx context.Context, canonicalPath string) (R
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		SELECT id, canonical_path, protected_branch, remote_name, main_worktree_path, policy_version, created_at, updated_at
-		FROM repositories
-		WHERE canonical_path = ?
-	`, canonicalPath)
-
-	record, err := scanRepositoryRecord(row)
+	record, err := sqlcgen.New(db).GetRepositoryByPath(ctx, canonicalPath)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return RepositoryRecord{}, ErrNotFound
@@ -180,7 +162,7 @@ func (s Store) GetRepositoryByPath(ctx context.Context, canonicalPath string) (R
 		return RepositoryRecord{}, err
 	}
 
-	return record, nil
+	return fromSQLCRepository(record), nil
 }
 
 // CreateIntegrationSubmission inserts a submission row.
@@ -206,36 +188,23 @@ func (s Store) CreateIntegrationSubmission(ctx context.Context, submission Integ
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		INSERT INTO integration_submissions (
-			repo_id,
-			branch_name,
-			source_ref,
-			ref_kind,
-			source_worktree_path,
-			source_sha,
-			allow_newer_head,
-			requested_by,
-			priority,
-			status,
-			last_error
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, allow_newer_head, requested_by, priority, status, last_error, created_at, updated_at
-	`,
-		submission.RepoID,
-		submission.BranchName,
-		submission.SourceRef,
-		submission.RefKind,
-		submission.SourceWorktree,
-		submission.SourceSHA,
-		submission.AllowNewerHead,
-		submission.RequestedBy,
-		submission.Priority,
-		submission.Status,
-		submission.LastError,
-	)
-
-	return scanIntegrationSubmission(row)
+	created, err := sqlcgen.New(db).CreateIntegrationSubmission(ctx, sqlcgen.CreateIntegrationSubmissionParams{
+		RepoID:             submission.RepoID,
+		BranchName:         submission.BranchName,
+		SourceRef:          submission.SourceRef,
+		RefKind:            string(submission.RefKind),
+		SourceWorktreePath: submission.SourceWorktree,
+		SourceSha:          submission.SourceSHA,
+		AllowNewerHead:     boolToInt64(submission.AllowNewerHead),
+		RequestedBy:        submission.RequestedBy,
+		Priority:           submission.Priority,
+		Status:             string(submission.Status),
+		LastError:          submission.LastError,
+	})
+	if err != nil {
+		return IntegrationSubmission{}, err
+	}
+	return fromSQLCIntegrationSubmission(created), nil
 }
 
 // GetIntegrationSubmission returns a submission by id.
@@ -246,13 +215,7 @@ func (s Store) GetIntegrationSubmission(ctx context.Context, submissionID int64)
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, allow_newer_head, requested_by, priority, status, last_error, created_at, updated_at
-		FROM integration_submissions
-		WHERE id = ?
-	`, submissionID)
-
-	submission, err := scanIntegrationSubmission(row)
+	submission, err := sqlcgen.New(db).GetIntegrationSubmission(ctx, submissionID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return IntegrationSubmission{}, ErrNotFound
@@ -260,7 +223,7 @@ func (s Store) GetIntegrationSubmission(ctx context.Context, submissionID int64)
 		return IntegrationSubmission{}, err
 	}
 
-	return submission, nil
+	return fromSQLCIntegrationSubmission(submission), nil
 }
 
 // NextQueuedIntegrationSubmission returns the oldest queued submission for a repo.
@@ -271,23 +234,7 @@ func (s Store) NextQueuedIntegrationSubmission(ctx context.Context, repoID int64
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, allow_newer_head, requested_by, priority, status, last_error, created_at, updated_at
-		FROM integration_submissions
-		WHERE repo_id = ? AND status = 'queued'
-		ORDER BY
-			CASE priority
-				WHEN 'high' THEN 0
-				WHEN 'normal' THEN 1
-				WHEN 'low' THEN 2
-				ELSE 1
-			END ASC,
-			created_at ASC,
-			id ASC
-		LIMIT 1
-	`, repoID)
-
-	submission, err := scanIntegrationSubmission(row)
+	submission, err := sqlcgen.New(db).NextQueuedIntegrationSubmission(ctx, repoID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return IntegrationSubmission{}, ErrNotFound
@@ -295,7 +242,7 @@ func (s Store) NextQueuedIntegrationSubmission(ctx context.Context, repoID int64
 		return IntegrationSubmission{}, err
 	}
 
-	return submission, nil
+	return fromSQLCIntegrationSubmission(submission), nil
 }
 
 // UpdateIntegrationSubmissionStatus updates submission state and error text.
@@ -309,14 +256,11 @@ func (s Store) UpdateIntegrationSubmissionStatus(ctx context.Context, submission
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		UPDATE integration_submissions
-		SET status = ?, last_error = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-		RETURNING id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, allow_newer_head, requested_by, priority, status, last_error, created_at, updated_at
-	`, status, lastError, submissionID)
-
-	submission, err := scanIntegrationSubmission(row)
+	submission, err := sqlcgen.New(db).UpdateIntegrationSubmissionStatus(ctx, sqlcgen.UpdateIntegrationSubmissionStatusParams{
+		Status:    string(status),
+		LastError: lastError,
+		ID:        submissionID,
+	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return IntegrationSubmission{}, ErrNotFound
@@ -324,7 +268,7 @@ func (s Store) UpdateIntegrationSubmissionStatus(ctx context.Context, submission
 		return IntegrationSubmission{}, err
 	}
 
-	return submission, nil
+	return fromSQLCIntegrationSubmission(submission), nil
 }
 
 // UpdateIntegrationSubmissionPriority updates queued submission priority.
@@ -335,14 +279,10 @@ func (s Store) UpdateIntegrationSubmissionPriority(ctx context.Context, submissi
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		UPDATE integration_submissions
-		SET priority = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-		RETURNING id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, allow_newer_head, requested_by, priority, status, last_error, created_at, updated_at
-	`, priority, submissionID)
-
-	submission, err := scanIntegrationSubmission(row)
+	submission, err := sqlcgen.New(db).UpdateIntegrationSubmissionPriority(ctx, sqlcgen.UpdateIntegrationSubmissionPriorityParams{
+		Priority: priority,
+		ID:       submissionID,
+	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return IntegrationSubmission{}, ErrNotFound
@@ -350,7 +290,7 @@ func (s Store) UpdateIntegrationSubmissionPriority(ctx context.Context, submissi
 		return IntegrationSubmission{}, err
 	}
 
-	return submission, nil
+	return fromSQLCIntegrationSubmission(submission), nil
 }
 
 // CreatePublishRequest inserts a publish request row.
@@ -364,26 +304,18 @@ func (s Store) CreatePublishRequest(ctx context.Context, request PublishRequest)
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		INSERT INTO publish_requests (
-			repo_id,
-			target_sha,
-			status,
-			attempt_count,
-			next_attempt_at,
-			superseded_by
-		) VALUES (?, ?, ?, ?, ?, ?)
-		RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
-	`,
-		request.RepoID,
-		request.TargetSHA,
-		request.Status,
-		request.AttemptCount,
-		request.NextAttemptAt,
-		request.SupersededBy,
-	)
-
-	return scanPublishRequest(row)
+	created, err := sqlcgen.New(db).CreatePublishRequest(ctx, sqlcgen.CreatePublishRequestParams{
+		RepoID:        request.RepoID,
+		TargetSha:     request.TargetSHA,
+		Status:        string(request.Status),
+		AttemptCount:  int64(request.AttemptCount),
+		NextAttemptAt: request.NextAttemptAt,
+		SupersededBy:  request.SupersededBy,
+	})
+	if err != nil {
+		return PublishRequest{}, err
+	}
+	return fromSQLCPublishRequest(created), nil
 }
 
 // GetPublishRequest returns a publish request by id.
@@ -394,13 +326,7 @@ func (s Store) GetPublishRequest(ctx context.Context, requestID int64) (PublishR
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
-		FROM publish_requests
-		WHERE id = ?
-	`, requestID)
-
-	request, err := scanPublishRequest(row)
+	request, err := sqlcgen.New(db).GetPublishRequest(ctx, requestID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return PublishRequest{}, ErrNotFound
@@ -408,7 +334,7 @@ func (s Store) GetPublishRequest(ctx context.Context, requestID int64) (PublishR
 		return PublishRequest{}, err
 	}
 
-	return request, nil
+	return fromSQLCPublishRequest(request), nil
 }
 
 // LatestQueuedPublishRequest returns the newest queued publish request for a repo.
@@ -419,15 +345,7 @@ func (s Store) LatestQueuedPublishRequest(ctx context.Context, repoID int64) (Pu
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
-		FROM publish_requests
-		WHERE repo_id = ? AND status = 'queued'
-		ORDER BY created_at DESC, id DESC
-		LIMIT 1
-	`, repoID)
-
-	request, err := scanPublishRequest(row)
+	request, err := sqlcgen.New(db).LatestQueuedPublishRequest(ctx, repoID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return PublishRequest{}, ErrNotFound
@@ -435,7 +353,7 @@ func (s Store) LatestQueuedPublishRequest(ctx context.Context, repoID int64) (Pu
 		return PublishRequest{}, err
 	}
 
-	return request, nil
+	return fromSQLCPublishRequest(request), nil
 }
 
 // LatestReadyQueuedPublishRequest returns the newest queued publish request ready to run now.
@@ -446,15 +364,10 @@ func (s Store) LatestReadyQueuedPublishRequest(ctx context.Context, repoID int64
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
-		FROM publish_requests
-		WHERE repo_id = ? AND status = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-		ORDER BY created_at DESC, id DESC
-		LIMIT 1
-	`, repoID, now.UTC())
-
-	request, err := scanPublishRequest(row)
+	request, err := sqlcgen.New(db).LatestReadyQueuedPublishRequest(ctx, sqlcgen.LatestReadyQueuedPublishRequestParams{
+		RepoID: repoID,
+		NowUtc: sql.NullTime{Time: now.UTC(), Valid: true},
+	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return PublishRequest{}, ErrNotFound
@@ -462,7 +375,7 @@ func (s Store) LatestReadyQueuedPublishRequest(ctx context.Context, repoID int64
 		return PublishRequest{}, err
 	}
 
-	return request, nil
+	return fromSQLCPublishRequest(request), nil
 }
 
 // NextDelayedQueuedPublishRequest returns the earliest delayed queued publish request for a repo.
@@ -473,15 +386,10 @@ func (s Store) NextDelayedQueuedPublishRequest(ctx context.Context, repoID int64
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
-		FROM publish_requests
-		WHERE repo_id = ? AND status = 'queued' AND next_attempt_at IS NOT NULL AND next_attempt_at > ?
-		ORDER BY next_attempt_at ASC, id ASC
-		LIMIT 1
-	`, repoID, now.UTC())
-
-	request, err := scanPublishRequest(row)
+	request, err := sqlcgen.New(db).NextDelayedQueuedPublishRequest(ctx, sqlcgen.NextDelayedQueuedPublishRequestParams{
+		RepoID: repoID,
+		NowUtc: sql.NullTime{Time: now.UTC(), Valid: true},
+	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return PublishRequest{}, ErrNotFound
@@ -489,7 +397,7 @@ func (s Store) NextDelayedQueuedPublishRequest(ctx context.Context, repoID int64
 		return PublishRequest{}, err
 	}
 
-	return request, nil
+	return fromSQLCPublishRequest(request), nil
 }
 
 // SupersedeOlderQueuedPublishRequests marks older queued requests as superseded.
@@ -500,12 +408,10 @@ func (s Store) SupersedeOlderQueuedPublishRequests(ctx context.Context, repoID i
 	}
 	defer db.Close()
 
-	_, err = db.ExecContext(ctx, `
-		UPDATE publish_requests
-		SET status = 'superseded', superseded_by = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE repo_id = ? AND status = 'queued' AND id <> ?
-	`, keepID, repoID, keepID)
-	return err
+	return sqlcgen.New(db).SupersedeOlderQueuedPublishRequests(ctx, sqlcgen.SupersedeOlderQueuedPublishRequestsParams{
+		KeepID: sql.NullInt64{Int64: keepID, Valid: true},
+		RepoID: repoID,
+	})
 }
 
 // UpdatePublishRequestStatus updates publish request state and superseded link.
@@ -519,14 +425,11 @@ func (s Store) UpdatePublishRequestStatus(ctx context.Context, requestID int64, 
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		UPDATE publish_requests
-		SET status = ?, superseded_by = ?, next_attempt_at = NULL, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-		RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
-	`, status, supersededBy, requestID)
-
-	request, err := scanPublishRequest(row)
+	request, err := sqlcgen.New(db).UpdatePublishRequestStatus(ctx, sqlcgen.UpdatePublishRequestStatusParams{
+		Status:       string(status),
+		SupersededBy: supersededBy,
+		ID:           requestID,
+	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return PublishRequest{}, ErrNotFound
@@ -534,7 +437,7 @@ func (s Store) UpdatePublishRequestStatus(ctx context.Context, requestID int64, 
 		return PublishRequest{}, err
 	}
 
-	return request, nil
+	return fromSQLCPublishRequest(request), nil
 }
 
 // SchedulePublishRetry requeues a publish request for a later retry attempt.
@@ -548,14 +451,11 @@ func (s Store) SchedulePublishRetry(ctx context.Context, requestID int64, attemp
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		UPDATE publish_requests
-		SET status = 'queued', attempt_count = ?, next_attempt_at = ?, superseded_by = NULL, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-		RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
-	`, attemptCount, nextAttemptAt.UTC(), requestID)
-
-	request, err := scanPublishRequest(row)
+	request, err := sqlcgen.New(db).SchedulePublishRetry(ctx, sqlcgen.SchedulePublishRetryParams{
+		AttemptCount:  int64(attemptCount),
+		NextAttemptAt: sql.NullTime{Time: nextAttemptAt.UTC(), Valid: true},
+		ID:            requestID,
+	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return PublishRequest{}, ErrNotFound
@@ -563,7 +463,7 @@ func (s Store) SchedulePublishRetry(ctx context.Context, requestID int64, attemp
 		return PublishRequest{}, err
 	}
 
-	return request, nil
+	return fromSQLCPublishRequest(request), nil
 }
 
 // ResetPublishRequestForRetry clears delayed retry state and manual retry budget exhaustion.
@@ -577,14 +477,7 @@ func (s Store) ResetPublishRequestForRetry(ctx context.Context, requestID int64)
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		UPDATE publish_requests
-		SET status = 'queued', attempt_count = 0, next_attempt_at = NULL, superseded_by = NULL, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-		RETURNING id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
-	`, requestID)
-
-	request, err := scanPublishRequest(row)
+	request, err := sqlcgen.New(db).ResetPublishRequestForRetry(ctx, requestID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return PublishRequest{}, ErrNotFound
@@ -592,7 +485,7 @@ func (s Store) ResetPublishRequestForRetry(ctx context.Context, requestID int64)
 		return PublishRequest{}, err
 	}
 
-	return request, nil
+	return fromSQLCPublishRequest(request), nil
 }
 
 // ListPublishRequests returns publish requests for a repo ordered by creation time.
@@ -603,27 +496,11 @@ func (s Store) ListPublishRequests(ctx context.Context, repoID int64) ([]Publish
 	}
 	defer db.Close()
 
-	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
-		FROM publish_requests
-		WHERE repo_id = ?
-		ORDER BY created_at ASC, id ASC
-	`, repoID)
+	requests, err := sqlcgen.New(db).ListPublishRequests(ctx, repoID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var requests []PublishRequest
-	for rows.Next() {
-		request, err := scanPublishRequest(rows)
-		if err != nil {
-			return nil, err
-		}
-		requests = append(requests, request)
-	}
-
-	return requests, rows.Err()
+	return mapPublishRequests(requests), nil
 }
 
 // AppendEvent inserts an event record.
@@ -637,24 +514,17 @@ func (s Store) AppendEvent(ctx context.Context, event EventRecord) (EventRecord,
 	}
 	defer db.Close()
 
-	row := db.QueryRowContext(ctx, `
-		INSERT INTO events (
-			repo_id,
-			item_type,
-			item_id,
-			event_type,
-			payload
-		) VALUES (?, ?, ?, ?, ?)
-		RETURNING id, repo_id, item_type, item_id, event_type, payload, created_at
-	`,
-		event.RepoID,
-		event.ItemType,
-		event.ItemID,
-		event.EventType,
-		[]byte(event.Payload),
-	)
-
-	return scanEventRecord(row)
+	created, err := sqlcgen.New(db).AppendEvent(ctx, sqlcgen.AppendEventParams{
+		RepoID:    event.RepoID,
+		ItemType:  string(event.ItemType),
+		ItemID:    event.ItemID,
+		EventType: string(event.EventType),
+		Payload:   []byte(event.Payload),
+	})
+	if err != nil {
+		return EventRecord{}, err
+	}
+	return fromSQLCEvent(created), nil
 }
 
 // CountUnfinishedItems returns unfinished submission and publish counts.
@@ -665,25 +535,17 @@ func (s Store) CountUnfinishedItems(ctx context.Context, repoID int64) (int, err
 	}
 	defer db.Close()
 
-	var submissionCount int
-	if err := db.QueryRowContext(ctx, `
-		SELECT COUNT(*)
-		FROM integration_submissions
-		WHERE repo_id = ? AND status IN ('queued', 'running', 'blocked')
-	`, repoID).Scan(&submissionCount); err != nil {
+	queries := sqlcgen.New(db)
+	submissionCount, err := queries.CountUnfinishedIntegrationSubmissions(ctx, repoID)
+	if err != nil {
+		return 0, err
+	}
+	publishCount, err := queries.CountUnfinishedPublishRequests(ctx, repoID)
+	if err != nil {
 		return 0, err
 	}
 
-	var publishCount int
-	if err := db.QueryRowContext(ctx, `
-		SELECT COUNT(*)
-		FROM publish_requests
-		WHERE repo_id = ? AND status IN ('queued', 'running')
-	`, repoID).Scan(&publishCount); err != nil {
-		return 0, err
-	}
-
-	return submissionCount + publishCount, nil
+	return int(submissionCount + publishCount), nil
 }
 
 // CountQueuedIntegrationSubmissions returns the number of queued submissions for a repo.
@@ -694,16 +556,12 @@ func (s Store) CountQueuedIntegrationSubmissions(ctx context.Context, repoID int
 	}
 	defer db.Close()
 
-	var count int
-	if err := db.QueryRowContext(ctx, `
-		SELECT COUNT(*)
-		FROM integration_submissions
-		WHERE repo_id = ? AND status = 'queued'
-	`, repoID).Scan(&count); err != nil {
+	count, err := sqlcgen.New(db).CountQueuedIntegrationSubmissions(ctx, repoID)
+	if err != nil {
 		return 0, err
 	}
 
-	return count, nil
+	return int(count), nil
 }
 
 func (s Store) open() (*sql.DB, error) {
@@ -858,81 +716,98 @@ func ensureSchemaVersion(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-type scanner interface {
-	Scan(dest ...any) error
-}
-
 // NullInt64 returns a valid sql.NullInt64.
 func NullInt64(v int64) sql.NullInt64 {
 	return sql.NullInt64{Int64: v, Valid: true}
 }
 
-func scanRepositoryRecord(row scanner) (RepositoryRecord, error) {
-	var record RepositoryRecord
-	err := row.Scan(
-		&record.ID,
-		&record.CanonicalPath,
-		&record.ProtectedBranch,
-		&record.RemoteName,
-		&record.MainWorktree,
-		&record.PolicyVersion,
-		&record.CreatedAt,
-		&record.UpdatedAt,
-	)
-	return record, err
+func boolToInt64(v bool) int64 {
+	if v {
+		return 1
+	}
+	return 0
 }
 
-func scanIntegrationSubmission(row scanner) (IntegrationSubmission, error) {
-	var submission IntegrationSubmission
-	err := row.Scan(
-		&submission.ID,
-		&submission.RepoID,
-		&submission.BranchName,
-		&submission.SourceRef,
-		&submission.RefKind,
-		&submission.SourceWorktree,
-		&submission.SourceSHA,
-		&submission.AllowNewerHead,
-		&submission.RequestedBy,
-		&submission.Priority,
-		&submission.Status,
-		&submission.LastError,
-		&submission.CreatedAt,
-		&submission.UpdatedAt,
-	)
-	return submission, err
+func fromSQLCRepository(row sqlcgen.Repository) RepositoryRecord {
+	return RepositoryRecord{
+		ID:              row.ID,
+		CanonicalPath:   row.CanonicalPath,
+		ProtectedBranch: row.ProtectedBranch,
+		RemoteName:      row.RemoteName,
+		MainWorktree:    row.MainWorktreePath,
+		PolicyVersion:   row.PolicyVersion,
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
+	}
 }
 
-func scanPublishRequest(row scanner) (PublishRequest, error) {
-	var request PublishRequest
-	err := row.Scan(
-		&request.ID,
-		&request.RepoID,
-		&request.TargetSHA,
-		&request.Status,
-		&request.AttemptCount,
-		&request.NextAttemptAt,
-		&request.SupersededBy,
-		&request.CreatedAt,
-		&request.UpdatedAt,
-	)
-	return request, err
+func fromSQLCIntegrationSubmission(row sqlcgen.IntegrationSubmission) IntegrationSubmission {
+	return IntegrationSubmission{
+		ID:             row.ID,
+		RepoID:         row.RepoID,
+		BranchName:     row.BranchName,
+		SourceRef:      row.SourceRef,
+		RefKind:        domain.RefKind(row.RefKind),
+		SourceWorktree: row.SourceWorktreePath,
+		SourceSHA:      row.SourceSha,
+		AllowNewerHead: row.AllowNewerHead != 0,
+		RequestedBy:    row.RequestedBy,
+		Priority:       row.Priority,
+		Status:         domain.SubmissionStatus(row.Status),
+		LastError:      row.LastError,
+		CreatedAt:      row.CreatedAt,
+		UpdatedAt:      row.UpdatedAt,
+	}
 }
 
-func scanEventRecord(row scanner) (EventRecord, error) {
-	var event EventRecord
-	var payload []byte
-	err := row.Scan(
-		&event.ID,
-		&event.RepoID,
-		&event.ItemType,
-		&event.ItemID,
-		&event.EventType,
-		&payload,
-		&event.CreatedAt,
-	)
-	event.Payload = payload
-	return event, err
+func mapIntegrationSubmissions(rows []sqlcgen.IntegrationSubmission) []IntegrationSubmission {
+	submissions := make([]IntegrationSubmission, 0, len(rows))
+	for _, row := range rows {
+		submissions = append(submissions, fromSQLCIntegrationSubmission(row))
+	}
+	return submissions
+}
+
+func fromSQLCPublishRequest(row sqlcgen.PublishRequest) PublishRequest {
+	return PublishRequest{
+		ID:            row.ID,
+		RepoID:        row.RepoID,
+		TargetSHA:     row.TargetSha,
+		Status:        domain.PublishStatus(row.Status),
+		AttemptCount:  int(row.AttemptCount),
+		NextAttemptAt: row.NextAttemptAt,
+		SupersededBy:  row.SupersededBy,
+		CreatedAt:     row.CreatedAt,
+		UpdatedAt:     row.UpdatedAt,
+	}
+}
+
+func mapPublishRequests(rows []sqlcgen.PublishRequest) []PublishRequest {
+	requests := make([]PublishRequest, 0, len(rows))
+	for _, row := range rows {
+		requests = append(requests, fromSQLCPublishRequest(row))
+	}
+	return requests
+}
+
+func fromSQLCEvent(row sqlcgen.Event) EventRecord {
+	return EventRecord{
+		ID:        row.ID,
+		RepoID:    row.RepoID,
+		ItemType:  domain.ItemType(row.ItemType),
+		ItemID:    row.ItemID,
+		EventType: domain.EventType(row.EventType),
+		Payload:   append(json.RawMessage(nil), row.Payload...),
+		CreatedAt: row.CreatedAt,
+	}
+}
+
+func mapEvents(rows []sqlcgen.Event) []EventRecord {
+	events := make([]EventRecord, 0, len(rows))
+	for _, row := range rows {
+		events = append(events, fromSQLCEvent(row))
+	}
+	return events
 }
 
 // ListEvents returns recent events for a repo ordered by most recent first.
@@ -947,28 +822,14 @@ func (s Store) ListEvents(ctx context.Context, repoID int64, limit int) ([]Event
 		limit = 20
 	}
 
-	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, item_type, item_id, event_type, payload, created_at
-		FROM events
-		WHERE repo_id = ?
-		ORDER BY created_at DESC, id DESC
-		LIMIT ?
-	`, repoID, limit)
+	events, err := sqlcgen.New(db).ListEvents(ctx, sqlcgen.ListEventsParams{
+		RepoID:     repoID,
+		LimitCount: int64(limit),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var events []EventRecord
-	for rows.Next() {
-		event, err := scanEventRecord(rows)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, event)
-	}
-
-	return events, rows.Err()
+	return mapEvents(events), nil
 }
 
 // ListEventsForItem returns recent events for a specific durable item.
@@ -983,33 +844,20 @@ func (s Store) ListEventsForItem(ctx context.Context, repoID int64, itemType str
 		limit = 20
 	}
 
-	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, item_type, item_id, event_type, payload, created_at
-		FROM events
-		WHERE repo_id = ? AND item_type = ? AND item_id = ?
-		ORDER BY id DESC
-		LIMIT ?
-	`, repoID, itemType, itemID, limit)
+	events, err := sqlcgen.New(db).ListEventsForItemDesc(ctx, sqlcgen.ListEventsForItemDescParams{
+		RepoID:     repoID,
+		ItemType:   string(itemType),
+		ItemID:     sql.NullInt64{Int64: itemID, Valid: true},
+		LimitCount: int64(limit),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var events []EventRecord
-	for rows.Next() {
-		event, err := scanEventRecord(rows)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, event)
+	mapped := mapEvents(events)
+	for left, right := 0, len(mapped)-1; left < right; left, right = left+1, right-1 {
+		mapped[left], mapped[right] = mapped[right], mapped[left]
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	for left, right := 0, len(events)-1; left < right; left, right = left+1, right-1 {
-		events[left], events[right] = events[right], events[left]
-	}
-	return events, nil
+	return mapped, nil
 }
 
 // ListEventsAfter returns events newer than the provided event id ordered by creation time.
@@ -1024,28 +872,15 @@ func (s Store) ListEventsAfter(ctx context.Context, repoID int64, afterID int64,
 		limit = 100
 	}
 
-	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, item_type, item_id, event_type, payload, created_at
-		FROM events
-		WHERE repo_id = ? AND id > ?
-		ORDER BY created_at ASC, id ASC
-		LIMIT ?
-	`, repoID, afterID, limit)
+	events, err := sqlcgen.New(db).ListEventsAfter(ctx, sqlcgen.ListEventsAfterParams{
+		RepoID:     repoID,
+		AfterID:    afterID,
+		LimitCount: int64(limit),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var events []EventRecord
-	for rows.Next() {
-		event, err := scanEventRecord(rows)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, event)
-	}
-
-	return events, rows.Err()
+	return mapEvents(events), nil
 }
 
 // ListIntegrationSubmissions returns submissions for a repo ordered by creation time.
@@ -1056,27 +891,11 @@ func (s Store) ListIntegrationSubmissions(ctx context.Context, repoID int64) ([]
 	}
 	defer db.Close()
 
-	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, allow_newer_head, requested_by, priority, status, last_error, created_at, updated_at
-		FROM integration_submissions
-		WHERE repo_id = ?
-		ORDER BY created_at ASC, id ASC
-	`, repoID)
+	submissions, err := sqlcgen.New(db).ListIntegrationSubmissions(ctx, repoID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var submissions []IntegrationSubmission
-	for rows.Next() {
-		submission, err := scanIntegrationSubmission(rows)
-		if err != nil {
-			return nil, err
-		}
-		submissions = append(submissions, submission)
-	}
-
-	return submissions, rows.Err()
+	return mapIntegrationSubmissions(submissions), nil
 }
 
 // ListIntegrationSubmissionsByStatus returns submissions for a repo filtered by status.
@@ -1087,27 +906,14 @@ func (s Store) ListIntegrationSubmissionsByStatus(ctx context.Context, repoID in
 	}
 	defer db.Close()
 
-	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, branch_name, source_ref, ref_kind, source_worktree_path, source_sha, allow_newer_head, requested_by, priority, status, last_error, created_at, updated_at
-		FROM integration_submissions
-		WHERE repo_id = ? AND status = ?
-		ORDER BY created_at ASC, id ASC
-	`, repoID, status)
+	submissions, err := sqlcgen.New(db).ListIntegrationSubmissionsByStatus(ctx, sqlcgen.ListIntegrationSubmissionsByStatusParams{
+		RepoID: repoID,
+		Status: string(status),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var submissions []IntegrationSubmission
-	for rows.Next() {
-		submission, err := scanIntegrationSubmission(rows)
-		if err != nil {
-			return nil, err
-		}
-		submissions = append(submissions, submission)
-	}
-
-	return submissions, rows.Err()
+	return mapIntegrationSubmissions(submissions), nil
 }
 
 // ListPublishRequestsByStatus returns publish requests for a repo filtered by status.
@@ -1118,92 +924,14 @@ func (s Store) ListPublishRequestsByStatus(ctx context.Context, repoID int64, st
 	}
 	defer db.Close()
 
-	rows, err := db.QueryContext(ctx, `
-		SELECT id, repo_id, target_sha, status, attempt_count, next_attempt_at, superseded_by, created_at, updated_at
-		FROM publish_requests
-		WHERE repo_id = ? AND status = ?
-		ORDER BY created_at ASC, id ASC
-	`, repoID, status)
+	requests, err := sqlcgen.New(db).ListPublishRequestsByStatus(ctx, sqlcgen.ListPublishRequestsByStatusParams{
+		RepoID: repoID,
+		Status: string(status),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var requests []PublishRequest
-	for rows.Next() {
-		request, err := scanPublishRequest(rows)
-		if err != nil {
-			return nil, err
-		}
-		requests = append(requests, request)
-	}
-
-	return requests, rows.Err()
+	return mapPublishRequests(requests), nil
 }
 
 var ErrNotFound = errors.New("state record not found")
-
-const schemaSQL = `
-CREATE TABLE IF NOT EXISTS repositories (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	canonical_path TEXT NOT NULL UNIQUE,
-	protected_branch TEXT NOT NULL,
-	remote_name TEXT NOT NULL,
-	main_worktree_path TEXT NOT NULL,
-	policy_version TEXT NOT NULL,
-	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS integration_submissions (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	repo_id INTEGER NOT NULL,
-	branch_name TEXT NOT NULL,
-	source_ref TEXT NOT NULL DEFAULT '',
-	ref_kind TEXT NOT NULL DEFAULT 'branch',
-	source_worktree_path TEXT NOT NULL,
-	source_sha TEXT NOT NULL,
-	allow_newer_head INTEGER NOT NULL DEFAULT 0,
-	requested_by TEXT NOT NULL,
-	priority TEXT NOT NULL DEFAULT 'normal',
-	status TEXT NOT NULL,
-	last_error TEXT NOT NULL DEFAULT '',
-	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (repo_id) REFERENCES repositories(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_integration_submissions_repo_status_created
-ON integration_submissions(repo_id, status, created_at);
-
-CREATE TABLE IF NOT EXISTS publish_requests (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	repo_id INTEGER NOT NULL,
-	target_sha TEXT NOT NULL,
-	status TEXT NOT NULL,
-	attempt_count INTEGER NOT NULL DEFAULT 0,
-	next_attempt_at DATETIME,
-	superseded_by INTEGER,
-	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (repo_id) REFERENCES repositories(id),
-	FOREIGN KEY (superseded_by) REFERENCES publish_requests(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_publish_requests_repo_status_created
-ON publish_requests(repo_id, status, created_at);
-
-CREATE TABLE IF NOT EXISTS events (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	repo_id INTEGER NOT NULL,
-	item_type TEXT NOT NULL,
-	item_id INTEGER,
-	event_type TEXT NOT NULL,
-	payload BLOB NOT NULL,
-	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (repo_id) REFERENCES repositories(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_events_repo_created
-ON events(repo_id, created_at);
-`
