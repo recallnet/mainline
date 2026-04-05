@@ -67,7 +67,7 @@ type submissionWaitResult struct {
 	Error            string                  `json:"error,omitempty"`
 }
 
-func runWait(args []string, stdout io.Writer, stderr io.Writer) error {
+func runWait(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" wait", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -136,7 +136,7 @@ Flags:
 	}
 	result, waitErr := waitForSubmissionTarget(queued, target, timeout, pollInterval)
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		if err := encoder.Encode(result); err != nil {
 			return err
@@ -144,24 +144,25 @@ Flags:
 		return waitErr
 	}
 
-	fmt.Fprintf(stdout, "Submission: %d\n", result.SubmissionID)
-	fmt.Fprintf(stdout, "Branch: %s\n", result.Branch)
-	fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
+	printer := stdout
+	printer.Section("Submission %d", result.SubmissionID)
+	printer.Line("Branch: %s", result.Branch)
+	printer.Line("Submission status: %s", result.SubmissionStatus)
 	if result.ProtectedSHA != "" {
-		fmt.Fprintf(stdout, "Protected SHA: %s\n", result.ProtectedSHA)
+		printer.Line("Protected SHA: %s", result.ProtectedSHA)
 	}
 	if result.PublishRequestID != 0 {
-		fmt.Fprintf(stdout, "Publish request: %d\n", result.PublishRequestID)
+		printer.Line("Publish request: %d", result.PublishRequestID)
 	}
 	if result.PublishStatus != "" {
-		fmt.Fprintf(stdout, "Publish status: %s\n", result.PublishStatus)
+		printer.Line("Publish status: %s", result.PublishStatus)
 	}
-	fmt.Fprintf(stdout, "Outcome: %s\n", result.Outcome)
+	printer.Line("Outcome: %s", result.Outcome)
 	if result.LastWorkerResult != "" {
-		fmt.Fprintf(stdout, "Last worker result: %s\n", result.LastWorkerResult)
+		printer.Line("Last worker result: %s", result.LastWorkerResult)
 	}
 	if result.Error != "" {
-		fmt.Fprintf(stdout, "Error: %s\n", result.Error)
+		printer.Warning("Error: %s", result.Error)
 	}
 	return waitErr
 }

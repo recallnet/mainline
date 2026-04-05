@@ -134,7 +134,7 @@ func TestInvariantCancelledSubmissionNeverLands(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCancel([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(submissions[0].ID, 10)}, &stdout, &stderr); err != nil {
+	if err := runCancel([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(submissions[0].ID, 10)}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCancel returned error: %v", err)
 	}
 	runOnce(t, repoRoot)
@@ -168,7 +168,7 @@ func TestInvariantCancelledPublishDoesNotPushUntilRetried(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	requestID := requests[0].ID
-	if err := runCancel([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requestID, 10)}, &stdout, &stderr); err != nil {
+	if err := runCancel([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requestID, 10)}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCancel returned error: %v", err)
 	}
 	runOnce(t, repoRoot)
@@ -180,7 +180,7 @@ func TestInvariantCancelledPublishDoesNotPushUntilRetried(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requestID, 10)}, &stdout, &stderr); err != nil {
+	if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requestID, 10)}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runRetry returned error: %v", err)
 	}
 	runOnce(t, repoRoot)
@@ -225,10 +225,10 @@ func TestInvariantInvalidControlActionsDoNotMutateCompletedState(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCancel([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(submissions[0].ID, 10)}, &stdout, &stderr); err == nil {
+	if err := runCancel([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(submissions[0].ID, 10)}, newStepPrinter(&stdout), &stderr); err == nil {
 		t.Fatalf("expected cancelling succeeded submission to fail")
 	}
-	if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requests[0].ID, 10)}, &stdout, &stderr); err == nil {
+	if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requests[0].ID, 10)}, newStepPrinter(&stdout), &stderr); err == nil {
 		t.Fatalf("expected retrying succeeded publish to fail")
 	}
 
@@ -283,7 +283,7 @@ func readStatusJSON(t *testing.T, repoRoot string) statusResult {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"status", "--repo", repoRoot, "--json", "--events", "10"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json", "--events", "10"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI status returned error: %v", err)
 	}
 
@@ -299,7 +299,7 @@ func readRecentEvents(t *testing.T, repoRoot string, limit int) []state.EventRec
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runEvents([]string{"--repo", repoRoot, "--json", "--limit", strconv.Itoa(limit)}, &stdout, &stderr); err != nil {
+	if err := runEvents([]string{"--repo", repoRoot, "--json", "--limit", strconv.Itoa(limit)}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runEvents returned error: %v", err)
 	}
 

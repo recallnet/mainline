@@ -28,7 +28,7 @@ func TestPublishQueuesCurrentProtectedTip(t *testing.T) {
 
 	var publishOut bytes.Buffer
 	var publishErr bytes.Buffer
-	if err := runPublish([]string{"--repo", repoRoot}, &publishOut, &publishErr); err != nil {
+	if err := runPublish([]string{"--repo", repoRoot}, newStepPrinter(&publishOut), &publishErr); err != nil {
 		t.Fatalf("runPublish returned error: %v", err)
 	}
 
@@ -66,7 +66,7 @@ func TestPublishRejectsDirtyCanonicalRootCheckout(t *testing.T) {
 
 	var publishOut bytes.Buffer
 	var publishErr bytes.Buffer
-	err := runPublish([]string{"--repo", repoRoot, "--json"}, &publishOut, &publishErr)
+	err := runPublish([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&publishOut), &publishErr)
 	if err == nil {
 		t.Fatalf("expected publish to fail when canonical root is dirty")
 	}
@@ -93,7 +93,7 @@ func TestPublishAutoRecoversDirtyCanonicalRootCheckoutWhenSafe(t *testing.T) {
 
 	var publishOut bytes.Buffer
 	var publishErr bytes.Buffer
-	if err := runPublish([]string{"--repo", repoRoot, "--json"}, &publishOut, &publishErr); err != nil {
+	if err := runPublish([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&publishOut), &publishErr); err != nil {
 		t.Fatalf("expected publish to auto-repair safe dirty root, got %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(repoRoot, "DIRTY.txt")); !os.IsNotExist(err) {
@@ -117,7 +117,7 @@ func TestPublishDrainsAndPublishesWithoutDaemon(t *testing.T) {
 
 	var publishOut bytes.Buffer
 	var publishErr bytes.Buffer
-	if err := runPublish([]string{"--repo", repoRoot}, &publishOut, &publishErr); err != nil {
+	if err := runPublish([]string{"--repo", repoRoot}, newStepPrinter(&publishOut), &publishErr); err != nil {
 		t.Fatalf("runPublish returned error: %v", err)
 	}
 	if !strings.Contains(publishOut.String(), "Published request") {
@@ -143,7 +143,7 @@ func TestRunOncePublishesLatestQueuedTipAndSupersedesOlderRequests(t *testing.T)
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 
@@ -188,7 +188,7 @@ func TestRunOnceLinksSupersededStalePublishRequestToReplacement(t *testing.T) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 
@@ -225,7 +225,7 @@ func TestRunOnceWithNoQueueReportsNoPublishWork(t *testing.T) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	if trimNewline(runOut.String()) != "No queued publish requests." {
@@ -239,7 +239,7 @@ func queuePublish(t *testing.T, repoRoot string) {
 
 	var publishOut bytes.Buffer
 	var publishErr bytes.Buffer
-	if err := runPublish([]string{"--repo", repoRoot}, &publishOut, &publishErr); err != nil {
+	if err := runPublish([]string{"--repo", repoRoot}, newStepPrinter(&publishOut), &publishErr); err != nil {
 		t.Fatalf("runPublish returned error: %v", err)
 	}
 }
@@ -293,7 +293,7 @@ func TestRunOncePrePublishChecksFailBeforePush(t *testing.T) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	if !strings.Contains(runOut.String(), "pre-publish checks failed") {
@@ -660,7 +660,7 @@ func TestPublishHookFailureThenManualRetrySucceeds(t *testing.T) {
 
 	var retryOut bytes.Buffer
 	var retryErr bytes.Buffer
-	if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requests[0].ID, 10)}, &retryOut, &retryErr); err != nil {
+	if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requests[0].ID, 10)}, newStepPrinter(&retryOut), &retryErr); err != nil {
 		t.Fatalf("runRetry returned error: %v", err)
 	}
 
@@ -888,7 +888,7 @@ func TestWaitForLandedReturnsSupersededWhenPublishWasOvertaken(t *testing.T) {
 	writeFileAndCommit(t, firstPath, "first.txt", "first\n", "first change")
 	var firstOut bytes.Buffer
 	var firstErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", firstPath, "--json"}, &firstOut, &firstErr); err != nil {
+	if err := runSubmit([]string{"--repo", firstPath, "--json"}, newStepPrinter(&firstOut), &firstErr); err != nil {
 		t.Fatalf("runSubmit(first) returned error: %v", err)
 	}
 	var firstSubmit submitResult
@@ -914,7 +914,7 @@ func TestWaitForLandedReturnsSupersededWhenPublishWasOvertaken(t *testing.T) {
 	writeFileAndCommit(t, secondPath, "second.txt", "second\n", "second change")
 	var secondOut bytes.Buffer
 	var secondErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", secondPath, "--json"}, &secondOut, &secondErr); err != nil {
+	if err := runSubmit([]string{"--repo", secondPath, "--json"}, newStepPrinter(&secondOut), &secondErr); err != nil {
 		t.Fatalf("runSubmit(second) returned error: %v", err)
 	}
 	runOnce(t, repoRoot)

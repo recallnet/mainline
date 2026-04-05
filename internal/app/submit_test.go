@@ -25,7 +25,7 @@ func TestSubmitQueuesCleanFeatureBranch(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -38,7 +38,7 @@ func TestSubmitQueuesCleanFeatureBranch(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -79,7 +79,7 @@ func TestSubmitAutoDetectsRepoFromCurrentWorktree(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -100,7 +100,7 @@ func TestSubmitAutoDetectsRepoFromCurrentWorktree(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit(nil, &submitOut, &submitErr); err != nil {
+	if err := runSubmit(nil, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -133,7 +133,7 @@ func TestSubmitOpportunisticallyDrainsQueuedWork(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -199,7 +199,7 @@ func TestSubmitQueuesAndExitsWhenAnotherWorkerHoldsLock(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -231,7 +231,7 @@ func TestSubmitQueueOnlySkipsOpportunisticDrain(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--queue-only", "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--queue-only", "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -257,13 +257,13 @@ func TestSubmitRejectsProtectedBranch(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", repoRoot}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", repoRoot}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil || !strings.Contains(err.Error(), "cannot submit protected branch") {
 		t.Fatalf("expected protected branch rejection, got %v", err)
 	}
@@ -278,7 +278,7 @@ func TestSubmitRejectsDirtyWorktree(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -288,7 +288,7 @@ func TestSubmitRejectsDirtyWorktree(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", featurePath}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", featurePath}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil || !strings.Contains(err.Error(), "is dirty") {
 		t.Fatalf("expected dirty worktree rejection, got %v", err)
 	}
@@ -303,7 +303,7 @@ func TestSubmitRejectsDetachedHeadWithoutBranch(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -316,7 +316,7 @@ func TestSubmitRejectsDetachedHeadWithoutBranch(t *testing.T) {
 	runTestCommand(t, detachedPath, "git", "commit", "-m", "detached commit")
 	runTestCommand(t, detachedPath, "git", "checkout", "--detach", "HEAD")
 
-	if err := runSubmit([]string{"--repo", detachedPath, "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", detachedPath, "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("expected detached HEAD submit to succeed, got %v", err)
 	}
 
@@ -341,7 +341,7 @@ func TestSubmitAcceptsExplicitSHAWhenCheckedOut(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -350,7 +350,7 @@ func TestSubmitAcceptsExplicitSHAWhenCheckedOut(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json", "--sha", headSHA}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--sha", headSHA}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -370,7 +370,7 @@ func TestSubmitRejectsSHAWhenNotCheckedOut(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -379,7 +379,7 @@ func TestSubmitRejectsSHAWhenNotCheckedOut(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", featurePath, "--sha", parentSHA}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", featurePath, "--sha", parentSHA}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil || !strings.Contains(err.Error(), "expected "+parentSHA+" to be checked out") {
 		t.Fatalf("expected sha checkout mismatch rejection, got %v", err)
 	}
@@ -390,7 +390,7 @@ func TestSubmitRejectsWorktreeFromDifferentRepository(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -407,7 +407,7 @@ func TestSubmitRejectsWorktreeFromDifferentRepository(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", repoRoot, "--worktree", foreignWorktree, "--branch", "feature/foreign"}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", repoRoot, "--worktree", foreignWorktree, "--branch", "feature/foreign"}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil || !strings.Contains(err.Error(), "does not belong to repository") {
 		t.Fatalf("expected cross-repo worktree rejection, got %v", err)
 	}
@@ -420,7 +420,7 @@ func TestSubmitAcceptsSymlinkedWorktreePath(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -442,7 +442,7 @@ func TestSubmitAcceptsSymlinkedWorktreePath(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", repoRoot, "--branch", "feature/symlink", "--worktree", aliasPath}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", repoRoot, "--branch", "feature/symlink", "--worktree", aliasPath}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -458,7 +458,7 @@ func TestSubmitJSONReturnsSubmissionMetadata(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -466,7 +466,7 @@ func TestSubmitJSONReturnsSubmissionMetadata(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json", "--requested-by", "factory"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--requested-by", "factory"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -495,7 +495,7 @@ func TestSubmitStoresRequestedPriority(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -503,7 +503,7 @@ func TestSubmitStoresRequestedPriority(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -540,7 +540,7 @@ func TestSubmitStoresAllowNewerHead(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -548,7 +548,7 @@ func TestSubmitStoresAllowNewerHead(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json", "--allow-newer-head"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--allow-newer-head"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -585,7 +585,7 @@ func TestSubmitRejectsUnknownPriority(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -593,7 +593,7 @@ func TestSubmitRejectsUnknownPriority(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", featurePath, "--priority", "urgent"}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", featurePath, "--priority", "urgent"}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil || !strings.Contains(err.Error(), "priority must be one of") {
 		t.Fatalf("expected invalid priority rejection, got %v", err)
 	}
@@ -606,7 +606,7 @@ func TestSubmitReprioritizesAlreadyQueuedSubmission(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -614,7 +614,7 @@ func TestSubmitReprioritizesAlreadyQueuedSubmission(t *testing.T) {
 
 	var firstOut bytes.Buffer
 	var firstErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityLow}, &firstOut, &firstErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityLow}, newStepPrinter(&firstOut), &firstErr); err != nil {
 		t.Fatalf("first runSubmit returned error: %v", err)
 	}
 
@@ -625,7 +625,7 @@ func TestSubmitReprioritizesAlreadyQueuedSubmission(t *testing.T) {
 
 	var secondOut bytes.Buffer
 	var secondErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, &secondOut, &secondErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, newStepPrinter(&secondOut), &secondErr); err != nil {
 		t.Fatalf("second runSubmit returned error: %v", err)
 	}
 
@@ -665,7 +665,7 @@ func TestSubmitUpgradesExistingLegacyStateSchema(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -737,7 +737,7 @@ func TestSubmitUpgradesExistingLegacyStateSchema(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -757,7 +757,7 @@ func TestSubmitCheckValidatesWithoutQueueing(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -765,7 +765,7 @@ func TestSubmitCheckValidatesWithoutQueueing(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--check", "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--check", "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -802,7 +802,7 @@ func TestSubmitCheckOnlyAliasValidatesWithoutQueueing(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -810,7 +810,7 @@ func TestSubmitCheckOnlyAliasValidatesWithoutQueueing(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--check-only", "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--check-only", "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -828,7 +828,7 @@ func TestSubmitCheckOnlyRejectsBranchBehindProtected(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -839,7 +839,7 @@ func TestSubmitCheckOnlyRejectsBranchBehindProtected(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", featurePath, "--check-only", "--json"}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", featurePath, "--check-only", "--json"}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil {
 		t.Fatalf("expected behind-protected check-only failure")
 	}
@@ -860,18 +860,18 @@ func TestSubmitCheckOnlyRejectsAlreadyQueuedSubmission(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
 	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
-	if err := runSubmit([]string{"--repo", featurePath}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath}, newStepPrinter(&bytes.Buffer{}), &bytes.Buffer{}); err != nil {
 		t.Fatalf("first runSubmit returned error: %v", err)
 	}
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", featurePath, "--check-only", "--json"}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", featurePath, "--check-only", "--json"}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil {
 		t.Fatalf("expected already-queued check-only failure")
 	}
@@ -892,18 +892,18 @@ func TestSubmitRejectsExactDuplicateActiveSubmission(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
 	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
-	if err := runSubmit([]string{"--repo", featurePath}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath}, newStepPrinter(&bytes.Buffer{}), &bytes.Buffer{}); err != nil {
 		t.Fatalf("first runSubmit returned error: %v", err)
 	}
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", featurePath, "--json"}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil {
 		t.Fatalf("expected duplicate submit failure")
 	}
@@ -920,7 +920,7 @@ func TestSubmitRejectsExactDuplicateActiveSubmission(t *testing.T) {
 func TestSubmitRejectsCheckOnlyWaitCombination(t *testing.T) {
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", ".", "--check-only", "--wait"}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", ".", "--check-only", "--wait"}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil {
 		t.Fatalf("expected flag conflict failure")
 	}
@@ -938,7 +938,7 @@ func TestSubmitRejectsWhenIntegrationQueueDepthReached(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -954,13 +954,13 @@ func TestSubmitRejectsWhenIntegrationQueueDepthReached(t *testing.T) {
 	writeFileAndCommit(t, featureOne, "one.txt", "one\n", "feature one")
 	writeFileAndCommit(t, featureTwo, "two.txt", "two\n", "feature two")
 
-	if err := runSubmit([]string{"--repo", featureOne}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runSubmit([]string{"--repo", featureOne}, newStepPrinter(&bytes.Buffer{}), &bytes.Buffer{}); err != nil {
 		t.Fatalf("first runSubmit returned error: %v", err)
 	}
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err = runSubmit([]string{"--repo", featureTwo, "--json"}, &submitOut, &submitErr)
+	err = runSubmit([]string{"--repo", featureTwo, "--json"}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil {
 		t.Fatalf("expected queue depth rejection")
 	}
@@ -986,7 +986,7 @@ func TestSubmitCheckOnlyIgnoresQueueDepthLimit(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -1002,13 +1002,13 @@ func TestSubmitCheckOnlyIgnoresQueueDepthLimit(t *testing.T) {
 	writeFileAndCommit(t, featureOne, "one.txt", "one\n", "feature one")
 	writeFileAndCommit(t, featureTwo, "two.txt", "two\n", "feature two")
 
-	if err := runSubmit([]string{"--repo", featureOne}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runSubmit([]string{"--repo", featureOne}, newStepPrinter(&bytes.Buffer{}), &bytes.Buffer{}); err != nil {
 		t.Fatalf("first runSubmit returned error: %v", err)
 	}
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featureTwo, "--check-only", "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featureTwo, "--check-only", "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("expected check-only to pass, got %v", err)
 	}
 
@@ -1028,7 +1028,7 @@ func TestSubmitCanReprioritizeQueuedDuplicateWhenQueueDepthReached(t *testing.T)
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -1043,13 +1043,13 @@ func TestSubmitCanReprioritizeQueuedDuplicateWhenQueueDepthReached(t *testing.T)
 
 	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
 
-	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityLow}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityLow}, newStepPrinter(&bytes.Buffer{}), &bytes.Buffer{}); err != nil {
 		t.Fatalf("first runSubmit returned error: %v", err)
 	}
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json", "--priority", submissionPriorityHigh}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("reprioritize runSubmit returned error: %v", err)
 	}
 
@@ -1078,7 +1078,7 @@ func TestSubmitJSONFailureIncludesStableErrorCode(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -1088,7 +1088,7 @@ func TestSubmitJSONFailureIncludesStableErrorCode(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", featurePath, "--json"}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil {
 		t.Fatalf("expected submit failure")
 	}
@@ -1109,13 +1109,13 @@ func TestSubmitJSONDetachedFailureUsesStableErrorCode(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", detachedPath, "--branch", "main", "--json"}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", detachedPath, "--branch", "main", "--json"}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil {
 		t.Fatalf("expected detached submit failure")
 	}
@@ -1139,7 +1139,7 @@ func TestSubmitWaitIntegratesBranchAndReturnsIntegratedOutcome(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -1169,7 +1169,7 @@ func TestSubmitWaitForLandedBlocksThroughAutoPublish(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--for", "landed", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--for", "landed", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -1203,13 +1203,13 @@ func TestSubmitWaitSucceedsAfterQueuedRebaseRewritesBranchSHA(t *testing.T) {
 	writeFileAndCommit(t, featureTwo, "two.txt", "two\n", "feature two")
 	originalSHA := trimNewline(runTestCommand(t, featureTwo, "git", "rev-parse", "HEAD"))
 
-	if err := runSubmit([]string{"--repo", featureOne}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runSubmit([]string{"--repo", featureOne}, newStepPrinter(&bytes.Buffer{}), &bytes.Buffer{}); err != nil {
 		t.Fatalf("first runSubmit returned error: %v", err)
 	}
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featureTwo, "--wait", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featureTwo, "--wait", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("second runSubmit returned error: %v", err)
 	}
 
@@ -1240,7 +1240,7 @@ func TestSubmitWaitTextWarnsWhenPublishModeIsManual(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--timeout", "30s", "--poll-interval", "10ms"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -1306,7 +1306,7 @@ func TestSubmitTextShowsRoundedEstimatedCompletion(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", secondPath}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", secondPath}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -1334,13 +1334,13 @@ func TestSubmitWaitReturnsBlockedExitCodeForConflict(t *testing.T) {
 	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/two", featureTwo)
 	replaceFileAndCommit(t, featureTwo, "README.md", "# beta\n", "feature two")
 
-	if err := runSubmit([]string{"--repo", featureOne, "--wait", "--timeout", "30s", "--poll-interval", "10ms"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runSubmit([]string{"--repo", featureOne, "--wait", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&bytes.Buffer{}), &bytes.Buffer{}); err != nil {
 		t.Fatalf("first runSubmit returned error: %v", err)
 	}
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err := runSubmit([]string{"--repo", featureTwo, "--wait", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, &submitOut, &submitErr)
+	err := runSubmit([]string{"--repo", featureTwo, "--wait", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil {
 		t.Fatalf("expected blocked wait failure")
 	}
@@ -1378,7 +1378,7 @@ func TestSubmitWaitReturnsTimeoutExitCodeWhenWorkerStaysBusy(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	err = runSubmit([]string{"--repo", featurePath, "--wait", "--json", "--timeout", "20ms", "--poll-interval", "5ms"}, &submitOut, &submitErr)
+	err = runSubmit([]string{"--repo", featurePath, "--wait", "--json", "--timeout", "20ms", "--poll-interval", "5ms"}, newStepPrinter(&submitOut), &submitErr)
 	if err == nil {
 		t.Fatalf("expected timeout wait failure")
 	}

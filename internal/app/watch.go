@@ -22,7 +22,7 @@ type watchFrame struct {
 	Status     statusResult `json:"status"`
 }
 
-func runWatch(args []string, stdout io.Writer, stderr io.Writer) error {
+func runWatch(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" watch", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -65,7 +65,7 @@ Flags:
 	return runWatchLoop(context.Background(), opts, stdout)
 }
 
-func runWatchLoop(ctx context.Context, opts watchOptions, stdout io.Writer) error {
+func runWatchLoop(ctx context.Context, opts watchOptions, stdout *stepPrinter) error {
 	if opts.maxCycles == 1 {
 		return renderWatchCycle(stdout, opts)
 	}
@@ -91,24 +91,22 @@ func runWatchLoop(ctx context.Context, opts watchOptions, stdout io.Writer) erro
 	}
 }
 
-func renderWatchCycle(stdout io.Writer, opts watchOptions) error {
+func renderWatchCycle(stdout *stepPrinter, opts watchOptions) error {
 	result, err := collectStatus(opts.repoPath, opts.eventLimit)
 	if err != nil {
 		return err
 	}
 
 	if opts.asJSON {
-		return json.NewEncoder(stdout).Encode(watchFrame{
+		return json.NewEncoder(stdout.Raw()).Encode(watchFrame{
 			ObservedAt: time.Now().UTC(),
 			Status:     result,
 		})
 	}
 
-	if _, err := fmt.Fprint(stdout, "\x1b[H\x1b[2J"); err != nil {
+	if _, err := io.WriteString(stdout.Raw(), "\x1b[H\x1b[2J"); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(stdout, "mainline watch  %s\n\n", time.Now().UTC().Format(time.RFC3339)); err != nil {
-		return err
-	}
+	stdout.Section("mainline watch  %s", time.Now().UTC().Format(time.RFC3339))
 	return renderStatus(stdout, result)
 }

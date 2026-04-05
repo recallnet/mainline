@@ -24,7 +24,7 @@ func TestLandJSONIntegratesAndPublishesBranch(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"land", "--repo", featurePath, "--json", "--timeout", "30s", "--poll-interval", "10ms"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"land", "--repo", featurePath, "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI land returned error: %v", err)
 	}
 
@@ -63,13 +63,13 @@ func TestLandReturnsBlockedSubmissionFailure(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"land", "--repo", featureOne, "--timeout", "30s", "--poll-interval", "10ms"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"land", "--repo", featureOne, "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI first land returned error: %v", err)
 	}
 
 	stdout.Reset()
 	stderr.Reset()
-	err := runCLI([]string{"land", "--repo", featureTwo, "--timeout", "30s", "--poll-interval", "10ms"}, &stdout, &stderr)
+	err := runCLI([]string{"land", "--repo", featureTwo, "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&stdout), &stderr)
 	if err == nil {
 		t.Fatalf("expected blocked land to fail")
 	}
@@ -95,7 +95,7 @@ func TestLandFailsPreflightBeforeQueueingWhenProtectedWorktreeIsDirty(t *testing
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err := runCLI([]string{"land", "--repo", featurePath, "--timeout", "30s", "--poll-interval", "10ms"}, &stdout, &stderr)
+	err := runCLI([]string{"land", "--repo", featurePath, "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&stdout), &stderr)
 	if err == nil {
 		t.Fatalf("expected dirty protected branch preflight failure")
 	}

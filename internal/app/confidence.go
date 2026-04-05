@@ -76,7 +76,7 @@ type certificationRepoEvidence struct {
 	Result string `json:"result"`
 }
 
-func runConfidence(args []string, stdout io.Writer, stderr io.Writer) error {
+func runConfidence(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" confidence", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -114,7 +114,7 @@ Flags:
 	}
 
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
@@ -344,15 +344,16 @@ func evaluateConfidenceGates(live statusResult, metrics confidenceMetrics, curre
 	return gates
 }
 
-func renderConfidence(stdout io.Writer, result confidenceResult) error {
+func renderConfidence(stdout *stepPrinter, result confidenceResult) error {
+	printer := stdout
 	stateLabel := "FAIL"
 	if result.PromotionReady {
 		stateLabel = "PASS"
 	}
-	fmt.Fprintf(stdout, "Confidence: %s\n", stateLabel)
-	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
-	fmt.Fprintf(stdout, "Current commit: %s\n", result.CurrentCommit)
-	fmt.Fprintf(stdout, "Live queue: submissions queued=%d running=%d blocked=%d failed=%d | publishes queued=%d running=%d failed=%d\n",
+	printer.Section("Confidence %s", stateLabel)
+	printer.Line("Repository root: %s", result.RepositoryRoot)
+	printer.Line("Current commit: %s", result.CurrentCommit)
+	printer.Line("Live queue: submissions queued=%d running=%d blocked=%d failed=%d | publishes queued=%d running=%d failed=%d",
 		result.Live.Counts.QueuedSubmissions,
 		result.Live.Counts.RunningSubmissions,
 		result.Live.Counts.BlockSubmissions,
@@ -361,18 +362,18 @@ func renderConfidence(stdout io.Writer, result confidenceResult) error {
 		result.Live.Counts.RunningPublishes,
 		result.Live.Counts.FailedPublishes,
 	)
-	fmt.Fprintf(stdout, "Recent metrics: blocked_rate=%.4f retry_rate=%.4f supersede_rate=%.4f avg_integration_ms=%d avg_publish_ms=%d\n",
+	printer.Line("Recent metrics: blocked_rate=%.4f retry_rate=%.4f supersede_rate=%.4f avg_integration_ms=%d avg_publish_ms=%d",
 		result.Metrics.BlockedRate,
 		result.Metrics.RetryRate,
 		result.Metrics.SupersedeRate,
 		result.Metrics.AverageIntegrationLatencyMS,
 		result.Metrics.AveragePublishLatencyMS,
 	)
-	fmt.Fprintf(stdout, "Soak evidence: %s (%s)\n", passFailLabel(result.Soak.Passed && result.Soak.Exists), result.Soak.Detail)
-	fmt.Fprintf(stdout, "Certification evidence: %s (%s)\n", passFailLabel(result.Certification.Passed && result.Certification.Exists), result.Certification.Detail)
-	fmt.Fprintln(stdout, "Gates:")
+	printer.Line("Soak evidence: %s (%s)", passFailLabel(result.Soak.Passed && result.Soak.Exists), result.Soak.Detail)
+	printer.Line("Certification evidence: %s (%s)", passFailLabel(result.Certification.Passed && result.Certification.Exists), result.Certification.Detail)
+	printer.Section("Gates")
 	for _, gate := range result.Gates {
-		fmt.Fprintf(stdout, "  %s %s: %s\n", passFailLabel(gate.Passed), gate.Name, gate.Reason)
+		printer.Line("%s %s: %s", passFailLabel(gate.Passed), gate.Name, gate.Reason)
 	}
 	return nil
 }

@@ -39,14 +39,14 @@ func RunDaemon(args []string) error {
 
 // RunDaemonWithName executes the daemon CLI using the provided program name.
 func RunDaemonWithName(programName string, args []string) error {
-	return runDaemonWithName(programName, args, os.Stdout, os.Stderr)
+	return runDaemonWithName(programName, args, newStepPrinter(os.Stdout), os.Stderr)
 }
 
-func runDaemon(args []string, stdout io.Writer, stderr io.Writer) error {
+func runDaemon(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	return runDaemonWithName("mainlined", args, stdout, stderr)
 }
 
-func runDaemonWithName(programName string, args []string, stdout io.Writer, stderr io.Writer) error {
+func runDaemonWithName(programName string, args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(programName, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -73,18 +73,18 @@ func runDaemonWithName(programName string, args []string, stdout io.Writer, stde
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			printDaemonHelp(stdout, programName)
+			printDaemonHelp(stdout.Raw(), programName)
 			return nil
 		}
 		return err
 	}
 
 	if showHelp {
-		printDaemonHelp(stdout, programName)
+		printDaemonHelp(stdout.Raw(), programName)
 		return nil
 	}
 	if showVersion {
-		printVersion(stdout, programName, false)
+		printVersion(stdout.Raw(), programName, false)
 		return nil
 	}
 	if opts.interval <= 0 {
@@ -94,7 +94,7 @@ func runDaemonWithName(programName string, args []string, stdout io.Writer, stde
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	return runDaemonLoop(ctx, opts, stdout)
+	return runDaemonLoop(ctx, opts, stdout.Raw())
 }
 
 func runDaemonLoop(ctx context.Context, opts daemonOptions, stdout io.Writer) error {

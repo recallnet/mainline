@@ -46,15 +46,15 @@ type lifecycleEvent struct {
 	RetryHint       string   `json:"retry_hint,omitempty"`
 }
 
-func runEvents(args []string, stdout io.Writer, stderr io.Writer) error {
+func runEvents(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	return runEventCommand("mainline events", args, stdout, stderr)
 }
 
-func runLogs(args []string, stdout io.Writer, stderr io.Writer) error {
+func runLogs(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	return runEventCommand("mainline logs", args, stdout, stderr)
 }
 
-func runEventCommand(commandName string, args []string, stdout io.Writer, stderr io.Writer) error {
+func runEventCommand(commandName string, args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(commandName, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -94,7 +94,7 @@ Flags:
 	return runEventStream(context.Background(), opts, stdout)
 }
 
-func runEventStream(ctx context.Context, opts eventOptions, stdout io.Writer) error {
+func runEventStream(ctx context.Context, opts eventOptions, stdout *stepPrinter) error {
 	_, _, _, repoRecord, store, err := loadRepoContext(opts.repoPath)
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func runEventStream(ctx context.Context, opts eventOptions, stdout io.Writer) er
 	initial = reverseEvents(initial)
 	lastID := int64(0)
 	for _, event := range initial {
-		if err := writeEvent(stdout, event, opts, &emitter); err != nil {
+		if err := writeEvent(stdout.Raw(), event, opts, &emitter); err != nil {
 			return err
 		}
 		lastID = event.ID
@@ -143,7 +143,7 @@ func runEventStream(ctx context.Context, opts eventOptions, stdout io.Writer) er
 				continue
 			}
 			for _, event := range events {
-				if err := writeEvent(stdout, event, opts, &emitter); err != nil {
+				if err := writeEvent(stdout.Raw(), event, opts, &emitter); err != nil {
 					return err
 				}
 				lastID = event.ID

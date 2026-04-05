@@ -27,7 +27,7 @@ type publishResult struct {
 	DrainResult      string               `json:"drain_result,omitempty"`
 }
 
-func runPublish(args []string, stdout io.Writer, stderr io.Writer) error {
+func runPublish(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" publish", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -125,16 +125,17 @@ Flags:
 	}
 
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
 
-	fmt.Fprintf(stdout, "Queued publish request %d\n", request.ID)
-	fmt.Fprintf(stdout, "Target SHA: %s\n", targetSHA)
-	fmt.Fprintf(stdout, "State path: %s\n", state.DefaultPath(layout.GitDir))
+	printer := stdout
+	printer.Section("Queued publish request %d", request.ID)
+	printer.Line("Target SHA: %s", targetSHA)
+	printer.Line("State path: %s", state.DefaultPath(layout.GitDir))
 	if result.DrainResult != "" {
-		fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+		printer.Line("Drain result: %s", result.DrainResult)
 	}
 	return nil
 }

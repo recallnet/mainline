@@ -7,7 +7,7 @@ import (
 	"io"
 )
 
-func runCompletion(args []string, stdout io.Writer, stderr io.Writer) error {
+func runCompletion(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" completion", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -43,14 +43,14 @@ Flags:
 		return fmt.Errorf("unknown shell %q; expected bash, zsh, or fish", fs.Arg(0))
 	}
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(map[string]string{
 			"shell":  shell,
 			"script": script,
 		})
 	}
-	_, err := io.WriteString(stdout, script)
+	_, err := io.WriteString(stdout.Raw(), script)
 	return err
 }
 

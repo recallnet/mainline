@@ -84,7 +84,7 @@ func TestRunOnceRejectsDirtyCanonicalRootCheckout(t *testing.T) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr)
+	err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr)
 	if err == nil {
 		t.Fatalf("expected run-once to fail when canonical root is dirty")
 	}
@@ -231,7 +231,7 @@ func TestRunOnceIntegratesDetachedHeadSubmissionBySHA(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", detachedPath, "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", detachedPath, "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 
@@ -278,7 +278,7 @@ func TestRunOnceBlocksConflictAndLeavesProtectedBranchUntouched(t *testing.T) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	if !strings.Contains(runOut.String(), "Blocked submission") {
@@ -316,7 +316,7 @@ func TestRunOnceBlocksConflictAndLeavesProtectedBranchUntouched(t *testing.T) {
 
 	var statusOut bytes.Buffer
 	var statusErr bytes.Buffer
-	if err := runStatus([]string{"--repo", repoRoot, "--json", "--events", "10"}, &statusOut, &statusErr); err != nil {
+	if err := runStatus([]string{"--repo", repoRoot, "--json", "--events", "10"}, newStepPrinter(&statusOut), &statusErr); err != nil {
 		t.Fatalf("runStatus returned error: %v", err)
 	}
 
@@ -386,13 +386,13 @@ func TestStatusBlockedSubmissionUsesLatestConflictDiagnosticsWhenHistoryIsLong(t
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 
 	var statusOut bytes.Buffer
 	var statusErr bytes.Buffer
-	if err := runStatus([]string{"--repo", repoRoot, "--json", "--events", "10"}, &statusOut, &statusErr); err != nil {
+	if err := runStatus([]string{"--repo", repoRoot, "--json", "--events", "10"}, newStepPrinter(&statusOut), &statusErr); err != nil {
 		t.Fatalf("runStatus returned error: %v", err)
 	}
 
@@ -475,7 +475,7 @@ func TestRunOnceReportsProtectedBranchSyncFromUpstream(t *testing.T) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	output := runOut.String()
@@ -544,7 +544,7 @@ func TestRunOnceReportsProtectedBranchSyncBeforeConflictBlock(t *testing.T) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	output := runOut.String()
@@ -605,7 +605,7 @@ func TestRunOncePreIntegrateChecksBlockBeforeProtectedBranchMutation(t *testing.
 	protectedBefore := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	if !strings.Contains(runOut.String(), "pre-integrate checks failed") {
@@ -649,7 +649,7 @@ func TestRunOnceFailsWhenSubmittedSourceWorktreeIsDeleted(t *testing.T) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	if !strings.Contains(runOut.String(), "source worktree is unavailable") {
@@ -681,7 +681,7 @@ func TestRunOnceFailsWhenSubmittedSourceWorktreeMovesAfterSubmit(t *testing.T) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	if !strings.Contains(runOut.String(), "source worktree is unavailable") {
@@ -709,7 +709,7 @@ func TestRunOnceFailsWhenSubmittedSourceWorktreeTurnsDirtyAfterSubmit(t *testing
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	if !strings.Contains(runOut.String(), "is dirty; clean it and resubmit") {
@@ -742,7 +742,7 @@ func TestRunOnceFailsWhenQueuedBranchHeadDriftsAfterSubmit(t *testing.T) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	if !strings.Contains(runOut.String(), "moved from submitted SHA") {
@@ -827,7 +827,7 @@ func TestRunOnceSyncsExternalProtectedAdvanceBeforeNextQueuedSubmission(t *testi
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	if !strings.Contains(runOut.String(), "Synced main from origin/main and integrated submission") {
@@ -894,7 +894,7 @@ func TestRunOncePreIntegrateTimeoutBlocksWithCheckTimeoutReason(t *testing.T) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	output := runOut.String()
@@ -936,7 +936,7 @@ func initRepoForWorker(t *testing.T, repoRoot string) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -957,7 +957,7 @@ func submitBranchWithArgs(t *testing.T, repoPath string, extraArgs ...string) {
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
 	args := append([]string{"--repo", repoPath}, extraArgs...)
-	if err := runSubmit(args, &submitOut, &submitErr); err != nil {
+	if err := runSubmit(args, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 }
@@ -967,7 +967,7 @@ func runOnce(t *testing.T, repoPath string) {
 
 	var runOut bytes.Buffer
 	var runErr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoPath}, &runOut, &runErr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoPath}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 }

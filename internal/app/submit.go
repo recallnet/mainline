@@ -101,7 +101,7 @@ type submitResult struct {
 	Error                 string                   `json:"error,omitempty"`
 }
 
-func runSubmit(args []string, stdout io.Writer, stderr io.Writer) error {
+func runSubmit(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	if err := applyAppTestFault("submit.start"); err != nil {
 		return err
 	}
@@ -238,10 +238,11 @@ Flags:
 		if asJSON {
 			return writeSubmitJSON(stdout, result, nil)
 		}
-		fmt.Fprintln(stdout, "Submission check passed")
-		fmt.Fprintf(stdout, "Branch: %s\n", result.Branch)
-		fmt.Fprintf(stdout, "Worktree: %s\n", result.SourceWorktree)
-		fmt.Fprintf(stdout, "Source SHA: %s\n", result.SourceSHA)
+		printer := stdout
+		printer.Success("Submission check passed")
+		printer.Line("Branch: %s", result.Branch)
+		printer.Line("Worktree: %s", result.SourceWorktree)
+		printer.Line("Source SHA: %s", result.SourceSHA)
 		return nil
 	}
 
@@ -314,28 +315,29 @@ Flags:
 			if asJSON {
 				return writeSubmitJSON(stdout, result, waitErr)
 			}
-			fmt.Fprintf(stdout, "Queued submission %d\n", queued.Submission.ID)
-			fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(queued.Submission))
-			fmt.Fprintf(stdout, "Worktree: %s\n", queued.Submission.SourceWorktree)
-			fmt.Fprintf(stdout, "Source SHA: %s\n", queued.Submission.SourceSHA)
-			fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
+			printer := stdout
+			printer.Section("Queued submission %d", queued.Submission.ID)
+			printer.Line("Branch: %s", submissionDisplayRef(queued.Submission))
+			printer.Line("Worktree: %s", queued.Submission.SourceWorktree)
+			printer.Line("Source SHA: %s", queued.Submission.SourceSHA)
+			printer.Line("Submission status: %s", result.SubmissionStatus)
 			if result.Outcome != "" {
-				fmt.Fprintf(stdout, "Outcome: %s\n", result.Outcome)
+				printer.Line("Outcome: %s", result.Outcome)
 			}
 			if result.PublishRequestID != 0 {
-				fmt.Fprintf(stdout, "Publish request: %d\n", result.PublishRequestID)
+				printer.Line("Publish request: %d", result.PublishRequestID)
 			}
 			if result.PublishStatus != "" {
-				fmt.Fprintf(stdout, "Publish status: %s\n", result.PublishStatus)
+				printer.Line("Publish status: %s", result.PublishStatus)
 			}
 			if result.LastWorkerResult != "" {
-				fmt.Fprintf(stdout, "Last worker result: %s\n", result.LastWorkerResult)
+				printer.Line("Last worker result: %s", result.LastWorkerResult)
 			}
 			if result.DurationMS > 0 {
-				fmt.Fprintf(stdout, "Duration: %s\n", (time.Duration(result.DurationMS) * time.Millisecond).Round(time.Millisecond))
+				printer.Line("Duration: %s", (time.Duration(result.DurationMS) * time.Millisecond).Round(time.Millisecond))
 			}
 			if result.Outcome == submissionOutcomeIntegrated && queued.Config.Publish.Mode == "manual" {
-				fmt.Fprintln(stdout, "Publish mode is manual: run mq publish or use mq land / mq wait --for landed when remote landing is required.")
+				printer.Warning("Publish mode is manual: run mq publish or use mq land / mq wait --for landed when remote landing is required.")
 			}
 			return waitErr
 		}
@@ -371,44 +373,45 @@ Flags:
 		return writeSubmitJSON(stdout, result, nil)
 	}
 
-	fmt.Fprintf(stdout, "Queued submission %d\n", queued.Submission.ID)
-	fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(queued.Submission))
-	fmt.Fprintf(stdout, "Worktree: %s\n", queued.Submission.SourceWorktree)
-	fmt.Fprintf(stdout, "Source SHA: %s\n", queued.Submission.SourceSHA)
+	printer := stdout
+	printer.Section("Queued submission %d", queued.Submission.ID)
+	printer.Line("Branch: %s", submissionDisplayRef(queued.Submission))
+	printer.Line("Worktree: %s", queued.Submission.SourceWorktree)
+	printer.Line("Source SHA: %s", queued.Submission.SourceSHA)
 	if result.QueuePosition > 0 {
-		fmt.Fprintf(stdout, "Queue position: %d\n", result.QueuePosition)
+		printer.Line("Queue position: %d", result.QueuePosition)
 	}
 	if eta := humanEstimatedCompletion(result.EstimatedCompletionMS); eta != "" {
-		fmt.Fprintf(stdout, "Estimated completion: %s (%s)\n", eta, result.EstimateBasis)
+		printer.Line("Estimated completion: %s (%s)", eta, result.EstimateBasis)
 	}
 	if result.DrainResult != "" {
-		fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+		printer.Line("Drain result: %s", result.DrainResult)
 	}
 	if result.Error != "" && !waitForResult {
-		fmt.Fprintf(stdout, "Drain error: %s\n", result.Error)
+		printer.Warning("Drain error: %s", result.Error)
 	}
 	if !waitForResult {
-		fmt.Fprintf(stdout, "Follow: mq wait --submission %d --for landed --json --timeout 30m\n", queued.Submission.ID)
+		printer.Info("Follow: mq wait --submission %d --for landed --json --timeout 30m", queued.Submission.ID)
 	}
 	if waitForResult {
-		fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
+		printer.Line("Submission status: %s", result.SubmissionStatus)
 		if result.Outcome != "" {
-			fmt.Fprintf(stdout, "Outcome: %s\n", result.Outcome)
+			printer.Line("Outcome: %s", result.Outcome)
 		}
 		if result.PublishRequestID != 0 {
-			fmt.Fprintf(stdout, "Publish request: %d\n", result.PublishRequestID)
+			printer.Line("Publish request: %d", result.PublishRequestID)
 		}
 		if result.PublishStatus != "" {
-			fmt.Fprintf(stdout, "Publish status: %s\n", result.PublishStatus)
+			printer.Line("Publish status: %s", result.PublishStatus)
 		}
 		if result.LastWorkerResult != "" {
-			fmt.Fprintf(stdout, "Last worker result: %s\n", result.LastWorkerResult)
+			printer.Line("Last worker result: %s", result.LastWorkerResult)
 		}
 		if result.DurationMS > 0 {
-			fmt.Fprintf(stdout, "Duration: %s\n", (time.Duration(result.DurationMS) * time.Millisecond).Round(time.Millisecond))
+			printer.Line("Duration: %s", (time.Duration(result.DurationMS) * time.Millisecond).Round(time.Millisecond))
 		}
 		if result.Outcome == submissionOutcomeIntegrated && queued.Config.Publish.Mode == "manual" {
-			fmt.Fprintln(stdout, "Publish mode is manual: run mq publish or use mq land / mq wait --for landed when remote landing is required.")
+			printer.Warning("Publish mode is manual: run mq publish or use mq land / mq wait --for landed when remote landing is required.")
 		}
 	}
 	return nil
@@ -848,8 +851,8 @@ func queuePreparedSubmission(prepared preparedSubmission) (queuedSubmission, err
 	}, nil
 }
 
-func writeSubmitJSON(stdout io.Writer, result submitResult, cmdErr error) error {
-	encoder := json.NewEncoder(stdout)
+func writeSubmitJSON(stdout *stepPrinter, result submitResult, cmdErr error) error {
+	encoder := json.NewEncoder(stdout.Raw())
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(result); err != nil {
 		return err

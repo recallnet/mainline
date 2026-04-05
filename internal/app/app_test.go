@@ -34,7 +34,7 @@ func TestCLIHelp(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	if err := runCLI([]string{"--help"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"--help"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -53,7 +53,7 @@ func TestMQHelpUsesMQIdentity(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	if err := runCLIWithName("mq", []string{"--help"}, &stdout, &stderr); err != nil {
+	if err := runCLIWithName("mq", []string{"--help"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLIWithName returned error: %v", err)
 	}
 
@@ -69,7 +69,7 @@ func TestDaemonHelp(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	if err := runDaemon([]string{"--help"}, &stdout, &stderr); err != nil {
+	if err := runDaemon([]string{"--help"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runDaemon returned error: %v", err)
 	}
 
@@ -87,7 +87,7 @@ func TestVersionCommandsReportBuildMetadata(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLIWithName("mq", []string{"version"}, &stdout, &stderr); err != nil {
+	if err := runCLIWithName("mq", []string{"version"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLIWithName version returned error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "mq v1.2.3 commit=abc1234 date=2026-03-31T00:00:00Z") {
@@ -96,7 +96,7 @@ func TestVersionCommandsReportBuildMetadata(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if err := runDaemonWithName("mainlined", []string{"--version"}, &stdout, &stderr); err != nil {
+	if err := runDaemonWithName("mainlined", []string{"--version"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runDaemonWithName version returned error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "mainlined v1.2.3 commit=abc1234 date=2026-03-31T00:00:00Z") {
@@ -113,7 +113,7 @@ func TestGlobalJSONVersionReportsStructuredBuildMetadata(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLIWithName("mq", []string{"--json", "version"}, &stdout, &stderr); err != nil {
+	if err := runCLIWithName("mq", []string{"--json", "version"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLIWithName version returned error: %v", err)
 	}
 
@@ -129,7 +129,7 @@ func TestGlobalJSONVersionReportsStructuredBuildMetadata(t *testing.T) {
 func TestGlobalJSONCompletionReportsStructuredScript(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"--json", "completion", "bash"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"--json", "completion", "bash"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -151,7 +151,7 @@ func TestGlobalJSONForwardsToRunOnceAndPublish(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"--json", "publish", "--repo", repoRoot}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"--json", "publish", "--repo", repoRoot}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("publish returned error: %v", err)
 	}
 	var publish publishResult
@@ -167,7 +167,7 @@ func TestGlobalJSONForwardsToRunOnceAndPublish(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if err := runCLI([]string{"--json", "run-once", "--repo", repoRoot}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"--json", "run-once", "--repo", repoRoot}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("run-once returned error: %v", err)
 	}
 	var result struct {
@@ -189,7 +189,7 @@ func TestStatusJSONContractContainsStableTopLevelFields(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -231,7 +231,7 @@ func TestStatusJSONIncludesOperatorSummaryFields(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -276,7 +276,7 @@ func TestStatusAndSubmitJSONIncludeRollingExecutionEstimate(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featureTwo, "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featureTwo, "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 	var submit submitResult
@@ -289,7 +289,7 @@ func TestStatusAndSubmitJSONIncludeRollingExecutionEstimate(t *testing.T) {
 
 	var statusOut bytes.Buffer
 	var statusErr bytes.Buffer
-	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, &statusOut, &statusErr); err != nil {
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, newStepPrinter(&statusOut), &statusErr); err != nil {
 		t.Fatalf("runCLI status returned error: %v", err)
 	}
 	var status statusResult
@@ -314,7 +314,7 @@ func TestWaitBySubmissionIDReturnsIntegratedOutcome(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 	var submit submitResult
@@ -324,7 +324,7 @@ func TestWaitBySubmissionIDReturnsIntegratedOutcome(t *testing.T) {
 
 	var waitOut bytes.Buffer
 	var waitErr bytes.Buffer
-	if err := runCLI([]string{"wait", "--repo", repoRoot, "--submission", strconv.FormatInt(submit.SubmissionID, 10), "--for", "integrated", "--json"}, &waitOut, &waitErr); err != nil {
+	if err := runCLI([]string{"wait", "--repo", repoRoot, "--submission", strconv.FormatInt(submit.SubmissionID, 10), "--for", "integrated", "--json"}, newStepPrinter(&waitOut), &waitErr); err != nil {
 		t.Fatalf("runCLI wait returned error: %v", err)
 	}
 
@@ -351,7 +351,7 @@ func TestWaitBySubmissionIDReturnsLandedOutcome(t *testing.T) {
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 	var submit submitResult
@@ -361,7 +361,7 @@ func TestWaitBySubmissionIDReturnsLandedOutcome(t *testing.T) {
 
 	var waitOut bytes.Buffer
 	var waitErr bytes.Buffer
-	if err := runCLI([]string{"wait", "--repo", repoRoot, "--submission", strconv.FormatInt(submit.SubmissionID, 10), "--for", "landed", "--json"}, &waitOut, &waitErr); err != nil {
+	if err := runCLI([]string{"wait", "--repo", repoRoot, "--submission", strconv.FormatInt(submit.SubmissionID, 10), "--for", "landed", "--json"}, newStepPrinter(&waitOut), &waitErr); err != nil {
 		t.Fatalf("runCLI wait returned error: %v", err)
 	}
 
@@ -391,7 +391,7 @@ func TestWaitBySubmissionIDReturnsFailedWhenCorrelatedPublishFails(t *testing.T)
 
 	var submitOut bytes.Buffer
 	var submitErr bytes.Buffer
-	if err := runSubmit([]string{"--repo", featurePath, "--json"}, &submitOut, &submitErr); err != nil {
+	if err := runSubmit([]string{"--repo", featurePath, "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
 		t.Fatalf("runSubmit returned error: %v", err)
 	}
 	var submit submitResult
@@ -401,7 +401,7 @@ func TestWaitBySubmissionIDReturnsFailedWhenCorrelatedPublishFails(t *testing.T)
 
 	var waitOut bytes.Buffer
 	var waitErr bytes.Buffer
-	err := runCLI([]string{"wait", "--repo", repoRoot, "--submission", strconv.FormatInt(submit.SubmissionID, 10), "--for", "landed", "--json", "--timeout", "10s"}, &waitOut, &waitErr)
+	err := runCLI([]string{"wait", "--repo", repoRoot, "--submission", strconv.FormatInt(submit.SubmissionID, 10), "--for", "landed", "--json", "--timeout", "10s"}, newStepPrinter(&waitOut), &waitErr)
 	if err == nil {
 		t.Fatalf("expected landed wait to fail when publish fails")
 	}
@@ -434,7 +434,7 @@ func TestStatusJSONCorrelatesSubmissionToPublish(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -462,7 +462,7 @@ func TestEventsLifecycleJSONContractContainsStableFields(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "20"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "20"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -500,7 +500,7 @@ func TestEventsJSONContractContainsStableFields(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--limit", "5"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--limit", "5"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -571,7 +571,7 @@ func TestWatchJSONContractContainsStableFields(t *testing.T) {
 		eventLimit: 1,
 		maxCycles:  1,
 		asJSON:     true,
-	}, &stdout); err != nil {
+	}, newStepPrinter(&stdout)); err != nil {
 		t.Fatalf("runWatchLoop returned error: %v", err)
 	}
 
@@ -589,7 +589,7 @@ func TestDaemonProcessesWorkFromBareCloneLinkedWorktree(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 	featurePath := filepath.Join(t.TempDir(), "bare-feature")
@@ -863,7 +863,7 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	if err := runCLI([]string{"completion", "bash"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"completion", "bash"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -907,7 +907,7 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if err := runCLI([]string{"completion", "fish"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"completion", "fish"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -1011,7 +1011,7 @@ func TestConfidenceJSONReportsPromotionReadyForCurrentEvidence(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"confidence", "--repo", repoRoot, "--json", "--soak-summary", soakPath, "--cert-report", certPath}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"confidence", "--repo", repoRoot, "--json", "--soak-summary", soakPath, "--cert-report", certPath}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -1056,7 +1056,7 @@ func TestConfidenceFailsOnMismatchedEvidenceCommit(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"confidence", "--repo", repoRoot, "--json", "--soak-summary", soakPath, "--cert-report", certPath}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"confidence", "--repo", repoRoot, "--json", "--soak-summary", soakPath, "--cert-report", certPath}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -1114,7 +1114,7 @@ func TestConfidenceUsesCurrentWorktreeHeadForBuildIdentity(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"confidence", "--repo", featurePath, "--json", "--soak-summary", soakPath, "--cert-report", certPath}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"confidence", "--repo", featurePath, "--json", "--soak-summary", soakPath, "--cert-report", certPath}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -1150,7 +1150,7 @@ func TestStatusJSONReportsQueuedWork(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"status", "--repo", repoRoot, "--json", "--events", "2"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json", "--events", "2"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -1198,7 +1198,7 @@ func TestStatusUpgradesExistingLegacyStateSchema(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -1228,7 +1228,7 @@ func TestStatusHumanOutputIncludesRecentSummary(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"status", "--repo", repoRoot}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"status", "--repo", repoRoot}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -1251,7 +1251,7 @@ func TestEventsJSONListsRecentEventsChronologically(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--limit", "3"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--limit", "3"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -1302,7 +1302,7 @@ func TestEventsLifecycleJSONProjectsBranchTransitions(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "20"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "20"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -1362,7 +1362,7 @@ func TestEventsLifecycleReplayKeepsBranchOnPublishWindow(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "3"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "3"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 
@@ -1403,7 +1403,7 @@ func TestEventsLifecycleFailedDetachedSubmissionKeepsSourceRef(t *testing.T) {
 
 	var submitStdout bytes.Buffer
 	var submitStderr bytes.Buffer
-	if err := runCLI([]string{"submit", "--repo", detachedPath, "--json"}, &submitStdout, &submitStderr); err != nil {
+	if err := runCLI([]string{"submit", "--repo", detachedPath, "--json"}, newStepPrinter(&submitStdout), &submitStderr); err != nil {
 		t.Fatalf("submit runCLI returned error: %v", err)
 	}
 
@@ -1419,13 +1419,13 @@ func TestEventsLifecycleFailedDetachedSubmissionKeepsSourceRef(t *testing.T) {
 
 	var runStdout bytes.Buffer
 	var runStderr bytes.Buffer
-	if err := runCLI([]string{"run-once", "--repo", repoRoot}, &runStdout, &runStderr); err != nil {
+	if err := runCLI([]string{"run-once", "--repo", repoRoot}, newStepPrinter(&runStdout), &runStderr); err != nil {
 		t.Fatalf("run-once runCLI returned error: %v", err)
 	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "20"}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--lifecycle", "--limit", "20"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("events runCLI returned error: %v", err)
 	}
 
@@ -1469,7 +1469,7 @@ func TestEventsFollowStreamsNewEvent(t *testing.T) {
 			limit:        1,
 			follow:       true,
 			pollInterval: 20 * time.Millisecond,
-		}, &output)
+		}, newStepPrinter(&output))
 	}()
 
 	time.Sleep(50 * time.Millisecond)
@@ -1508,7 +1508,7 @@ func TestEventsFollowLifecycleStreamsIntegratedBranchEvent(t *testing.T) {
 			lifecycle:    true,
 			follow:       true,
 			pollInterval: 20 * time.Millisecond,
-		}, &output)
+		}, newStepPrinter(&output))
 	}()
 
 	featurePath := filepath.Join(t.TempDir(), "feature-follow-lifecycle")
@@ -1542,11 +1542,11 @@ func TestLogsMatchesEventOutput(t *testing.T) {
 	var eventStdout bytes.Buffer
 	var logsStdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--limit", "3"}, &eventStdout, &stderr); err != nil {
+	if err := runCLI([]string{"events", "--repo", repoRoot, "--json", "--limit", "3"}, newStepPrinter(&eventStdout), &stderr); err != nil {
 		t.Fatalf("events runCLI returned error: %v", err)
 	}
 	stderr.Reset()
-	if err := runCLI([]string{"logs", "--repo", repoRoot, "--json", "--limit", "3"}, &logsStdout, &stderr); err != nil {
+	if err := runCLI([]string{"logs", "--repo", repoRoot, "--json", "--limit", "3"}, newStepPrinter(&logsStdout), &stderr); err != nil {
 		t.Fatalf("logs runCLI returned error: %v", err)
 	}
 	if logsStdout.String() != eventStdout.String() {
@@ -1557,7 +1557,7 @@ func TestLogsMatchesEventOutput(t *testing.T) {
 func TestLogsHelpUsesLogsCommandName(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err := runCLI([]string{"logs", "--help"}, &stdout, &stderr)
+	err := runCLI([]string{"logs", "--help"}, newStepPrinter(&stdout), &stderr)
 	if err != nil {
 		t.Fatalf("expected help success for logs command, got %v", err)
 	}
@@ -1573,7 +1573,7 @@ func TestLogsHelpUsesLogsCommandName(t *testing.T) {
 func TestSubmitHelpMentionsAgentTurboPath(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err := runCLIWithName("mq", []string{"submit", "--help"}, &stdout, &stderr)
+	err := runCLIWithName("mq", []string{"submit", "--help"}, newStepPrinter(&stdout), &stderr)
 	if err != nil {
 		t.Fatalf("expected help success for submit command, got %v", err)
 	}
@@ -1589,7 +1589,7 @@ func TestSubmitHelpMentionsAgentTurboPath(t *testing.T) {
 func TestRepoInitHelpExitsSuccessfully(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCLIWithName("mq", []string{"repo", "init", "--help"}, &stdout, &stderr); err != nil {
+	if err := runCLIWithName("mq", []string{"repo", "init", "--help"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("expected help success for repo init, got %v", err)
 	}
 	output := stderr.String()
@@ -1610,7 +1610,7 @@ func TestWatchJSONEmitsSnapshots(t *testing.T) {
 		eventLimit: 2,
 		maxCycles:  2,
 		asJSON:     true,
-	}, &stdout); err != nil {
+	}, newStepPrinter(&stdout)); err != nil {
 		t.Fatalf("runWatchLoop returned error: %v", err)
 	}
 
@@ -1637,7 +1637,7 @@ func TestCLIRepoSubcommandsRemainReachable(t *testing.T) {
 	var stderr bytes.Buffer
 	repoRoot, _ := createTestRepo(t)
 
-	if err := runCLI([]string{"repo", "init", "--repo", repoRoot}, &stdout, &stderr); err != nil {
+	if err := runCLI([]string{"repo", "init", "--repo", repoRoot}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCLI returned error: %v", err)
 	}
 

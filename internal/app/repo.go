@@ -68,7 +68,7 @@ type rootCheckoutInfo struct {
 	Topology    string `json:"topology,omitempty"`
 }
 
-func runRepoInit(args []string, stdout io.Writer, stderr io.Writer) error {
+func runRepoInit(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" repo init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -180,7 +180,7 @@ Flags:
 	}
 
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(map[string]any{
 			"ok":                         true,
@@ -204,20 +204,23 @@ Flags:
 		})
 	}
 
-	fmt.Fprintf(stdout, "Initialized %s\n", policy.ConfigPath(repoRoot))
-	fmt.Fprintf(stdout, "Protected branch: %s\n", cfg.Repo.ProtectedBranch)
-	fmt.Fprintf(stdout, "Main worktree: %s\n", cfg.Repo.MainWorktree)
-	fmt.Fprintf(stdout, "State path: %s\n", state.DefaultPath(layout.GitDir))
-	fmt.Fprintf(stdout, "Global registry: %s\n", mustGlobalRegistryPath())
-	fmt.Fprintln(stdout, "Next:")
-	fmt.Fprintln(stdout, "  git add mainline.toml")
-	fmt.Fprintln(stdout, "  git commit -m \"Initialize mainline repo policy\"")
-	fmt.Fprintln(stdout, "  ./scripts/install-hooks.sh")
-	fmt.Fprintln(stdout, "  # for agent/factory repos, set [publish].Mode = 'auto' before relying on submit --wait")
-	fmt.Fprintln(stdout, "  mq submit --queue-only --json")
-	fmt.Fprintln(stdout, "  mq submit --check-only --json")
-	fmt.Fprintln(stdout, "  mq submit --wait --timeout 15m --json")
-	fmt.Fprintln(stdout, "  mq land --json --timeout 30m")
+	printer := stdout
+	printer.Section("Initialized %s", policy.ConfigPath(repoRoot))
+	printer.Line("Protected branch: %s", cfg.Repo.ProtectedBranch)
+	printer.Line("Main worktree: %s", cfg.Repo.MainWorktree)
+	printer.Line("State path: %s", state.DefaultPath(layout.GitDir))
+	printer.Line("Global registry: %s", mustGlobalRegistryPath())
+	printer.Section("Next")
+	printer.Bullet(
+		"git add mainline.toml",
+		"git commit -m \"Initialize mainline repo policy\"",
+		"./scripts/install-hooks.sh",
+		"# for agent/factory repos, set [publish].Mode = 'auto' before relying on submit --wait",
+		"mq submit --queue-only --json",
+		"mq submit --check-only --json",
+		"mq submit --wait --timeout 15m --json",
+		"mq land --json --timeout 30m",
+	)
 	return nil
 }
 
@@ -228,7 +231,7 @@ type registryPruneResult struct {
 	PrunedRepos    []string `json:"pruned_repositories,omitempty"`
 }
 
-func runRegistryPrune(args []string, stdout io.Writer, stderr io.Writer) error {
+func runRegistryPrune(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" registry prune", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -271,21 +274,23 @@ Flags:
 		PrunedRepos:    pruned,
 	}
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
 
-	fmt.Fprintf(stdout, "Registry: %s\n", result.RegistryPath)
-	fmt.Fprintf(stdout, "Pruned: %d\n", result.PrunedCount)
-	fmt.Fprintf(stdout, "Remaining: %d\n", result.RemainingCount)
+	printer := stdout
+	printer.Section("Registry prune")
+	printer.Line("Registry: %s", result.RegistryPath)
+	printer.Line("Pruned: %d", result.PrunedCount)
+	printer.Line("Remaining: %d", result.RemainingCount)
 	for _, repo := range result.PrunedRepos {
-		fmt.Fprintf(stdout, "  removed: %s\n", repo)
+		printer.Line("removed: %s", repo)
 	}
 	return nil
 }
 
-func runRepoShow(args []string, stdout io.Writer, stderr io.Writer) error {
+func runRepoShow(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" repo show", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -369,42 +374,44 @@ Flags:
 	result.Warnings = warnings
 
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
 
-	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
-	fmt.Fprintf(stdout, "Config path: %s\n", result.ConfigPath)
-	fmt.Fprintf(stdout, "Config present: %t\n", result.ConfigPresent)
-	fmt.Fprintf(stdout, "Current branch: %s\n", result.Branch)
-	fmt.Fprintf(stdout, "Protected branch: %s\n", result.Config.Repo.ProtectedBranch)
-	fmt.Fprintf(stdout, "Main worktree: %s\n", result.Config.Repo.MainWorktree)
-	fmt.Fprintf(stdout, "Remote: %s\n", result.Config.Repo.RemoteName)
-	fmt.Fprintf(stdout, "Worktrees: %d\n", len(result.Worktrees))
+	printer := stdout
+	printer.Section("Repository")
+	printer.Line("Repository root: %s", result.RepositoryRoot)
+	printer.Line("Config path: %s", result.ConfigPath)
+	printer.Line("Config present: %t", result.ConfigPresent)
+	printer.Line("Current branch: %s", result.Branch)
+	printer.Line("Protected branch: %s", result.Config.Repo.ProtectedBranch)
+	printer.Line("Main worktree: %s", result.Config.Repo.MainWorktree)
+	printer.Line("Remote: %s", result.Config.Repo.RemoteName)
+	printer.Line("Worktrees: %d", len(result.Worktrees))
 	if result.RootCheckout.Path != "" {
-		fmt.Fprintf(stdout, "Root checkout: %s\n", result.RootCheckout.Path)
-		fmt.Fprintf(stdout, "Root checkout canonical: %s\n", yesNo(result.RootCheckout.IsCanonical))
+		printer.Line("Root checkout: %s", result.RootCheckout.Path)
+		printer.Line("Root checkout canonical: %s", yesNo(result.RootCheckout.IsCanonical))
 		if result.RootCheckout.Branch != "" {
-			fmt.Fprintf(stdout, "Root checkout branch: %s\n", result.RootCheckout.Branch)
+			printer.Line("Root checkout branch: %s", result.RootCheckout.Branch)
 		}
-		fmt.Fprintf(stdout, "Root checkout clean: %s\n", yesNo(result.RootCheckout.Clean))
+		printer.Line("Root checkout clean: %s", yesNo(result.RootCheckout.Clean))
 	}
 	if record.ID != 0 {
-		fmt.Fprintf(stdout, "State path: %s\n", state.DefaultPath(layout.GitDir))
+		printer.Line("State path: %s", state.DefaultPath(layout.GitDir))
 	}
 	if result.BranchStatus.HasUpstream {
-		fmt.Fprintf(stdout, "Protected upstream: %s (ahead %d, behind %d)\n", result.BranchStatus.Upstream, result.BranchStatus.AheadCount, result.BranchStatus.BehindCount)
+		printer.Line("Protected upstream: %s (ahead %d, behind %d)", result.BranchStatus.Upstream, result.BranchStatus.AheadCount, result.BranchStatus.BehindCount)
 	} else {
-		fmt.Fprintln(stdout, "Protected upstream: none")
+		printer.Line("Protected upstream: none")
 	}
 	for _, warning := range result.Warnings {
-		fmt.Fprintf(stdout, "Warning: %s\n", warning)
+		printer.Warning("%s", warning)
 	}
 	return nil
 }
 
-func runRepoRoot(args []string, stdout io.Writer, stderr io.Writer) error {
+func runRepoRoot(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" repo root", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -459,34 +466,36 @@ Flags:
 	result.FixesApplied = fixesApplied
 
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
 
-	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
-	fmt.Fprintf(stdout, "Config path: %s\n", result.ConfigPath)
-	fmt.Fprintf(stdout, "Protected branch: %s\n", result.ProtectedBranch)
-	fmt.Fprintf(stdout, "Main worktree: %s\n", result.MainWorktree)
-	fmt.Fprintf(stdout, "Root checkout: %s\n", result.RootCheckout.Path)
+	printer := stdout
+	printer.Section("Canonical root")
+	printer.Line("Repository root: %s", result.RepositoryRoot)
+	printer.Line("Config path: %s", result.ConfigPath)
+	printer.Line("Protected branch: %s", result.ProtectedBranch)
+	printer.Line("Main worktree: %s", result.MainWorktree)
+	printer.Line("Root checkout: %s", result.RootCheckout.Path)
 	if result.RootCheckout.Topology != "" {
-		fmt.Fprintf(stdout, "Root checkout topology: %s\n", result.RootCheckout.Topology)
+		printer.Line("Root checkout topology: %s", result.RootCheckout.Topology)
 	}
-	fmt.Fprintf(stdout, "Root checkout canonical: %s\n", yesNo(result.RootCheckout.IsCanonical))
+	printer.Line("Root checkout canonical: %s", yesNo(result.RootCheckout.IsCanonical))
 	if result.RootCheckout.Branch != "" {
-		fmt.Fprintf(stdout, "Root checkout branch: %s\n", result.RootCheckout.Branch)
+		printer.Line("Root checkout branch: %s", result.RootCheckout.Branch)
 	}
-	fmt.Fprintf(stdout, "Root checkout clean: %s\n", yesNo(result.RootCheckout.Clean))
-	fmt.Fprintf(stdout, "Root trustworthy: %s\n", yesNo(result.Trustworthy))
-	fmt.Fprintf(stdout, "Can adopt root: %s\n", yesNo(result.CanAdoptRoot))
+	printer.Line("Root checkout clean: %s", yesNo(result.RootCheckout.Clean))
+	printer.Line("Root trustworthy: %s", yesNo(result.Trustworthy))
+	printer.Line("Can adopt root: %s", yesNo(result.CanAdoptRoot))
 	for _, warning := range result.Warnings {
-		fmt.Fprintf(stdout, "Warning: %s\n", warning)
+		printer.Warning("%s", warning)
 	}
 	for _, action := range result.RecommendedActions {
-		fmt.Fprintf(stdout, "Next: %s\n", action)
+		printer.Info("Next: %s", action)
 	}
 	for _, applied := range result.FixesApplied {
-		fmt.Fprintf(stdout, "Fixed: %s\n", applied)
+		printer.Success("Fixed: %s", applied)
 	}
 	return nil
 }
@@ -576,7 +585,7 @@ func recommendedRootActions(repoRoot string, cfg policy.File, rootInfo rootCheck
 	return actions
 }
 
-func runRepoAudit(args []string, stdout io.Writer, stderr io.Writer) error {
+func runRepoAudit(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" repo audit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -607,28 +616,30 @@ Flags:
 	}
 
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
 
-	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
-	fmt.Fprintf(stdout, "Protected branch: %s\n", result.ProtectedBranch)
+	printer := stdout
+	printer.Section("Repo audit")
+	printer.Line("Repository root: %s", result.RepositoryRoot)
+	printer.Line("Protected branch: %s", result.ProtectedBranch)
 	if result.ProtectedSHA != "" {
-		fmt.Fprintf(stdout, "Protected SHA: %s\n", result.ProtectedSHA)
+		printer.Line("Protected SHA: %s", result.ProtectedSHA)
 	}
 	if len(result.Unmerged) == 0 {
-		fmt.Fprintln(stdout, "Unmerged branches: none")
+		printer.Line("Unmerged branches: none")
 		return nil
 	}
 
-	fmt.Fprintln(stdout, "Unmerged branches:")
+	printer.Section("Unmerged branches")
 	for _, branch := range result.Unmerged {
 		if branch.WorktreePath != "" {
-			fmt.Fprintf(stdout, "  %s %s (%s)\n", branch.Branch, branch.HeadSHA, branch.WorktreePath)
+			printer.Line("%s %s (%s)", branch.Branch, branch.HeadSHA, branch.WorktreePath)
 			continue
 		}
-		fmt.Fprintf(stdout, "  %s %s\n", branch.Branch, branch.HeadSHA)
+		printer.Line("%s %s", branch.Branch, branch.HeadSHA)
 	}
 	return nil
 }
@@ -735,7 +746,7 @@ func captureGit(worktreePath string, args ...string) (string, error) {
 	return string(output), nil
 }
 
-func runDoctor(args []string, stdout io.Writer, stderr io.Writer) error {
+func runDoctor(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -866,60 +877,62 @@ Flags:
 	}
 
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
 
-	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
-	fmt.Fprintf(stdout, "Protected branch: %s\n", result.ProtectedBranch)
-	fmt.Fprintf(stdout, "Main worktree: %s\n", result.MainWorktreePath)
+	printer := stdout
+	printer.Section("Doctor")
+	printer.Line("Repository root: %s", result.RepositoryRoot)
+	printer.Line("Protected branch: %s", result.ProtectedBranch)
+	printer.Line("Main worktree: %s", result.MainWorktreePath)
 	if result.RootCheckout.Path != "" {
-		fmt.Fprintf(stdout, "Root checkout: %s\n", result.RootCheckout.Path)
-		fmt.Fprintf(stdout, "Root checkout canonical: %s\n", yesNo(result.RootCheckout.IsCanonical))
+		printer.Line("Root checkout: %s", result.RootCheckout.Path)
+		printer.Line("Root checkout canonical: %s", yesNo(result.RootCheckout.IsCanonical))
 		if result.RootCheckout.Branch != "" {
-			fmt.Fprintf(stdout, "Root checkout branch: %s\n", result.RootCheckout.Branch)
+			printer.Line("Root checkout branch: %s", result.RootCheckout.Branch)
 		}
-		fmt.Fprintf(stdout, "Root checkout clean: %s\n", yesNo(result.RootCheckout.Clean))
+		printer.Line("Root checkout clean: %s", yesNo(result.RootCheckout.Clean))
 	}
-	fmt.Fprintf(stdout, "Git repository: %s\n", yesNo(result.IsGitRepository))
-	fmt.Fprintf(stdout, "Protected branch exists: %s\n", yesNo(result.ProtectedBranchExists))
-	fmt.Fprintf(stdout, "Main worktree exists: %s\n", yesNo(result.MainWorktreeExists))
-	fmt.Fprintf(stdout, "Protected branch clean: %s\n", yesNo(result.ProtectedBranchClean))
+	printer.Line("Git repository: %s", yesNo(result.IsGitRepository))
+	printer.Line("Protected branch exists: %s", yesNo(result.ProtectedBranchExists))
+	printer.Line("Main worktree exists: %s", yesNo(result.MainWorktreeExists))
+	printer.Line("Protected branch clean: %s", yesNo(result.ProtectedBranchClean))
 	for _, dirtyPath := range result.ProtectedDirtyPaths {
-		fmt.Fprintf(stdout, "Protected dirty path: %s\n", dirtyPath)
+		printer.Warning("Protected dirty path: %s", dirtyPath)
 	}
 	if result.QueueBlocked {
-		fmt.Fprintln(stdout, "Queue blocked: yes")
+		printer.Warning("Queue blocked: yes")
 		for _, action := range result.NextActions {
-			fmt.Fprintf(stdout, "Next action: %s\n", action)
+			printer.Info("Next action: %s", action)
 		}
 	}
 	if result.HasUpstream {
-		fmt.Fprintf(stdout, "Upstream: %s\n", result.UpstreamRef)
-		fmt.Fprintf(stdout, "Behind upstream: %s\n", yesNo(result.IsBehindUpstream))
-		fmt.Fprintf(stdout, "Ahead of upstream: %s\n", yesNo(result.IsAheadOfUpstream))
-		fmt.Fprintf(stdout, "Diverged from upstream: %s\n", yesNo(result.HasDivergedUpstream))
+		printer.Line("Upstream: %s", result.UpstreamRef)
+		printer.Line("Behind upstream: %s", yesNo(result.IsBehindUpstream))
+		printer.Line("Ahead of upstream: %s", yesNo(result.IsAheadOfUpstream))
+		printer.Line("Diverged from upstream: %s", yesNo(result.HasDivergedUpstream))
 	} else {
-		fmt.Fprintln(stdout, "Upstream: none")
+		printer.Line("Upstream: none")
 	}
-	fmt.Fprintf(stdout, "Stale locks: %d\n", len(result.StaleLocks))
+	printer.Line("Stale locks: %d", len(result.StaleLocks))
 	for _, stale := range result.StaleLocks {
-		fmt.Fprintf(stdout, "Stale lock: %s\n", stale)
+		printer.Line("Stale lock: %s", stale)
 	}
-	fmt.Fprintf(stdout, "Unfinished queue items: %d\n", len(result.UnfinishedQueueItems))
-	fmt.Fprintf(stdout, "Warnings: %d\n", len(result.Warnings))
+	printer.Line("Unfinished queue items: %d", len(result.UnfinishedQueueItems))
+	printer.Line("Warnings: %d", len(result.Warnings))
 	for _, warning := range result.Warnings {
-		fmt.Fprintf(stdout, "Warning: %s\n", warning)
+		printer.Warning("%s", warning)
 	}
 	if fix {
-		fmt.Fprintf(stdout, "Fixes applied: %d\n", len(result.FixesApplied))
+		printer.Line("Fixes applied: %d", len(result.FixesApplied))
 		for _, applied := range result.FixesApplied {
-			fmt.Fprintf(stdout, "Fixed: %s\n", applied)
+			printer.Success("Fixed: %s", applied)
 		}
-		fmt.Fprintf(stdout, "Fixes skipped: %d\n", len(result.FixesSkipped))
+		printer.Line("Fixes skipped: %d", len(result.FixesSkipped))
 		for _, skipped := range result.FixesSkipped {
-			fmt.Fprintf(stdout, "Skipped: %s\n", skipped)
+			printer.Warning("Skipped: %s", skipped)
 		}
 	}
 	return nil

@@ -35,7 +35,7 @@ type landResult struct {
 	Error            string                  `json:"error,omitempty"`
 }
 
-func runLand(args []string, stdout io.Writer, stderr io.Writer) error {
+func runLand(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" land", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -110,29 +110,30 @@ Flags:
 	result.DurationMS = time.Since(start).Milliseconds()
 
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		if err := encoder.Encode(result); err != nil {
 			return err
 		}
 	} else {
-		fmt.Fprintf(stdout, "Queued submission %d\n", result.SubmissionID)
-		fmt.Fprintf(stdout, "Branch: %s\n", result.Branch)
-		fmt.Fprintf(stdout, "Worktree: %s\n", result.SourceWorktree)
-		fmt.Fprintf(stdout, "Source SHA: %s\n", result.SourceSHA)
-		fmt.Fprintf(stdout, "Priority: %s\n", result.Priority)
-		fmt.Fprintf(stdout, "Submission status: %s\n", result.SubmissionStatus)
+		printer := stdout
+		printer.Section("Queued submission %d", result.SubmissionID)
+		printer.Line("Branch: %s", result.Branch)
+		printer.Line("Worktree: %s", result.SourceWorktree)
+		printer.Line("Source SHA: %s", result.SourceSHA)
+		printer.Line("Priority: %s", result.Priority)
+		printer.Line("Submission status: %s", result.SubmissionStatus)
 		if result.ProtectedSHA != "" {
-			fmt.Fprintf(stdout, "Protected SHA: %s\n", result.ProtectedSHA)
+			printer.Line("Protected SHA: %s", result.ProtectedSHA)
 		}
 		if result.PublishRequestID != 0 {
-			fmt.Fprintf(stdout, "Publish request: %d\n", result.PublishRequestID)
+			printer.Line("Publish request: %d", result.PublishRequestID)
 		}
 		if result.PublishStatus != "" {
-			fmt.Fprintf(stdout, "Publish status: %s\n", result.PublishStatus)
+			printer.Line("Publish status: %s", result.PublishStatus)
 		}
-		fmt.Fprintf(stdout, "Published: %t\n", result.Published)
-		fmt.Fprintf(stdout, "Duration: %s\n", time.Since(start).Round(time.Millisecond))
+		printer.Line("Published: %t", result.Published)
+		printer.Line("Duration: %s", time.Since(start).Round(time.Millisecond))
 	}
 
 	return waitErr

@@ -417,7 +417,7 @@ func submitStressAgents(t *testing.T, plans []stressAgentPlan) {
 
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
-			if err := runSubmit([]string{"--repo", plan.Worktree}, &stdout, &stderr); err != nil {
+			if err := runSubmit([]string{"--repo", plan.Worktree}, newStepPrinter(&stdout), &stderr); err != nil {
 				errCh <- fmt.Errorf("submit %s: %w (%s)", plan.Branch, err, stderr.String())
 				return
 			}
@@ -566,7 +566,7 @@ func retryFailedStressItems(t *testing.T, repoRoot string, report *stressReport)
 
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
-		if err := runRetry([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(submission.ID, 10)}, &stdout, &stderr); err != nil {
+		if err := runRetry([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(submission.ID, 10)}, newStepPrinter(&stdout), &stderr); err != nil {
 			t.Fatalf("retry submission %d: %v (%s)", submission.ID, err, stderr.String())
 		}
 		report.RetriedSubmissionIDs = append(report.RetriedSubmissionIDs, submission.ID)
@@ -583,7 +583,7 @@ func retryFailedStressItems(t *testing.T, repoRoot string, report *stressReport)
 
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
-		if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(request.ID, 10)}, &stdout, &stderr); err != nil {
+		if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(request.ID, 10)}, newStepPrinter(&stdout), &stderr); err != nil {
 			t.Fatalf("retry publish %d: %v (%s)", request.ID, err, stderr.String())
 		}
 		report.RetriedPublishRequestIDs = append(report.RetriedPublishRequestIDs, request.ID)

@@ -14,7 +14,7 @@ import (
 	"github.com/recallnet/mainline/internal/policy"
 )
 
-func runConfigEdit(args []string, stdout io.Writer, stderr io.Writer) error {
+func runConfigEdit(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" config edit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -54,8 +54,9 @@ Flags:
 	}
 
 	configPath := policy.ConfigPath(repoRoot)
+	printer := stdout
 	if printPath && !asJSON {
-		fmt.Fprintln(stdout, configPath)
+		printer.Line("%s", configPath)
 	}
 
 	editorCommand, err := resolveEditorCommand(editor)
@@ -69,7 +70,7 @@ Flags:
 	if asJSON {
 		cmd.Stdout = stderr
 	} else {
-		cmd.Stdout = stdout
+		cmd.Stdout = stdout.Raw()
 	}
 	cmd.Stderr = stderr
 
@@ -78,7 +79,7 @@ Flags:
 	}
 
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(map[string]any{
 			"ok":              true,
@@ -89,7 +90,7 @@ Flags:
 		})
 	}
 
-	fmt.Fprintf(stdout, "Edited %s\n", configPath)
+	printer.Success("Edited %s", configPath)
 	return nil
 }
 

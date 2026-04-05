@@ -19,14 +19,14 @@ func RunCLI(args []string) error {
 
 // RunCLIWithName executes the CLI using the provided program name.
 func RunCLIWithName(programName string, args []string) error {
-	return runCLIWithName(programName, args, os.Stdout, os.Stderr)
+	return runCLIWithName(programName, args, newStepPrinter(os.Stdout), os.Stderr)
 }
 
-func runCLI(args []string, stdout io.Writer, stderr io.Writer) error {
+func runCLI(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	return runCLIWithName("mainline", args, stdout, stderr)
 }
 
-func runCLIWithName(programName string, args []string, stdout io.Writer, stderr io.Writer) error {
+func runCLIWithName(programName string, args []string, stdout *stepPrinter, stderr io.Writer) error {
 	previousProgramName := activeCLIProgramName
 	activeCLIProgramName = programName
 	defer func() {
@@ -35,12 +35,12 @@ func runCLIWithName(programName string, args []string, stdout io.Writer, stderr 
 
 	root := newCLICommandTree(programName, stdout, stderr)
 	root.SetArgs(args)
-	root.SetOut(stdout)
+	root.SetOut(stdout.Raw())
 	root.SetErr(stderr)
 	return root.Execute()
 }
 
-func newCLICommandTree(programName string, stdout io.Writer, stderr io.Writer) *cobra.Command {
+func newCLICommandTree(programName string, stdout *stepPrinter, stderr io.Writer) *cobra.Command {
 	var asJSON bool
 	var showVersion bool
 
@@ -52,16 +52,16 @@ func newCLICommandTree(programName string, stdout io.Writer, stderr io.Writer) *
 		Args:             cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if showVersion {
-				printVersion(stdout, programName, asJSON)
+				printVersion(stdout.Raw(), programName, asJSON)
 				return nil
 			}
-			printCLIHelp(stdout, programName)
+			printCLIHelp(stdout.Raw(), programName)
 			return nil
 		},
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetHelpFunc(func(*cobra.Command, []string) {
-		printCLIHelp(stdout, programName)
+		printCLIHelp(stdout.Raw(), programName)
 	})
 	root.PersistentFlags().BoolVar(&asJSON, "json", false, "output json where supported")
 	root.Flags().BoolVar(&showVersion, "version", false, "show version")
@@ -90,7 +90,7 @@ func newCLICommandTree(programName string, stdout io.Writer, stderr io.Writer) *
 	return root
 }
 
-func newLegacyCommand(use string, short string, supportsJSON bool, stdout io.Writer, stderr io.Writer, runner func([]string, io.Writer, io.Writer) error) *cobra.Command {
+func newLegacyCommand(use string, short string, supportsJSON bool, stdout *stepPrinter, stderr io.Writer, runner func([]string, *stepPrinter, io.Writer) error) *cobra.Command {
 	return &cobra.Command{
 		Use:                use,
 		Short:              short,
@@ -112,19 +112,19 @@ func newLegacyCommand(use string, short string, supportsJSON bool, stdout io.Wri
 	}
 }
 
-func newVersionCommand(programName string, stdout io.Writer) *cobra.Command {
+func newVersionCommand(programName string, stdout *stepPrinter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "show build metadata",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			printVersion(stdout, programName, shouldForceJSON(cmd))
+			printVersion(stdout.Raw(), programName, shouldForceJSON(cmd))
 			return nil
 		},
 	}
 }
 
-func newConfigCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
+func newConfigCommand(stdout *stepPrinter, stderr io.Writer) *cobra.Command {
 	config := &cobra.Command{
 		Use:   "config",
 		Short: "configuration commands",
@@ -139,7 +139,7 @@ func newConfigCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	return config
 }
 
-func newRegistryCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
+func newRegistryCommand(stdout *stepPrinter, stderr io.Writer) *cobra.Command {
 	registry := &cobra.Command{
 		Use:   "registry",
 		Short: "global registry commands",
@@ -154,7 +154,7 @@ func newRegistryCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
 	return registry
 }
 
-func newRepoCommand(stdout io.Writer, stderr io.Writer) *cobra.Command {
+func newRepoCommand(stdout *stepPrinter, stderr io.Writer) *cobra.Command {
 	repo := &cobra.Command{
 		Use:   "repo",
 		Short: "repository commands",

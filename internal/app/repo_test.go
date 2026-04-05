@@ -24,7 +24,7 @@ func TestRepoInitAndShow(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -42,7 +42,7 @@ func TestRepoInitAndShow(t *testing.T) {
 
 	var showOut bytes.Buffer
 	var showErr bytes.Buffer
-	if err := runRepoShow([]string{"--repo", repoRoot}, &showOut, &showErr); err != nil {
+	if err := runRepoShow([]string{"--repo", repoRoot}, newStepPrinter(&showOut), &showErr); err != nil {
 		t.Fatalf("runRepoShow returned error: %v", err)
 	}
 
@@ -63,7 +63,7 @@ func TestRepoShowRepairsMissingRepositoryRecord(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -83,7 +83,7 @@ func TestRepoShowRepairsMissingRepositoryRecord(t *testing.T) {
 
 	var showOut bytes.Buffer
 	var showErr bytes.Buffer
-	if err := runRepoShow([]string{"--repo", repoRoot}, &showOut, &showErr); err != nil {
+	if err := runRepoShow([]string{"--repo", repoRoot}, newStepPrinter(&showOut), &showErr); err != nil {
 		t.Fatalf("runRepoShow returned error: %v", err)
 	}
 
@@ -109,7 +109,7 @@ func TestRepoRootReportsTrustworthyCanonicalCheckout(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
@@ -117,7 +117,7 @@ func TestRepoRootReportsTrustworthyCanonicalCheckout(t *testing.T) {
 
 	var rootOut bytes.Buffer
 	var rootErr bytes.Buffer
-	if err := runRepoRoot([]string{"--repo", repoRoot, "--json"}, &rootOut, &rootErr); err != nil {
+	if err := runRepoRoot([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&rootOut), &rootErr); err != nil {
 		t.Fatalf("runRepoRoot returned error: %v", err)
 	}
 
@@ -142,7 +142,7 @@ func TestRepoRootIgnoresAstrochickenAuthoringSurfaceForTrust(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
@@ -160,7 +160,7 @@ func TestRepoRootIgnoresAstrochickenAuthoringSurfaceForTrust(t *testing.T) {
 
 	var rootOut bytes.Buffer
 	var rootErr bytes.Buffer
-	if err := runRepoRoot([]string{"--repo", repoRoot, "--json"}, &rootOut, &rootErr); err != nil {
+	if err := runRepoRoot([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&rootOut), &rootErr); err != nil {
 		t.Fatalf("runRepoRoot returned error: %v", err)
 	}
 
@@ -182,7 +182,7 @@ func TestRepoRootHonorsGitIgnoredGeneratedFilesForTrust(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
@@ -203,7 +203,7 @@ func TestRepoRootHonorsGitIgnoredGeneratedFilesForTrust(t *testing.T) {
 
 	var rootOut bytes.Buffer
 	var rootErr bytes.Buffer
-	if err := runRepoRoot([]string{"--repo", repoRoot, "--json"}, &rootOut, &rootErr); err != nil {
+	if err := runRepoRoot([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&rootOut), &rootErr); err != nil {
 		t.Fatalf("runRepoRoot returned error: %v", err)
 	}
 
@@ -226,7 +226,7 @@ func TestRepoRootAdoptsCleanRootAsCanonicalMainWorktree(t *testing.T) {
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
 	nonCanonical := filepath.Join(repoRoot, "shadow-main")
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", nonCanonical}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", nonCanonical}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
@@ -234,7 +234,7 @@ func TestRepoRootAdoptsCleanRootAsCanonicalMainWorktree(t *testing.T) {
 
 	var rootOut bytes.Buffer
 	var rootErr bytes.Buffer
-	if err := runRepoRoot([]string{"--repo", repoRoot, "--adopt-root", "--json"}, &rootOut, &rootErr); err != nil {
+	if err := runRepoRoot([]string{"--repo", repoRoot, "--adopt-root", "--json"}, newStepPrinter(&rootOut), &rootErr); err != nil {
 		t.Fatalf("runRepoRoot returned error: %v", err)
 	}
 
@@ -265,7 +265,7 @@ func TestRepoRootRejectsAdoptWhenRootCheckoutIsDirty(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", filepath.Join(repoRoot, "shadow-main")}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", filepath.Join(repoRoot, "shadow-main")}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
@@ -277,7 +277,7 @@ func TestRepoRootRejectsAdoptWhenRootCheckoutIsDirty(t *testing.T) {
 
 	var rootOut bytes.Buffer
 	var rootErr bytes.Buffer
-	err := runRepoRoot([]string{"--repo", repoRoot, "--adopt-root", "--json"}, &rootOut, &rootErr)
+	err := runRepoRoot([]string{"--repo", repoRoot, "--adopt-root", "--json"}, newStepPrinter(&rootOut), &rootErr)
 	if err == nil {
 		t.Fatalf("expected adopt-root to fail when root checkout is dirty")
 	}
@@ -291,7 +291,7 @@ func TestRepoRootAdoptRequiresInitializedRepo(t *testing.T) {
 
 	var rootOut bytes.Buffer
 	var rootErr bytes.Buffer
-	err := runRepoRoot([]string{"--repo", repoRoot, "--adopt-root", "--json"}, &rootOut, &rootErr)
+	err := runRepoRoot([]string{"--repo", repoRoot, "--adopt-root", "--json"}, newStepPrinter(&rootOut), &rootErr)
 	if err == nil {
 		t.Fatalf("expected adopt-root to require repo init first")
 	}
@@ -307,7 +307,7 @@ func TestRepoInitSupportsJSONOutput(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath, "--json"}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath, "--json"}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -344,7 +344,7 @@ func TestRepoInitRegistersRepoForGlobalDaemon(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -371,7 +371,7 @@ func TestRepoInitRepairsMalformedGlobalRegistryOnWrite(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -420,7 +420,7 @@ func TestRegistryPruneCommandRemovesMissingEntries(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runRegistryPrune([]string{"--registry", registryPath, "--json"}, &stdout, &stderr); err != nil {
+	if err := runRegistryPrune([]string{"--registry", registryPath, "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runRegistryPrune: %v", err)
 	}
 	var result registryPruneResult
@@ -437,7 +437,7 @@ func TestDoctorDetectsDirtyProtectedBranch(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -448,7 +448,7 @@ func TestDoctorDetectsDirtyProtectedBranch(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -469,7 +469,7 @@ func TestDoctorRepairsMissingRepositoryRecord(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -489,7 +489,7 @@ func TestDoctorRepairsMissingRepositoryRecord(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -509,13 +509,13 @@ func TestDoctorDetectsMissingCanonicalWorktree(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", missingWorktree}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", missingWorktree}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -532,7 +532,7 @@ func TestRepoInitFromLinkedWorktreeWritesSharedConfig(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", linkedWorktree}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", linkedWorktree}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -562,7 +562,7 @@ func TestRepoInitCanonicalizesRelativeMainWorktreeToRepoRoot(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", "."}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", "."}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -586,7 +586,7 @@ func TestRepoInitRejectsDetachedProtectedWorktree(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	err := runRepoInit([]string{"--repo", detachedPath, "--main-worktree", detachedPath}, &initOut, &initErr)
+	err := runRepoInit([]string{"--repo", detachedPath, "--main-worktree", detachedPath}, newStepPrinter(&initOut), &initErr)
 	if err == nil {
 		t.Fatalf("expected detached protected worktree rejection")
 	}
@@ -605,7 +605,7 @@ func TestRepoInitRejectsNonDefaultProtectedBranchWithoutExplicitOverride(t *test
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	err := runRepoInit([]string{"--repo", protectedPath, "--main-worktree", protectedPath}, &initOut, &initErr)
+	err := runRepoInit([]string{"--repo", protectedPath, "--main-worktree", protectedPath}, newStepPrinter(&initOut), &initErr)
 	if err == nil {
 		t.Fatalf("expected non-default protected branch rejection")
 	}
@@ -624,7 +624,7 @@ func TestRepoShowWarnsWhenRootCheckoutIsDirtyAndNonCanonical(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", featurePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", featurePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -634,7 +634,7 @@ func TestRepoShowWarnsWhenRootCheckoutIsDirtyAndNonCanonical(t *testing.T) {
 
 	var showOut bytes.Buffer
 	var showErr bytes.Buffer
-	if err := runRepoShow([]string{"--repo", repoRoot, "--json"}, &showOut, &showErr); err != nil {
+	if err := runRepoShow([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&showOut), &showErr); err != nil {
 		t.Fatalf("runRepoShow returned error: %v", err)
 	}
 
@@ -671,7 +671,7 @@ func TestDoctorWarnsWhenRootCheckoutIsDirtyAndNonCanonical(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", featurePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--main-worktree", featurePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -681,7 +681,7 @@ func TestDoctorWarnsWhenRootCheckoutIsDirtyAndNonCanonical(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -715,7 +715,7 @@ func TestDoctorJSONIncludesProtectedDirtyPaths(t *testing.T) {
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, &out, &errOut); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&out), &errOut); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -794,7 +794,7 @@ func TestDoctorFixSupersedesObsoleteBlockedSubmission(t *testing.T) {
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &out, &errOut); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, newStepPrinter(&out), &errOut); err != nil {
 		t.Fatalf("runDoctor --fix returned error: %v", err)
 	}
 
@@ -820,7 +820,7 @@ func TestStatusJSONWorksWhenCanonicalRootIsDirty(t *testing.T) {
 
 	var statusOut bytes.Buffer
 	var statusErr bytes.Buffer
-	if err := runStatus([]string{"--repo", repoRoot, "--json", "--events", "3"}, &statusOut, &statusErr); err != nil {
+	if err := runStatus([]string{"--repo", repoRoot, "--json", "--events", "3"}, newStepPrinter(&statusOut), &statusErr); err != nil {
 		t.Fatalf("runStatus returned error: %v", err)
 	}
 
@@ -839,7 +839,7 @@ func TestRepoAuditListsUnmergedWorktreeBranches(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
@@ -856,7 +856,7 @@ func TestRepoAuditListsUnmergedWorktreeBranches(t *testing.T) {
 
 	var auditOut bytes.Buffer
 	var auditErr bytes.Buffer
-	if err := runRepoAudit([]string{"--repo", repoRoot, "--json"}, &auditOut, &auditErr); err != nil {
+	if err := runRepoAudit([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&auditOut), &auditErr); err != nil {
 		t.Fatalf("runRepoAudit returned error: %v", err)
 	}
 
@@ -884,7 +884,7 @@ func TestRepoInitFromBareCloneWorktreeUsesSharedStorage(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -906,13 +906,13 @@ func TestDoctorSucceedsFromBareCloneWorktree(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", worktreePath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", worktreePath, "--json"}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", worktreePath, "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -944,13 +944,13 @@ func TestRepoShowReportsBareStorageTopologyForRootCheckout(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", worktreePath, "--protected-branch", "main"}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", worktreePath, "--protected-branch", "main"}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
 	var showOut bytes.Buffer
 	var showErr bytes.Buffer
-	if err := runRepoShow([]string{"--repo", worktreePath, "--json"}, &showOut, &showErr); err != nil {
+	if err := runRepoShow([]string{"--repo", worktreePath, "--json"}, newStepPrinter(&showOut), &showErr); err != nil {
 		t.Fatalf("runRepoShow returned error: %v", err)
 	}
 
@@ -987,13 +987,13 @@ func TestRepoShowAndStatusWorkForBareStorageReposWithMultipleWorktrees(t *testin
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", worktreePath, "--protected-branch", "main"}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", worktreePath, "--protected-branch", "main"}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
 	var showOut bytes.Buffer
 	var showErr bytes.Buffer
-	if err := runRepoShow([]string{"--repo", worktreePath, "--json"}, &showOut, &showErr); err != nil {
+	if err := runRepoShow([]string{"--repo", worktreePath, "--json"}, newStepPrinter(&showOut), &showErr); err != nil {
 		t.Fatalf("runRepoShow returned error: %v", err)
 	}
 	var showResult repoShowResult
@@ -1006,7 +1006,7 @@ func TestRepoShowAndStatusWorkForBareStorageReposWithMultipleWorktrees(t *testin
 
 	var statusOut bytes.Buffer
 	var statusErr bytes.Buffer
-	if err := runStatus([]string{"--repo", worktreePath, "--json"}, &statusOut, &statusErr); err != nil {
+	if err := runStatus([]string{"--repo", worktreePath, "--json"}, newStepPrinter(&statusOut), &statusErr); err != nil {
 		t.Fatalf("runStatus returned error: %v", err)
 	}
 	var statusResult statusResult
@@ -1025,13 +1025,13 @@ func TestDoctorWarnsWhenConfiguredMainWorktreeIsDetached(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--protected-branch", "main", "--main-worktree", mainPath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--protected-branch", "main", "--main-worktree", mainPath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1055,13 +1055,13 @@ func TestDoctorWarnsWhenConfiguredMainWorktreeTracksWrongBranch(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot, "--protected-branch", "main", "--main-worktree", mainPath}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot, "--protected-branch", "main", "--main-worktree", mainPath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1083,7 +1083,7 @@ func TestDoctorDoesNotCreateStateDBBeforeInit(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1099,7 +1099,7 @@ func TestDoctorWarnsWhenWorktreeOutsidePolicyPrefix(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
@@ -1119,7 +1119,7 @@ func TestDoctorWarnsWhenWorktreeOutsidePolicyPrefix(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1147,7 +1147,7 @@ func TestDoctorAcceptsSymlinkedPolicyPrefix(t *testing.T) {
 
 	var initOut bytes.Buffer
 	var initErr bytes.Buffer
-	if err := runRepoInit([]string{"--repo", repoRoot}, &initOut, &initErr); err != nil {
+	if err := runRepoInit([]string{"--repo", repoRoot}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
@@ -1165,7 +1165,7 @@ func TestDoctorAcceptsSymlinkedPolicyPrefix(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1220,7 +1220,7 @@ func TestDoctorFixClearsStaleLockAndRecoversRunningSubmission(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1253,7 +1253,7 @@ func TestDoctorFixFailsQueuedSubmissionWithMissingBranch(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1300,7 +1300,7 @@ func TestDoctorFixAbortsProtectedMergeState(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--fix"}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1329,7 +1329,7 @@ func TestDoctorFixQueuesPublishForProtectedTipAheadOfUpstream(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1362,7 +1362,7 @@ func TestDoctorFixDoesNotQueuePublishWhenProtectedWorktreeIsDirty(t *testing.T) 
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1401,7 +1401,7 @@ func TestDoctorFixRestoresCanonicalRootToUpstreamWhenQueueIsIdle(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1449,7 +1449,7 @@ func TestDoctorFixSkipsCanonicalRootRepairWhenQueueNotIdle(t *testing.T) {
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, &doctorOut, &doctorErr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 
@@ -1482,7 +1482,7 @@ perl -0pi -e "s/ProtectedBranch = 'main'/ProtectedBranch = 'stable'/" "$1"
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runConfigEdit([]string{"--repo", repoRoot, "--editor", editorPath, "--print-path"}, &stdout, &stderr); err != nil {
+	if err := runConfigEdit([]string{"--repo", repoRoot, "--editor", editorPath, "--print-path"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runConfigEdit returned error: %v", err)
 	}
 
@@ -1518,7 +1518,7 @@ echo "# edited" >> "$1"
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runConfigEdit([]string{"--repo", linkedWorktree, "--editor", editorPath}, &stdout, &stderr); err != nil {
+	if err := runConfigEdit([]string{"--repo", linkedWorktree, "--editor", editorPath}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runConfigEdit returned error: %v", err)
 	}
 
@@ -1544,7 +1544,7 @@ func TestConfigEditRequiresEditor(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	err := runConfigEdit([]string{"--repo", repoRoot}, &stdout, &stderr)
+	err := runConfigEdit([]string{"--repo", repoRoot}, newStepPrinter(&stdout), &stderr)
 	if err == nil {
 		t.Fatalf("expected missing editor error")
 	}
@@ -1566,7 +1566,7 @@ echo "# args-ok" >> "$2"
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runConfigEdit([]string{"--repo", repoRoot, "--editor", editorPath + " --wait"}, &stdout, &stderr); err != nil {
+	if err := runConfigEdit([]string{"--repo", repoRoot, "--editor", editorPath + " --wait"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runConfigEdit returned error: %v", err)
 	}
 
@@ -1592,7 +1592,7 @@ echo "# json-ok" >> "$1"
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runConfigEdit([]string{"--repo", repoRoot, "--editor", editorPath, "--json"}, &stdout, &stderr); err != nil {
+	if err := runConfigEdit([]string{"--repo", repoRoot, "--editor", editorPath, "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runConfigEdit returned error: %v", err)
 	}
 

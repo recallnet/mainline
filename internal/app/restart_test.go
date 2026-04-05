@@ -149,7 +149,7 @@ func TestRunOnceReportsBusyWhileAnotherWorkerHoldsIntegrationLock(t *testing.T) 
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runRunOnce([]string{"--repo", repoRoot}, &stdout, &stderr); err != nil {
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "Integration worker busy.") {
@@ -199,7 +199,7 @@ func TestDoctorReportsStaleLockMetadata(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runDoctor([]string{"--repo", repoRoot}, &stdout, &stderr); err != nil {
+	if err := runDoctor([]string{"--repo", repoRoot}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runDoctor returned error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "Stale locks: 1") {

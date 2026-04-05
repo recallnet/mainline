@@ -155,7 +155,7 @@ func newStatusPublish(request state.PublishRequest) statusPublish {
 	return result
 }
 
-func runStatus(args []string, stdout io.Writer, stderr io.Writer) error {
+func runStatus(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -189,7 +189,7 @@ Flags:
 	}
 
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
 	}
@@ -286,22 +286,24 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 	return result, nil
 }
 
-func renderStatus(stdout io.Writer, result statusResult) error {
-	fmt.Fprintf(stdout, "Repository root: %s\n", result.RepositoryRoot)
-	fmt.Fprintf(stdout, "Current worktree: %s\n", result.CurrentWorktree)
-	fmt.Fprintf(stdout, "Current branch: %s\n", result.CurrentBranch)
-	fmt.Fprintf(stdout, "State: %s\n", result.State)
-	fmt.Fprintf(stdout, "Queue length: %d\n", result.QueueLength)
-	fmt.Fprintf(stdout, "Protected branch: %s\n", result.ProtectedBranch)
+func renderStatus(stdout *stepPrinter, result statusResult) error {
+	printer := stdout
+	printer.Section("Repository status")
+	printer.Line("Repository root: %s", result.RepositoryRoot)
+	printer.Line("Current worktree: %s", result.CurrentWorktree)
+	printer.Line("Current branch: %s", result.CurrentBranch)
+	printer.Line("State: %s", result.State)
+	printer.Line("Queue length: %d", result.QueueLength)
+	printer.Line("Protected branch: %s", result.ProtectedBranch)
 	if result.ProtectedBranchSHA != "" {
-		fmt.Fprintf(stdout, "Protected SHA: %s\n", result.ProtectedBranchSHA)
+		printer.Line("Protected SHA: %s", result.ProtectedBranchSHA)
 	}
 	if result.ProtectedUpstream.HasUpstream {
-		fmt.Fprintf(stdout, "Protected upstream: %s (ahead %d, behind %d)\n", result.ProtectedUpstream.Upstream, result.ProtectedUpstream.AheadCount, result.ProtectedUpstream.BehindCount)
+		printer.Line("Protected upstream: %s (ahead %d, behind %d)", result.ProtectedUpstream.Upstream, result.ProtectedUpstream.AheadCount, result.ProtectedUpstream.BehindCount)
 	} else {
-		fmt.Fprintln(stdout, "Protected upstream: none")
+		printer.Line("Protected upstream: none")
 	}
-	fmt.Fprintf(stdout, "Queue: submissions queued=%d running=%d blocked=%d failed=%d cancelled=%d | publishes queued=%d running=%d failed=%d cancelled=%d succeeded=%d\n",
+	printer.Line("Queue: submissions queued=%d running=%d blocked=%d failed=%d cancelled=%d | publishes queued=%d running=%d failed=%d cancelled=%d succeeded=%d",
 		result.Counts.QueuedSubmissions,
 		result.Counts.RunningSubmissions,
 		result.Counts.BlockSubmissions,
@@ -314,14 +316,15 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 		result.Counts.SucceededPublishes,
 	)
 	if result.ExecutionEstimate.AvgExecutionMS > 0 {
-		fmt.Fprintf(stdout, "Execution estimate (24h rolling): basis=%s avg=%s samples=%d\n",
+		printer.Line("Execution estimate (24h rolling): basis=%s avg=%s samples=%d",
 			result.ExecutionEstimate.Basis,
 			(time.Duration(result.ExecutionEstimate.AvgExecutionMS) * time.Millisecond).Round(time.Millisecond),
 			result.ExecutionEstimate.SampleCount,
 		)
 	}
 	if result.LatestSubmission != nil {
-		fmt.Fprintf(stdout, "Latest submission: #%d %s from %s (%s, priority=%s)\n",
+		printer.Section("Latest submission:")
+		printer.Line("#%d %s from %s (%s, priority=%s)",
 			result.LatestSubmission.ID,
 			submissionDisplayRef(result.LatestSubmission.integrationSubmission()),
 			result.LatestSubmission.SourceWorktree,
@@ -329,38 +332,38 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 			result.LatestSubmission.Priority,
 		)
 		if result.LatestSubmission.LastError != "" {
-			fmt.Fprintf(stdout, "  last error: %s\n", result.LatestSubmission.LastError)
+			printer.Line("last error: %s", result.LatestSubmission.LastError)
 		}
 		if len(result.LatestSubmission.ConflictFiles) > 0 {
-			fmt.Fprintf(stdout, "  conflict files: %s\n", strings.Join(result.LatestSubmission.ConflictFiles, ", "))
+			printer.Line("conflict files: %s", strings.Join(result.LatestSubmission.ConflictFiles, ", "))
 		}
 		if result.LatestSubmission.ProtectedTipSHA != "" {
-			fmt.Fprintf(stdout, "  protected tip: %s\n", result.LatestSubmission.ProtectedTipSHA)
+			printer.Line("protected tip: %s", result.LatestSubmission.ProtectedTipSHA)
 		}
 		if result.LatestSubmission.RetryHint != "" {
-			fmt.Fprintf(stdout, "  retry hint: %s\n", result.LatestSubmission.RetryHint)
+			printer.Line("retry hint: %s", result.LatestSubmission.RetryHint)
 		}
 		if result.LatestSubmission.QueuePosition > 0 && result.LatestSubmission.EstimatedCompletionMS > 0 {
-			fmt.Fprintf(stdout, "  queue position: %d\n", result.LatestSubmission.QueuePosition)
-			fmt.Fprintf(stdout, "  estimated completion: %s (%s basis)\n",
+			printer.Line("queue position: %d", result.LatestSubmission.QueuePosition)
+			printer.Line("estimated completion: %s (%s basis)",
 				(time.Duration(result.LatestSubmission.EstimatedCompletionMS) * time.Millisecond).Round(time.Millisecond),
 				result.LatestSubmission.EstimateBasis,
 			)
 		}
 	} else {
-		fmt.Fprintln(stdout, "Latest submission: none")
+		printer.Line("Latest submission: none")
 	}
 	if result.LatestPublish != nil {
-		fmt.Fprintf(stdout, "Latest publish: #%d %s (%s)\n",
+		printer.Line("Latest publish: #%d %s (%s)",
 			result.LatestPublish.ID,
 			result.LatestPublish.TargetSHA,
 			result.LatestPublish.Status,
 		)
 	} else {
-		fmt.Fprintln(stdout, "Latest publish: none")
+		printer.Line("Latest publish: none")
 	}
 	if result.IntegrationWorker != nil {
-		fmt.Fprintf(stdout, "Integration worker: owner=%s request=%d pid=%d started=%s\n",
+		printer.Line("Integration worker: owner=%s request=%d pid=%d started=%s",
 			result.IntegrationWorker.Owner,
 			result.IntegrationWorker.RequestID,
 			result.IntegrationWorker.PID,
@@ -368,7 +371,7 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 		)
 	}
 	if result.PublishWorker != nil {
-		fmt.Fprintf(stdout, "Publish worker: owner=%s request=%d pid=%d started=%s\n",
+		printer.Line("Publish worker: owner=%s request=%d pid=%d started=%s",
 			result.PublishWorker.Owner,
 			result.PublishWorker.RequestID,
 			result.PublishWorker.PID,
@@ -376,29 +379,29 @@ func renderStatus(stdout io.Writer, result statusResult) error {
 		)
 	}
 	if len(result.ActiveSubmissions) > 0 {
-		fmt.Fprintln(stdout, "Active submissions:")
+		printer.Section("Active submissions:")
 		for _, submission := range result.ActiveSubmissions {
-			fmt.Fprintf(stdout, "  #%d %s (%s)\n", submission.ID, submissionDisplayRef(submission.integrationSubmission()), submission.Status)
+			printer.Line("#%d %s (%s)", submission.ID, submissionDisplayRef(submission.integrationSubmission()), submission.Status)
 		}
 	}
 	if len(result.ActivePublishes) > 0 {
-		fmt.Fprintln(stdout, "Active publishes:")
+		printer.Section("Active publishes:")
 		for _, request := range result.ActivePublishes {
-			fmt.Fprintf(stdout, "  #%d %s (%s)\n", request.ID, request.TargetSHA, request.Status)
+			printer.Line("#%d %s (%s)", request.ID, request.TargetSHA, request.Status)
 		}
 	}
 	if len(result.RecentEvents) == 0 {
-		fmt.Fprintln(stdout, "Recent events: none")
+		printer.Line("Recent events: none")
 		return nil
 	}
-	fmt.Fprintln(stdout, "Recent events:")
+	printer.Section("Recent events:")
 	for _, event := range result.RecentEvents {
-		fmt.Fprintf(stdout, "  %s  %s", event.CreatedAt.UTC().Format(time.RFC3339), event.EventType)
+		line := fmt.Sprintf("%s  %s", event.CreatedAt.UTC().Format(time.RFC3339), event.EventType)
 		payload := strings.TrimSpace(string(event.Payload))
 		if payload != "" && payload != "{}" {
-			fmt.Fprintf(stdout, "  %s", payload)
+			line = fmt.Sprintf("%s  %s", line, payload)
 		}
-		fmt.Fprintln(stdout)
+		printer.Line("%s", line)
 	}
 
 	return nil

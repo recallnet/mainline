@@ -47,7 +47,7 @@ func TestRetrySubmissionRequeuesBlockedWork(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runRetry([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(blockedID, 10)}, &stdout, &stderr); err != nil {
+	if err := runRetry([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(blockedID, 10)}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runRetry returned error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "Retried submission") {
@@ -93,7 +93,7 @@ func TestCancelSubmissionMarksQueuedWorkCancelled(t *testing.T) {
 	}
 	submissionID := submissions[0].ID
 
-	if err := runCancel([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(submissionID, 10)}, &stdout, &stderr); err != nil {
+	if err := runCancel([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(submissionID, 10)}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCancel returned error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "Cancelled submission") {
@@ -145,14 +145,14 @@ func TestCancelAndRetryPublishRequest(t *testing.T) {
 	}
 	requestID := requests[0].ID
 
-	if err := runCancel([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requestID, 10)}, &stdout, &stderr); err != nil {
+	if err := runCancel([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requestID, 10)}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCancel returned error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "Cancelled publish request") {
 		t.Fatalf("expected publish cancel output, got %q", stdout.String())
 	}
 
-	if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requestID, 10)}, &stdout, &stderr); err != nil {
+	if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requestID, 10)}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runRetry returned error: %v", err)
 	}
 	request, err := store.GetPublishRequest(context.Background(), requestID)
@@ -199,7 +199,7 @@ func TestRetrySubmissionSupportsJSONOutput(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runRetry([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(blockedID, 10), "--json"}, &stdout, &stderr); err != nil {
+	if err := runRetry([]string{"--repo", repoRoot, "--submission", strconv.FormatInt(blockedID, 10), "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runRetry returned error: %v", err)
 	}
 
@@ -235,7 +235,7 @@ func TestCancelPublishSupportsJSONOutput(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if err := runCancel([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requestID, 10), "--json"}, &stdout, &stderr); err != nil {
+	if err := runCancel([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requestID, 10), "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
 		t.Fatalf("runCancel returned error: %v", err)
 	}
 

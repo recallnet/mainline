@@ -11,15 +11,15 @@ import (
 	"github.com/recallnet/mainline/internal/state"
 )
 
-func runRetry(args []string, stdout io.Writer, stderr io.Writer) error {
+func runRetry(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	return runControlAction("retry", args, stdout, stderr)
 }
 
-func runCancel(args []string, stdout io.Writer, stderr io.Writer) error {
+func runCancel(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	return runControlAction("cancel", args, stdout, stderr)
 }
 
-func runControlAction(action string, args []string, stdout io.Writer, stderr io.Writer) error {
+func runControlAction(action string, args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" "+action, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -75,7 +75,7 @@ type controlResult struct {
 	DrainResult    string `json:"drain_result,omitempty"`
 }
 
-func controlSubmission(ctx context.Context, action string, repoPath string, store state.Store, repoID int64, submissionID int64, stdout io.Writer, asJSON bool) error {
+func controlSubmission(ctx context.Context, action string, repoPath string, store state.Store, repoID int64, submissionID int64, stdout *stepPrinter, asJSON bool) error {
 	submission, err := store.GetIntegrationSubmission(ctx, submissionID)
 	if err != nil {
 		return err
@@ -123,13 +123,14 @@ func controlSubmission(ctx context.Context, action string, repoPath string, stor
 			}
 		}
 		if asJSON {
-			return json.NewEncoder(stdout).Encode(result)
+			return json.NewEncoder(stdout.Raw()).Encode(result)
 		}
-		fmt.Fprintf(stdout, "Retried submission %d\n", updated.ID)
-		fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(updated))
-		fmt.Fprintf(stdout, "Status: %s\n", result.Status)
+		printer := stdout
+		printer.Section("Retried submission %d", updated.ID)
+		printer.Line("Branch: %s", submissionDisplayRef(updated))
+		printer.Line("Status: %s", result.Status)
 		if result.DrainResult != "" {
-			fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+			printer.Line("Drain result: %s", result.DrainResult)
 		}
 		return nil
 	case "cancel":
@@ -170,13 +171,14 @@ func controlSubmission(ctx context.Context, action string, repoPath string, stor
 			}
 		}
 		if asJSON {
-			return json.NewEncoder(stdout).Encode(result)
+			return json.NewEncoder(stdout.Raw()).Encode(result)
 		}
-		fmt.Fprintf(stdout, "Cancelled submission %d\n", updated.ID)
-		fmt.Fprintf(stdout, "Branch: %s\n", submissionDisplayRef(updated))
-		fmt.Fprintf(stdout, "Status: %s\n", result.Status)
+		printer := stdout
+		printer.Section("Cancelled submission %d", updated.ID)
+		printer.Line("Branch: %s", submissionDisplayRef(updated))
+		printer.Line("Status: %s", result.Status)
 		if result.DrainResult != "" {
-			fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+			printer.Line("Drain result: %s", result.DrainResult)
 		}
 		return nil
 	default:
@@ -184,7 +186,7 @@ func controlSubmission(ctx context.Context, action string, repoPath string, stor
 	}
 }
 
-func controlPublish(ctx context.Context, action string, repoPath string, store state.Store, repoID int64, publishID int64, stdout io.Writer, asJSON bool) error {
+func controlPublish(ctx context.Context, action string, repoPath string, store state.Store, repoID int64, publishID int64, stdout *stepPrinter, asJSON bool) error {
 	request, err := store.GetPublishRequest(ctx, publishID)
 	if err != nil {
 		return err
@@ -236,13 +238,14 @@ func controlPublish(ctx context.Context, action string, repoPath string, store s
 			}
 		}
 		if asJSON {
-			return json.NewEncoder(stdout).Encode(result)
+			return json.NewEncoder(stdout.Raw()).Encode(result)
 		}
-		fmt.Fprintf(stdout, "Retried publish request %d\n", updated.ID)
-		fmt.Fprintf(stdout, "Target SHA: %s\n", updated.TargetSHA)
-		fmt.Fprintf(stdout, "Status: %s\n", result.Status)
+		printer := stdout
+		printer.Section("Retried publish request %d", updated.ID)
+		printer.Line("Target SHA: %s", updated.TargetSHA)
+		printer.Line("Status: %s", result.Status)
 		if result.DrainResult != "" {
-			fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+			printer.Line("Drain result: %s", result.DrainResult)
 		}
 		return nil
 	case "cancel":
@@ -287,13 +290,14 @@ func controlPublish(ctx context.Context, action string, repoPath string, store s
 			}
 		}
 		if asJSON {
-			return json.NewEncoder(stdout).Encode(result)
+			return json.NewEncoder(stdout.Raw()).Encode(result)
 		}
-		fmt.Fprintf(stdout, "Cancelled publish request %d\n", updated.ID)
-		fmt.Fprintf(stdout, "Target SHA: %s\n", updated.TargetSHA)
-		fmt.Fprintf(stdout, "Status: %s\n", result.Status)
+		printer := stdout
+		printer.Section("Cancelled publish request %d", updated.ID)
+		printer.Line("Target SHA: %s", updated.TargetSHA)
+		printer.Line("Status: %s", result.Status)
 		if result.DrainResult != "" {
-			fmt.Fprintf(stdout, "Drain result: %s\n", result.DrainResult)
+			printer.Line("Drain result: %s", result.DrainResult)
 		}
 		return nil
 	default:

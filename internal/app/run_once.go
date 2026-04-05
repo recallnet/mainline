@@ -18,7 +18,7 @@ import (
 	"github.com/recallnet/mainline/internal/state"
 )
 
-func runRunOnce(args []string, stdout io.Writer, stderr io.Writer) error {
+func runRunOnce(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	fs := flag.NewFlagSet(currentCLIProgramName()+" run-once", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
@@ -47,7 +47,7 @@ Flags:
 		return err
 	}
 	if asJSON {
-		encoder := json.NewEncoder(stdout)
+		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(map[string]any{
 			"ok":     true,
@@ -55,7 +55,7 @@ Flags:
 			"result": result,
 		})
 	}
-	fmt.Fprintln(stdout, result)
+	stdout.Line("%s", result)
 	return nil
 }
 
