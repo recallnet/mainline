@@ -1,0 +1,33 @@
+{
+  "schema_version": "retention_policy.v1",
+  "classes": [
+    {
+      "class": "authoritative_runtime",
+      "retention": "retain_until_superseded_or_archived",
+      "compaction": "replace_by_current_row_only",
+      "queryability": "primary operator surfaces remain queryable from current rows",
+      "export_behavior": "prefer projection and event mirrors; never depend on remote mirrors for authority"
+    },
+    {
+      "class": "durable_summary",
+      "retention": "retain_long_term",
+      "compaction": "compact by generation while keeping latest summary lineage",
+      "queryability": "operator summaries remain queryable after compaction",
+      "export_behavior": "eligible for snapshot and projection export"
+    },
+    {
+      "class": "forensic_history",
+      "retention": "retain_by_explicit_window_or_archive_budget",
+      "compaction": "archive or expire outside the active window",
+      "queryability": "primary surfaces must not depend on retained forensic depth",
+      "export_behavior": "prefer event_audit export before local expiry"
+    },
+    {
+      "class": "ephemeral_cache",
+      "retention": "retain_short_window_only",
+      "compaction": "evict and rebuild freely",
+      "queryability": "not queryable in authoritative operator surfaces",
+      "export_behavior": "do not export by default"
+    }
+  ]
+}

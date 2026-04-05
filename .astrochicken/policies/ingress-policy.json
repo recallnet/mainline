@@ -1,0 +1,248 @@
+{
+  "schema_version": "ingress_policy.v1",
+  "selectors": [
+    {
+      "name": "manual-plan-file",
+      "source": "manual",
+      "object_kind": "plan",
+      "event_kind": "file.provided",
+      "file_kinds": [
+        "markdown"
+      ],
+      "path_globs": [
+        "*.md"
+      ],
+      "declared_schema_versions": [
+        "plan.v1"
+      ]
+    },
+    {
+      "name": "manual-release-report",
+      "source": "manual",
+      "object_kind": "report",
+      "event_kind": "file.provided",
+      "file_kinds": [
+        "markdown"
+      ],
+      "path_globs": [
+        "*.md"
+      ],
+      "declared_schema_versions": [
+        "report.v1"
+      ]
+    },
+    {
+      "name": "github-goal-ready",
+      "source": "github",
+      "object_kind": "issue",
+      "event_kind": "issue.opened",
+      "labels_include": [
+        "goal",
+        "ready"
+      ],
+      "assignees_exact": [
+        "@active_user"
+      ],
+      "assignees_allow_empty": true
+    },
+    {
+      "name": "github-bug-triage",
+      "source": "github",
+      "object_kind": "issue",
+      "event_kind": "issue.opened",
+      "labels_include": [
+        "bug"
+      ],
+      "assignees_exact": [
+        "@active_user"
+      ],
+      "assignees_allow_empty": true
+    },
+    {
+      "name": "github-issue-execution",
+      "source": "github",
+      "object_kind": "issue",
+      "event_kind": "issue.opened",
+      "labels_include": [
+        "task",
+        "ready"
+      ],
+      "assignees_exact": [
+        "@active_user"
+      ],
+      "assignees_allow_empty": true
+    },
+    {
+      "name": "github-feature-execution",
+      "source": "github",
+      "object_kind": "issue",
+      "event_kind": "issue.opened",
+      "labels_include": [
+        "feature",
+        "ready"
+      ],
+      "assignees_exact": [
+        "@active_user"
+      ],
+      "assignees_allow_empty": true
+    },
+    {
+      "name": "github-issue-opened-observation",
+      "source": "github",
+      "object_kind": "issue",
+      "event_kind": "issue.opened"
+    },
+    {
+      "name": "github-issue-metadata",
+      "source": "github",
+      "object_kind": "issue",
+      "event_kind": "issue.metadata_observed"
+    },
+    {
+      "name": "github-issue-blocked-by",
+      "source": "github",
+      "object_kind": "issue",
+      "event_kind": "issue.blocked_by_observed"
+    },
+    {
+      "name": "github-pull-request-observed",
+      "source": "github",
+      "object_kind": "pull_request",
+      "event_kind": "pull_request.observed"
+    },
+    {
+      "name": "github-ci-signal",
+      "source": "github",
+      "object_kind": "build",
+      "event_kind": "build.status_observed"
+    }
+  ],
+  "mappings": [
+    {
+      "name": "manual-plan-intake",
+      "selector": "manual-plan-file",
+      "fact_kind": "plan.intake_requested",
+      "entity_kind": "plan_document",
+      "entity_id_strategy": "content_hash"
+    },
+    {
+      "name": "github-goal-intake",
+      "selector": "github-goal-ready",
+      "fact_kind": "goal.intake_requested",
+      "entity_kind": "issue",
+      "entity_id_strategy": "external_object_id"
+    },
+    {
+      "name": "github-bug-triage-request",
+      "selector": "github-bug-triage",
+      "fact_kind": "bug.triage_requested",
+      "entity_kind": "issue",
+      "entity_id_strategy": "external_object_id"
+    },
+    {
+      "name": "github-issue-execution-request",
+      "selector": "github-issue-execution",
+      "fact_kind": "issue.execution_requested",
+      "entity_kind": "issue",
+      "entity_id_strategy": "external_object_id"
+    },
+    {
+      "name": "github-feature-execution-request",
+      "selector": "github-feature-execution",
+      "fact_kind": "issue.execution_requested",
+      "entity_kind": "issue",
+      "entity_id_strategy": "external_object_id"
+    },
+    {
+      "name": "github-issue-parent-child-on-open",
+      "selector": "github-issue-opened-observation",
+      "fact_kind": "relationship.parent_child_observed",
+      "entity_kind": "work_item",
+      "entity_id_strategy": "external_object_id"
+    },
+    {
+      "name": "manual-release-report-request",
+      "selector": "manual-release-report",
+      "fact_kind": "release.report_requested",
+      "entity_kind": "report_document",
+      "entity_id_strategy": "content_hash"
+    },
+    {
+      "name": "github-issue-metadata-observation",
+      "selector": "github-issue-metadata",
+      "fact_kind": "work.metadata_observed",
+      "entity_kind": "work_item",
+      "entity_id_strategy": "external_object_id"
+    },
+    {
+      "name": "github-issue-parent-child-observation",
+      "selector": "github-issue-metadata",
+      "fact_kind": "relationship.parent_child_observed",
+      "entity_kind": "work_item",
+      "entity_id_strategy": "external_object_id"
+    },
+    {
+      "name": "github-issue-blocked-by-observation",
+      "selector": "github-issue-blocked-by",
+      "fact_kind": "relationship.blocked_by_observed",
+      "entity_kind": "work_item",
+      "entity_id_strategy": "external_object_id"
+    },
+    {
+      "name": "github-pull-request-observation",
+      "selector": "github-pull-request-observed",
+      "fact_kind": "change_request.observed",
+      "entity_kind": "change_request",
+      "entity_id_strategy": "external_object_id"
+    },
+    {
+      "name": "github-ci-signal-observation",
+      "selector": "github-ci-signal",
+      "fact_kind": "verification.signal_observed",
+      "entity_kind": "verification_target",
+      "entity_id_strategy": "external_object_id"
+    }
+  ],
+  "routing": [
+    {
+      "fact_kind": "plan.intake_requested",
+      "owning_subsystem": "goal_intake"
+    },
+    {
+      "fact_kind": "goal.intake_requested",
+      "owning_subsystem": "goal_intake"
+    },
+    {
+      "fact_kind": "bug.triage_requested",
+      "owning_subsystem": "bug_triage"
+    },
+    {
+      "fact_kind": "issue.execution_requested",
+      "owning_subsystem": "issue_execution"
+    },
+    {
+      "fact_kind": "release.report_requested",
+      "owning_subsystem": "release_reporting"
+    },
+    {
+      "fact_kind": "work.metadata_observed",
+      "owning_subsystem": "observation"
+    },
+    {
+      "fact_kind": "relationship.parent_child_observed",
+      "owning_subsystem": "observation"
+    },
+    {
+      "fact_kind": "relationship.blocked_by_observed",
+      "owning_subsystem": "observation"
+    },
+    {
+      "fact_kind": "change_request.observed",
+      "owning_subsystem": "observation"
+    },
+    {
+      "fact_kind": "verification.signal_observed",
+      "owning_subsystem": "observation"
+    }
+  ]
+}

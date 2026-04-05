@@ -1,0 +1,5 @@
+{
+  "schema_version": "merge_backend_policy.v1",
+  "default_backend": "mq",
+  "allow_direct_fallback": true
+}
