@@ -600,7 +600,7 @@ func (s Store) open() (*sql.DB, error) {
 	}
 	if version > currentSchemaVersion {
 		db.Close()
-		return nil, fmt.Errorf("%w at %s: found version %d, binary supports up to %d", ErrUnsupportedSchemaVersion, s.Path, version, currentSchemaVersion)
+		return nil, fmt.Errorf("%w at %s: found version %d, binary supports up to %d; rebuild mq from the latest mainline source to pick up the newer schema", ErrUnsupportedSchemaVersion, s.Path, version, currentSchemaVersion)
 	}
 
 	return db, nil
@@ -635,7 +635,7 @@ func ensureSchemaVersion(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	if version > currentSchemaVersion {
-		return fmt.Errorf("%w: found version %d, binary supports up to %d", ErrUnsupportedSchemaVersion, version, currentSchemaVersion)
+		return fmt.Errorf("%w: found version %d, binary supports up to %d; rebuild mq from the latest mainline source to pick up the newer schema", ErrUnsupportedSchemaVersion, version, currentSchemaVersion)
 	}
 	if err := bootstrapLegacySchemaVersion(ctx, db); err != nil {
 		return err
@@ -695,7 +695,7 @@ func bootstrapLegacySchemaVersion(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	if legacyVersion > currentSchemaVersion {
-		return fmt.Errorf("%w: found version %d, binary supports up to %d", ErrUnsupportedSchemaVersion, legacyVersion, currentSchemaVersion)
+		return fmt.Errorf("%w: found version %d, binary supports up to %d; rebuild mq from the latest mainline source to pick up the newer schema", ErrUnsupportedSchemaVersion, legacyVersion, currentSchemaVersion)
 	}
 
 	bootstrapVersion := legacyVersion
