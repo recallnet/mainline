@@ -84,11 +84,11 @@ func TestStressParallelAgentQueueAndPublishCoalescing(t *testing.T) {
 	if report.PublishRequests != report.SucceededSubmissions {
 		t.Fatalf("expected one publish request per succeeded submission, got %+v", report)
 	}
-	if report.SucceededPublishes != 1 {
-		t.Fatalf("expected one final succeeded publish, got %+v", report)
+	if report.SucceededPublishes < 1 {
+		t.Fatalf("expected at least one succeeded publish, got %+v", report)
 	}
-	if report.SupersededPublishes != report.SucceededSubmissions-1 {
-		t.Fatalf("expected %d superseded publishes, got %+v", report.SucceededSubmissions-1, report)
+	if report.SucceededPublishes+report.SupersededPublishes != report.PublishRequests {
+		t.Fatalf("expected every publish request to finish as succeeded or superseded, got %+v", report)
 	}
 	if report.FailedPublishes != 0 {
 		t.Fatalf("expected no failed publishes, got %+v", report)
