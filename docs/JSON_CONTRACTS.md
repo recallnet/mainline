@@ -105,6 +105,9 @@ Optional top-level keys:
 `queue_length` is the current unfinished queue depth across queued/running/
 blocked submissions and queued/running publishes.
 
+Repo policy and protected-worktree configuration come from `mainline.toml`.
+The SQLite store is the durable queue/event state and repo identity layer.
+
 `protected_upstream` is a `git.BranchStatus` object with:
 
 - `name`
@@ -176,6 +179,10 @@ worker is currently holding that lease:
 - `request_id`
 - `pid`
 - `created_at`
+
+If the same protected worktree was accidentally registered under multiple repo
+rows in one state database, `mq` may consolidate those rows by protected
+worktree so status, wait, and publish resolve against one repo identity.
 
 ## `mq events --json`
 

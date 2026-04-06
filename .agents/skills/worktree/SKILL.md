@@ -29,11 +29,10 @@ Default commands to optimize for:
 
 - `mq submit --check-only --json`
 - `mq submit --queue-only --json`
-- `mq submit --wait --timeout 15m --json`
 - `mq submit --wait --for landed --timeout 30m --json`
 - `mq wait --submission <id> --for landed --json --timeout 30m`
 - `mq land --json --timeout 30m`
-- `mq events --follow --json --lifecycle`
+- `mq events --follow --json --lifecycle` for audit/debug only
 
 Do not use this skill to bypass `mq`. It exists to dogfood the workflow that
 `mainline` is building for other repos.
@@ -175,7 +174,7 @@ mq wait --submission <id> --for landed --json --timeout 30m
 
 Use that pattern when the caller wants to track a specific queued submission by
 id instead of polling by branch name. Follow the submission, not the logs.
-Do not use sleeps, branch-name polling, `mq logs`, or `mq events` as the
+Do not use sleeps, branch-name polling, `mq logs`, `mq events`, or `mq watch` as the
 primary way to decide whether a queued change finished.
 
 If the branch is ready to hand off asynchronously instead:
@@ -251,6 +250,8 @@ Expected:
 - `unmerged` is empty once the branch is truly reachable from protected `main`
 - `mq repo show` and `mq doctor` do not warn that the repo root checkout is
   dirty or non-canonical
+- `mainline.toml` remains the authority for repo config; SQLite state is queue
+  identity and history only
 
 ## Review and fix loop
 

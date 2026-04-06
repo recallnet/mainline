@@ -60,6 +60,9 @@ instructions.
   draining.
 - Default follow pattern: `submission_id` plus `mq wait --submission <id> --for landed --json --timeout 30m`.
 - Do not use `sleep`, branch-name polling, `mq logs`, or `mq events` as the primary way to decide whether a queued change finished.
+- `mainline.toml` is the runtime config authority for protected branch, remote,
+  and main worktree. Treat SQLite as queue/history state, not as the place to
+  hand-edit or reason about repo policy.
 - Use `mq events --follow --json --lifecycle` only when a controller or operator needs deeper audit/debug notifications than the submission wait path.
 - Use `mq registry prune --json` if stale temp repos or deleted repos are
   polluting the optional global registry.

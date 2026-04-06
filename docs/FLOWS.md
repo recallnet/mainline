@@ -24,6 +24,9 @@ mq doctor --repo .
 
 If protected `main` is dirty, start with `mq doctor --repo .`: it reports that the queue is blocked and tells you to take ownership of cleaning or resolving the protected root checkout before retrying.
 
+`mainline.toml` is the runtime config authority for the repo. The SQLite state
+store keeps queue identity, events, and publish/integration history.
+
 Use a topic worktree, then land it:
 
 ```bash
@@ -64,7 +67,8 @@ humans inspect and local wrappers build from. Keep that checkout clean and on
 the protected branch. Topic worktrees are where feature edits belong.
 If config drift ever points the canonical main worktree somewhere else, prefer
 `mq repo root --repo /path/to/main --adopt-root` once `/path/to/main` is clean
-and back on the protected branch.
+and back on the protected branch. The goal is that humans do not need to know
+some extra `protected-main/` path just to inspect or operate the repo.
 
 Submit from any linked worktree in the same repo:
 
@@ -216,6 +220,9 @@ mq retry --repo /path/to/main --publish 4
 `mq status --json` now projects publish correlation back onto succeeded
 submissions through `publish_request_id`, `publish_status`, and `outcome`, so a
 factory can answer “did this submission fully land?” from one status surface.
+If a protected worktree was ever registered under multiple repo identities,
+`mq` now consolidates those rows by protected worktree so status, wait, and
+publish no longer split state across multiple repo ids.
 
 Optional only: for multi-repo experiments, one registered-repo host is still available:
 

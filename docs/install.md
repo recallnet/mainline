@@ -79,6 +79,9 @@ Use `mq repo root --repo . --json` to confirm that the canonical root checkout
 is trustworthy. If the root checkout is already clean and on the protected
 branch but config drift points elsewhere, repair that with
 `mq repo root --repo . --adopt-root`.
+`mainline.toml` in that repo root is the runtime config authority for protected
+branch, remote, and main worktree. The SQLite state store keeps queue history
+and repo identity; it should not be treated as the source of policy truth.
 
 For bare-repository-plus-worktree layouts, there is no human-facing root
 checkout at the bare repo path. In that topology, trust the configured
@@ -89,6 +92,15 @@ checkout on `main`, for example:
 ```bash
 mq repo init --repo /path/to/clean-main-worktree --protected-branch main --main-worktree /path/to/clean-main-worktree
 ```
+
+Even in that topology, the intended human/operator model is still:
+
+- `cd /path/to/repo`
+- see clean protected `main`
+- do feature work in linked worktrees
+
+Humans should not need to know a separate hidden protected-main path just to
+inspect or operate the repo.
 
 State compatibility:
 

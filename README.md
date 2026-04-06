@@ -60,8 +60,10 @@ Once that line is real, the rest follows:
 - publish is a separate queue
 - operators can see, retry, cancel, and stream what is happening
 
-Git still owns refs, rebases, fast-forwards, pushes, and worktrees. SQLite owns
-queue state, locks, and event history. `mainline` coordinates the two.
+Git still owns refs, rebases, fast-forwards, pushes, and worktrees.
+`mainline.toml` owns repo policy and protected-worktree configuration.
+SQLite owns queue state, locks, and event history. `mainline` coordinates the
+three.
 Do not run environment-mutating helpers like `npm skills` from the protected
 root checkout; run them in the topic worktree you are changing so local
 lockfile drift does not block publish.
@@ -96,9 +98,9 @@ mq submit --json
 mq wait --submission 42 --for landed --json --timeout 30m
 ```
 
-That is the primary follow path. Use the returned `submission_id` and wait on it.
-Do not use sleeps, branch-name polling, `mq logs`, or `mq events` as the normal
-way to decide whether your land finished.
+That is the primary follow path. Use the returned `submission_id` and wait on
+it. Do not use sleeps, branch-name polling, `mq logs`, `mq events`, or
+`mq watch` as the normal way to decide whether your land finished.
 
 If the wrapper expects remote landing as part of the same job, prefer:
 
@@ -108,6 +110,9 @@ mq land --json --timeout 30m
 
 For agent-heavy and factory-style repos, set `[publish].Mode = 'auto'` in
 `mainline.toml` unless there is a real operator reason to keep publish manual.
+That file is the runtime config authority for the repo. The SQLite store keeps
+queue identity and history; it should not be treated as the source of repo
+policy truth.
 
 If you want to prove that some other process, not `submit`, handled a specific change:
 
@@ -173,6 +178,8 @@ perfectly disciplined. It turns the safe path into the normal path.
 - optional manual `mainlined` helper mode for experiments or multi-repo hosting
 - retry and cancel as real operator controls
 - policy checks, hook coordination, and repo-managed hooks
+- repository-row consolidation when one protected worktree was accidentally
+  registered under multiple canonical paths
 - Homebrew, Nix, GitHub release archives, checksums, and release manifests
 - GoReleaser-driven multi-platform binary releases for macOS, Linux, and Windows
 
@@ -237,6 +244,14 @@ In this source checkout:
   `mainline.toml` exists in Git
 - queue/state commands like `mq status --repo . --json` can still fail until
   this checkout has been explicitly initialized on this machine
+
+For initialized repos, the operator model should stay simple:
+
+- humans `cd` into the normal repo path
+- that checkout is protected `main`
+- it stays clean and boring
+- feature work happens in linked worktrees
+- bare Git storage, if present, stays an implementation detail
 
 If you are onboarding as a contributor to `mainline` itself, start with:
 
