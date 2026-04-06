@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/recallnet/mainline/internal/git"
+	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
 	_ "modernc.org/sqlite"
 )
@@ -1229,6 +1230,36 @@ func TestStatusJSONReportsQueuedWork(t *testing.T) {
 	}
 	if len(status.RecentEvents) == 0 {
 		t.Fatalf("expected recent events, got none")
+	}
+}
+
+func TestStatusUsesDurableRepoRecordWhenConfigDrifts(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	cfg, err := policy.LoadFile(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	cfg.Repo.ProtectedBranch = "stale-branch"
+	cfg.Repo.RemoteName = "stale-remote"
+	cfg.Repo.MainWorktree = filepath.Join(repoRoot, "stale-worktree")
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var status statusResult
+	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if status.ProtectedBranch != "main" {
+		t.Fatalf("expected durable protected branch from sqlite, got %+v", status)
 	}
 }
 

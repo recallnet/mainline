@@ -187,6 +187,10 @@ func loadRepoContext(repoPath string) (git.RepositoryLayout, string, policy.File
 	if err != nil {
 		return git.RepositoryLayout{}, "", policy.File{}, state.RepositoryRecord{}, state.Store{}, err
 	}
+	// Runtime repo identity comes from the durable repository row once state exists.
+	cfg.Repo.ProtectedBranch = repoRecord.ProtectedBranch
+	cfg.Repo.RemoteName = repoRecord.RemoteName
+	cfg.Repo.MainWorktree = repoRecord.MainWorktree
 
 	return layout, repoRoot, cfg, repoRecord, store, nil
 }
