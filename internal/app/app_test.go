@@ -800,6 +800,63 @@ func TestGlobalDaemonSkipsDirtyRootRepoAndDrainsHealthyRepo(t *testing.T) {
 	}
 }
 
+func TestGlobalDaemonIdleExitDoesNotTreatBusyRepoAsIdle(t *testing.T) {
+	registryPath := filepath.Join(t.TempDir(), "registry.json")
+	t.Setenv("MAINLINE_REGISTRY_PATH", registryPath)
+
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
+	lease, err := lockManager.Acquire(state.PublishLock, "test")
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	defer lease.Release()
+
+	var stdout bytes.Buffer
+	opts := daemonOptions{
+		allRepos:     true,
+		registryPath: registryPath,
+		interval:     time.Millisecond,
+		maxCycles:    1,
+		jsonLogs:     true,
+		idleExit:     true,
+	}
+	if err := runDaemonLoop(context.Background(), opts, &stdout); err != nil {
+		t.Fatalf("runDaemonLoop returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected daemon logs, got %q", stdout.String())
+	}
+
+	var sawBusyCycle bool
+	var last daemonLog
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if err := json.Unmarshal([]byte(line), &last); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if last.Repo == canonicalRegistryPath(repoRoot) && last.Event == "cycle.completed" && strings.Contains(last.Message, "Publish worker busy.") {
+			sawBusyCycle = true
+		}
+	}
+	if !sawBusyCycle {
+		t.Fatalf("expected busy repo cycle log, got %q", stdout.String())
+	}
+	if last.Event != "daemon.max_cycles_reached" {
+		t.Fatalf("expected daemon.max_cycles_reached, got %+v", last)
+	}
+}
+
 func TestDaemonIdleExitEmitsJSONLog(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

@@ -160,7 +160,7 @@ func runGlobalDaemonLoop(ctx context.Context, opts daemonOptions, stdout io.Writ
 				continue
 			}
 			logDaemonForRepo(stdout, opts, repo.MainWorktree, "info", "cycle.completed", cycle, result)
-			if !isIdleWorkerResult(result) && !isBusyWorkerResult(result) {
+			if !isIdleWorkerResult(result) {
 				worked = true
 			}
 		}
