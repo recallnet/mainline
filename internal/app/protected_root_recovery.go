@@ -28,6 +28,12 @@ func ensureProtectedRootHealthy(ctx context.Context, engine git.Engine, cfg poli
 	if !report.ProtectedBranchExists {
 		return git.HealthReport{}, fmt.Errorf("protected branch %q does not exist", cfg.Repo.ProtectedBranch)
 	}
+	if report.MainWorktreeDetached {
+		return git.HealthReport{}, fmt.Errorf("configured main worktree %s is detached; switch it with `git checkout --ignore-other-worktrees %s` before retrying", cfg.Repo.MainWorktree, cfg.Repo.ProtectedBranch)
+	}
+	if report.MainWorktreeBranch != "" && report.MainWorktreeBranch != cfg.Repo.ProtectedBranch {
+		return git.HealthReport{}, fmt.Errorf("configured main worktree %s is on branch %s, expected %s; switch it with `git checkout --ignore-other-worktrees %s` before retrying", cfg.Repo.MainWorktree, report.MainWorktreeBranch, cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
+	}
 	if report.ProtectedBranchClean && !report.HasDivergedUpstream {
 		return report, nil
 	}

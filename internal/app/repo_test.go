@@ -1076,6 +1076,16 @@ func TestDoctorWarnsWhenConfiguredMainWorktreeTracksWrongBranch(t *testing.T) {
 	if !strings.Contains(joined, "--protected-branch main") {
 		t.Fatalf("expected explicit repo init correction guidance, got %#v", result.Warnings)
 	}
+	if !result.QueueBlocked {
+		t.Fatalf("expected queue blocked when configured main worktree is on wrong branch")
+	}
+	actions := strings.Join(result.NextActions, "\n")
+	if !strings.Contains(actions, "git checkout --ignore-other-worktrees main") {
+		t.Fatalf("expected direct protected worktree checkout action, got %#v", result.NextActions)
+	}
+	if strings.Contains(actions, repoRoot) {
+		t.Fatalf("expected next actions to point at the configured main worktree, not repository root: %#v", result.NextActions)
+	}
 }
 
 func TestDoctorDoesNotCreateStateDBBeforeInit(t *testing.T) {

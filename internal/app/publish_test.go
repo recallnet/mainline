@@ -534,6 +534,9 @@ func TestIsTransientPublishErrorRejectsHookAndGateFailures(t *testing.T) {
 	cases := []error{
 		errors.New("gate failed"),
 		errors.New("pre-push hook declined"),
+		errors.New("husky - pre-push script failed (code 1)"),
+		errors.New("Docs policy unit tests failed"),
+		errors.New("error: failed to push some refs to 'github.com:recallnet/tradecore.git'"),
 		errors.New("protected branch worktree /tmp/repo is dirty"),
 	}
 	for _, err := range cases {

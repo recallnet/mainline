@@ -99,6 +99,31 @@ func TestRunOnceRejectsDirtyCanonicalRootCheckout(t *testing.T) {
 	}
 }
 
+func TestRunOnceRejectsConfiguredMainWorktreeOnWrongBranch(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	mainPath := filepath.Join(t.TempDir(), "wrong-main")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "protected-main", mainPath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", repoRoot, "--protected-branch", "main", "--main-worktree", mainPath}, newStepPrinter(&initOut), &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr)
+	if err == nil {
+		t.Fatalf("expected run-once to fail when configured main worktree is on the wrong branch")
+	}
+	if !strings.Contains(err.Error(), "configured main worktree") || !strings.Contains(err.Error(), "expected main") {
+		t.Fatalf("expected wrong-branch protected worktree error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "git checkout --ignore-other-worktrees main") {
+		t.Fatalf("expected exact checkout guidance, got %v", err)
+	}
+}
+
 func TestRunOnceAutoRecoversDirtyCanonicalRootCheckoutWhenSafe(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

@@ -865,7 +865,7 @@ Flags:
 			result.UnfinishedQueueItems = make([]string, count)
 		}
 	}
-	result.QueueBlocked = !result.ProtectedBranchClean
+	result.QueueBlocked = !result.ProtectedBranchClean || result.MainWorktreeDetached || (result.MainWorktreeBranch != "" && result.MainWorktreeBranch != result.ProtectedBranch)
 	result.NextActions = doctorNextActions(result)
 	staleLocks, err := lockManager.InspectStale(time.Hour)
 	if err != nil {
@@ -948,13 +948,33 @@ type doctorResult struct {
 }
 
 func doctorNextActions(result doctorResult) []string {
-	if result.ProtectedBranchClean {
+	if result.ProtectedBranchClean && !result.MainWorktreeDetached && (result.MainWorktreeBranch == "" || result.MainWorktreeBranch == result.ProtectedBranch) {
 		return nil
+	}
+	doctorRepo := result.MainWorktreePath
+	if doctorRepo == "" {
+		doctorRepo = result.RepositoryRoot
+	}
+	if result.MainWorktreeDetached {
+		return []string{
+			"mainline is blocked until the protected root checkout is back on the protected branch",
+			"take ownership of the protected root checkout and switch it with `git checkout --ignore-other-worktrees " + result.ProtectedBranch + "` in " + result.MainWorktreePath,
+			"re-run `mq doctor --repo " + doctorRepo + "` after the protected root checkout is back on " + result.ProtectedBranch,
+			"retry the blocked operation after the protected root checkout is valid again",
+		}
+	}
+	if result.MainWorktreeBranch != "" && result.MainWorktreeBranch != result.ProtectedBranch {
+		return []string{
+			"mainline is blocked until the protected root checkout is back on the protected branch",
+			"take ownership of the protected root checkout and switch it with `git checkout --ignore-other-worktrees " + result.ProtectedBranch + "` in " + result.MainWorktreePath,
+			"re-run `mq doctor --repo " + doctorRepo + "` after the protected root checkout is back on " + result.ProtectedBranch,
+			"retry the blocked operation after the protected root checkout is valid again",
+		}
 	}
 	return []string{
 		"mainline is blocked until the protected root checkout is clean",
-		"take ownership of the protected root checkout and inspect it with `mq doctor --repo " + result.RepositoryRoot + "`",
-		"if the queue is idle and the root only needs to be restored to shipped main, run `mq doctor --repo " + result.RepositoryRoot + " --fix`",
+		"take ownership of the protected root checkout and inspect it with `mq doctor --repo " + doctorRepo + "`",
+		"if the queue is idle and the root only needs to be restored to shipped main, run `mq doctor --repo " + doctorRepo + " --fix`",
 		"otherwise save, clean, or commit local changes, or resolve any abnormal git state on the protected root checkout",
 		"retry the blocked operation after the protected root checkout is clean",
 	}

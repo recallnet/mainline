@@ -73,6 +73,8 @@ type HealthReport struct {
 	RepositoryRoot        string   `json:"repository_root"`
 	ProtectedBranch       string   `json:"protected_branch"`
 	MainWorktreePath      string   `json:"main_worktree_path"`
+	MainWorktreeBranch    string   `json:"main_worktree_branch,omitempty"`
+	MainWorktreeDetached  bool     `json:"main_worktree_detached,omitempty"`
 	IsGitRepository       bool     `json:"is_git_repository"`
 	ProtectedBranchExists bool     `json:"protected_branch_exists"`
 	MainWorktreeExists    bool     `json:"main_worktree_exists"`
@@ -696,6 +698,8 @@ func (e Engine) InspectHealth(protectedBranch string, mainWorktreePath string) (
 		}
 
 		report.MainWorktreeExists = true
+		report.MainWorktreeBranch = wt.Branch
+		report.MainWorktreeDetached = wt.IsDetached
 		if wt.Branch == protectedBranch {
 			status, err := engine.StatusPorcelain(wt.Path)
 			if err != nil {
