@@ -44,6 +44,9 @@ instructions.
 - Controllers and factory-style callers should prefer:
   - `mq land --json --timeout 30m`
   - `mainlined --all --json` only as an explicit manual experiment, not as the default machine setup
+- Do not teach `mq run-once` plus `mq publish` as the normal happy path. Those
+  remain operator/debug commands. Default guidance should center `mq submit`,
+  `mq wait`, and `mq land`.
 - If `mq repo show` or `mq doctor` warns that the root checkout is dirty or not
   canonical, fix that before trusting local binaries or local docs.
 - Use `mq repo root --repo /Users/devrel/Projects/recallnet/mainline --json`

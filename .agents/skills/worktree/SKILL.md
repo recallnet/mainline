@@ -210,16 +210,25 @@ Submission expectations:
 
 ### 6. Let `mq` land the change
 
-Use `mq` instead of manual merge:
+Use the queue-first default flow, not manual `run-once` plus `publish`.
+
+Normal blocking paths:
 
 ```bash
-mq run-once --repo ~/Projects/recallnet/mainline
+mq submit --wait --for landed --timeout 30m --json
 ```
 
-When publish behavior is part of the dogfood target:
+or:
 
 ```bash
-mq publish --repo ~/Projects/recallnet/mainline
+mq land --json --timeout 30m
+```
+
+If the caller needs a durable handle instead of waiting inline:
+
+```bash
+mq submit --json
+mq wait --submission <id> --for landed --json --timeout 30m
 ```
 
 Recommended verification loop:
@@ -227,16 +236,16 @@ Recommended verification loop:
 ```bash
 mq status --repo ~/Projects/recallnet/mainline --json
 mq repo audit --repo ~/Projects/recallnet/mainline --json
-mq events --repo ~/Projects/recallnet/mainline --follow --json --lifecycle
 ```
+
+Use `mq events --follow --json --lifecycle` only when a controller or operator
+needs deeper audit/debug detail than the submission-id flow.
 
 Expected:
 
 - submission is visible in durable queue state
-- integration result is visible after `mq run-once`
-- publish result is visible after `mq publish`
-- `status --json` can correlate a succeeded submission to `publish_request_id`,
-  `publish_status`, and `outcome`
+- publish correlation is visible through `publish_request_id`, `publish_status`,
+  and `outcome`
 - `unmerged` is empty once the branch is truly reachable from protected `main`
 - `mq repo show` and `mq doctor` do not warn that the repo root checkout is
   dirty or non-canonical

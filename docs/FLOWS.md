@@ -213,6 +213,9 @@ Optional only: for multi-repo experiments, one registered-repo host is still ava
 mainlined --all --json
 ```
 
+Do not make that part of default repo onboarding. The intended default is still
+daemonless `mq` commands plus `mq wait --submission <id> ...` for follow-up.
+
 If old deleted repos are still showing up in that optional global mode, clean
 the registry with:
 

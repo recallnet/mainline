@@ -301,13 +301,17 @@ Submit and land:
 ```bash
 cd /path/to/topic-worktree
 mq submit --check-only --json
-mq submit --allow-newer-head --wait --timeout 15m --json
 mq submit --wait --timeout 15m --json
 mq submit --wait --for landed --timeout 30m --json
+mq submit --allow-newer-head --wait --timeout 15m --json
 mq submit --json
 mq wait --submission 42 --for landed --json --timeout 30m
 mq land --json --timeout 30m
 ```
+
+Use `mq submit --wait` when the caller only needs an integration result.
+Use `mq submit --wait --for landed` or `mq land` when the job is not done until
+remote `main` has moved.
 
 Operate and observe:
 

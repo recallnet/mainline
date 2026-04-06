@@ -201,7 +201,8 @@ it directly:
 mainlined --all --json --interval 2s
 ```
 
-That path is optional and not part of the default machine setup.
+That path is optional and not part of the default machine setup. Treat it as a
+manual helper/debug host, not as required setup for a normal repo.
 
 If old deleted repos are still present in the optional global registry:
 
