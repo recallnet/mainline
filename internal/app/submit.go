@@ -706,7 +706,7 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 			}
 			return preparedSubmission{}, &submitValidationError{
 				Code:    "branch_needs_rebase",
-				Message: fmt.Sprintf("%s does not include protected branch %q at %s; rebase before submission", target, cfg.Repo.ProtectedBranch, protectedHeadSHA),
+				Message: fmt.Sprintf("%s does not include local protected branch %q at %s; rebase onto local %s first with `git rebase %s`, then resubmit", target, cfg.Repo.ProtectedBranch, protectedHeadSHA, cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch),
 			}
 		}
 	}

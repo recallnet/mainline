@@ -329,6 +329,85 @@ func TestStatusTextShowsLocalProtectedRebaseGuidance(t *testing.T) {
 	}
 }
 
+func TestStatusPrefersPublishingHeadlineWhenBlockedSubmissionAlsoExists(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishMode(t, repoRoot, "auto")
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	protectedSHA := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	runningRequest, err := store.CreatePublishRequest(context.Background(), state.PublishRequest{
+		RepoID:    repoRecord.ID,
+		TargetSHA: protectedSHA,
+		Status:    domain.PublishStatusQueued,
+	})
+	if err != nil {
+		t.Fatalf("CreatePublishRequest: %v", err)
+	}
+	if _, err := store.UpdatePublishRequestStatus(context.Background(), runningRequest.ID, domain.PublishStatusRunning, sql.NullInt64{}); err != nil {
+		t.Fatalf("UpdatePublishRequestStatus: %v", err)
+	}
+
+	blockedSubmission, err := store.CreateIntegrationSubmission(context.Background(), state.IntegrationSubmission{
+		RepoID:         repoRecord.ID,
+		BranchName:     "feature/blocked",
+		SourceRef:      "feature/blocked",
+		RefKind:        domain.RefKindBranch,
+		SourceWorktree: filepath.Join(t.TempDir(), "feature-blocked"),
+		SourceSHA:      "deadbeef",
+		RequestedBy:    "test",
+		Priority:       submissionPriorityNormal,
+		Status:         domain.SubmissionStatusQueued,
+	})
+	if err != nil {
+		t.Fatalf("CreateIntegrationSubmission: %v", err)
+	}
+	blockedSubmission, err = store.UpdateIntegrationSubmissionStatus(context.Background(), blockedSubmission.ID, domain.SubmissionStatusBlocked, "rebase conflict")
+	if err != nil {
+		t.Fatalf("UpdateIntegrationSubmissionStatus: %v", err)
+	}
+	if _, err := store.AppendEvent(context.Background(), state.EventRecord{
+		RepoID:    repoRecord.ID,
+		ItemType:  domain.ItemTypeIntegrationSubmission,
+		ItemID:    state.NullInt64(blockedSubmission.ID),
+		EventType: domain.EventTypeIntegrationBlocked,
+		Payload: mustJSON(blockedSubmissionDetails{
+			Error:           "rebase conflict",
+			BlockedReason:   domain.BlockedReasonRebaseConflict,
+			ConflictFiles:   []string{"README.md"},
+			ProtectedTipSHA: protectedSHA,
+			RetryHint:       "manual-rebase-from-tip",
+		}),
+	}); err != nil {
+		t.Fatalf("AppendEvent: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var status statusResult
+	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if status.State != "publishing" {
+		t.Fatalf("expected publishing headline, got %+v", status)
+	}
+	if len(status.Alerts) == 0 || !strings.Contains(status.Alerts[0], "Separate blocked submissions") {
+		t.Fatalf("expected mixed-state alert, got %+v", status.Alerts)
+	}
+}
+
 func TestStatusAndSubmitJSONIncludeRollingExecutionEstimate(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

@@ -36,6 +36,7 @@ type statusResult struct {
 	CurrentBranch       string                `json:"current_branch"`
 	CurrentBranchStatus *git.BranchComparison `json:"current_branch_status,omitempty"`
 	RebaseGuidance      *statusRebaseGuidance `json:"rebase_guidance,omitempty"`
+	Alerts              []string              `json:"alerts,omitempty"`
 	State               string                `json:"state"`
 	QueueLength         int                   `json:"queue_length"`
 	ProtectedBranch     string                `json:"protected_branch"`
@@ -92,6 +93,12 @@ type statusSubmission struct {
 	PublishFailureCause   string                   `json:"publish_failure_cause,omitempty"`
 	PublishFailureSummary string                   `json:"publish_failure_summary,omitempty"`
 	PublishFailureError   string                   `json:"publish_failure_error,omitempty"`
+	NextActions           []statusNextAction       `json:"next_actions,omitempty"`
+}
+
+type statusNextAction struct {
+	Label   string `json:"label"`
+	Command string `json:"command,omitempty"`
 }
 
 type blockedSubmissionDetails struct {
@@ -260,7 +267,7 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		return statusResult{}, err
 	}
 
-	enrichedSubmissions, err := enrichStatusSubmissions(ctx, store, repoRecord.ID, cfg.Repo.MainWorktree, submissions)
+	enrichedSubmissions, err := enrichStatusSubmissions(ctx, store, repoRecord.ID, cfg.Repo.MainWorktree, cfg.Repo.ProtectedBranch, submissions)
 	if err != nil {
 		return statusResult{}, err
 	}
@@ -292,6 +299,7 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		}
 	}
 	result.State, result.QueueLength = summarizeQueueState(result.Counts)
+	result.Alerts = buildStatusAlerts(result.Counts)
 	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
 	if metadata, ok := readActiveLease(lockManager, state.IntegrationLock); ok {
 		result.IntegrationWorker = &metadata
@@ -340,6 +348,12 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 			printer.Line("Protected sync hint: %s", result.RebaseGuidance.ProtectedBehindUpstreamHint)
 		}
 	}
+	if len(result.Alerts) > 0 {
+		printer.Section("Alerts:")
+		for _, alert := range result.Alerts {
+			printer.Line("%s", alert)
+		}
+	}
 	printer.Line("Queue: submissions queued=%d running=%d blocked=%d failed=%d cancelled=%d | publishes queued=%d running=%d failed=%d cancelled=%d succeeded=%d",
 		result.Counts.QueuedSubmissions,
 		result.Counts.RunningSubmissions,
@@ -379,6 +393,13 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 		}
 		if result.LatestSubmission.RetryHint != "" {
 			printer.Line("retry hint: %s", result.LatestSubmission.RetryHint)
+		}
+		for _, action := range result.LatestSubmission.NextActions {
+			if action.Command != "" {
+				printer.Line("%s: %s", action.Label, action.Command)
+				continue
+			}
+			printer.Line("%s", action.Label)
 		}
 		if result.LatestSubmission.PublishFailureSummary != "" {
 			printer.Line("publish failure: %s", result.LatestSubmission.PublishFailureSummary)
@@ -494,7 +515,7 @@ func activeSubmissions(submissions []statusSubmission) []statusSubmission {
 	return active
 }
 
-func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int64, mainWorktree string, submissions []state.IntegrationSubmission) ([]statusSubmission, error) {
+func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int64, mainWorktree string, protectedBranch string, submissions []state.IntegrationSubmission) ([]statusSubmission, error) {
 	mainEngine := git.NewEngine(mainWorktree)
 	enriched := make([]statusSubmission, 0, len(submissions))
 	for _, submission := range submissions {
@@ -508,6 +529,7 @@ func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int6
 			item.ConflictFiles = details.ConflictFiles
 			item.ProtectedTipSHA = details.ProtectedTipSHA
 			item.RetryHint = details.RetryHint
+			item.NextActions = buildBlockedSubmissionActions(item, protectedBranch)
 		}
 		if submission.Status == domain.SubmissionStatusSucceeded {
 			info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission, mainEngine)
@@ -604,15 +626,56 @@ func summarizeQueueState(counts statusCounts) (string, int) {
 		counts.QueuedPublishes +
 		counts.RunningPublishes
 	switch {
-	case counts.BlockSubmissions > 0:
-		return "blocked", queueLength
 	case counts.RunningPublishes > 0:
 		return "publishing", queueLength
+	case counts.BlockSubmissions > 0:
+		return "blocked", queueLength
 	case counts.RunningSubmissions > 0:
 		return "integrating", queueLength
 	case counts.QueuedSubmissions > 0 || counts.QueuedPublishes > 0:
 		return "queued", queueLength
 	default:
 		return "idle", 0
+	}
+}
+
+func buildStatusAlerts(counts statusCounts) []string {
+	var alerts []string
+	if counts.RunningPublishes > 0 && counts.BlockSubmissions > 0 {
+		alerts = append(alerts, "A publish is actively running. Separate blocked submissions still need attention, but they are not stopping the current publish.")
+	}
+	if counts.RunningSubmissions > 0 && counts.BlockSubmissions > 0 {
+		alerts = append(alerts, "An integration is actively running. Separate blocked submissions still need attention.")
+	}
+	return alerts
+}
+
+func buildBlockedSubmissionActions(submission statusSubmission, protectedBranch string) []statusNextAction {
+	if submission.SourceWorktree == "" {
+		return nil
+	}
+	rebaseCommand := fmt.Sprintf("cd %s && git rebase %s", submission.SourceWorktree, protectedBranch)
+	retryCommand := fmt.Sprintf("mq retry --submission %d --repo %s", submission.ID, submission.SourceWorktree)
+	cancelCommand := fmt.Sprintf("mq cancel --submission %d --repo %s", submission.ID, submission.SourceWorktree)
+
+	switch submission.BlockedReason {
+	case domain.BlockedReasonRebaseConflict:
+		return []statusNextAction{
+			{Label: "Resolve the branch against local protected main", Command: rebaseCommand},
+			{Label: "Retry this blocked submission after the rebase resolves", Command: retryCommand},
+			{Label: "Cancel this blocked submission if it is obsolete", Command: cancelCommand},
+		}
+	case domain.BlockedReasonCheckTimeout:
+		return []statusNextAction{
+			{Label: "Inspect and fix the hanging check in the source worktree", Command: fmt.Sprintf("cd %s", submission.SourceWorktree)},
+			{Label: "Retry this blocked submission after fixing the check", Command: retryCommand},
+			{Label: "Cancel this blocked submission if it is obsolete", Command: cancelCommand},
+		}
+	default:
+		return []statusNextAction{
+			{Label: "Inspect the blocked source worktree", Command: fmt.Sprintf("cd %s", submission.SourceWorktree)},
+			{Label: "Retry this blocked submission when ready", Command: retryCommand},
+			{Label: "Cancel this blocked submission if it is obsolete", Command: cancelCommand},
+		}
 	}
 }

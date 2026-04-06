@@ -852,6 +852,9 @@ func TestSubmitCheckOnlyRejectsBranchBehindProtected(t *testing.T) {
 	if result.ErrorCode != "branch_needs_rebase" {
 		t.Fatalf("expected branch_needs_rebase, got %+v", result)
 	}
+	if !strings.Contains(result.Error, "git rebase main") {
+		t.Fatalf("expected explicit local rebase command, got %+v", result)
+	}
 }
 
 func TestSubmitCheckOnlyRejectsAlreadyQueuedSubmission(t *testing.T) {

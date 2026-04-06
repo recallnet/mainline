@@ -32,6 +32,10 @@ changed_cached() {
   git diff --cached --name-only -- "$@" 2>/dev/null || true
 }
 
+has_staged_matches() {
+  [[ -n "$(changed_cached "$@")" ]]
+}
+
 current_branch() {
   git symbolic-ref --quiet --short HEAD 2>/dev/null || echo detached
 }
@@ -141,6 +145,35 @@ run_release_regressions_if_staged() {
   rm -rf "${out}"
 }
 
+run_scoped_go_suite_for_staged_changes() {
+  local global_go_inputs staged_go_dirs packages
+
+  global_go_inputs="$(changed_cached 'go.mod' 'go.sum' 'go.work' 'go.work.sum' 'Makefile' 'scripts/run-hook-checks.sh')"
+  if [[ -n "${global_go_inputs}" ]]; then
+    go vet ./...
+    go test ./...
+    return 0
+  fi
+
+  staged_go_dirs="$(changed_cached '*.go' | xargs -n1 dirname 2>/dev/null | sort -u || true)"
+  if [[ -z "${staged_go_dirs}" ]]; then
+    return 0
+  fi
+
+  packages="$(
+    while read -r dir; do
+      [[ -n "${dir}" ]] || continue
+      go list "./${dir}" 2>/dev/null || true
+    done <<< "${staged_go_dirs}" | sort -u
+  )"
+  if [[ -z "${packages}" ]]; then
+    return 0
+  fi
+
+  go vet ${packages}
+  go test ${packages}
+}
+
 run_full_repo_suite() {
   check_repo_format
   go vet ./...
@@ -212,9 +245,10 @@ case "${mode}" in
     check_staged_go_format
     check_workflows_if_staged
     check_secrets_in_staged_files
-    go vet ./...
-    go test ./...
-    make test-invariants
+    run_scoped_go_suite_for_staged_changes
+    if has_staged_matches '*.go' 'go.mod' 'go.sum' 'go.work' 'go.work.sum' 'internal/app/*.go' 'internal/state/*.go'; then
+      make test-invariants
+    fi
     run_release_regressions_if_staged
     ;;
   pre-push)

@@ -361,6 +361,9 @@ func TestRunOnceBlocksConflictAndLeavesProtectedBranchUntouched(t *testing.T) {
 	if report.LatestSubmission.RetryHint != "manual-rebase-from-tip" {
 		t.Fatalf("expected retry hint, got %+v", report.LatestSubmission)
 	}
+	if len(report.LatestSubmission.NextActions) == 0 || !strings.Contains(report.LatestSubmission.NextActions[0].Command, "git rebase main") {
+		t.Fatalf("expected blocked next actions with local rebase command, got %+v", report.LatestSubmission.NextActions)
+	}
 	if len(report.LatestSubmission.ConflictFiles) == 0 || report.LatestSubmission.ConflictFiles[0] != "README.md" {
 		t.Fatalf("expected conflict files for blocked submission, got %+v", report.LatestSubmission)
 	}
@@ -947,6 +950,9 @@ func TestRunOncePreIntegrateTimeoutBlocksWithCheckTimeoutReason(t *testing.T) {
 	}
 	if report.LatestSubmission.RetryHint != "rerun-after-fixing-hanging-check" {
 		t.Fatalf("expected timeout retry hint, got %+v", report.LatestSubmission)
+	}
+	if len(report.LatestSubmission.NextActions) == 0 || !strings.Contains(report.LatestSubmission.NextActions[0].Command, report.LatestSubmission.SourceWorktree) {
+		t.Fatalf("expected timeout next actions, got %+v", report.LatestSubmission.NextActions)
 	}
 	if report.LatestSubmission.ProtectedTipSHA != protectedBefore {
 		t.Fatalf("expected protected tip %q, got %+v", protectedBefore, report.LatestSubmission)
