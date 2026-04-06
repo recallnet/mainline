@@ -32,13 +32,11 @@ instructions.
 - Make all code changes, tests, and commits in that feature worktree.
 - Most coding agents should finish with:
   - `mq submit --check-only --json`
-  - `mq submit --wait --timeout 15m --json`
-  - treat `submit --wait` as `integrated`, not remote-published
-  - use `mq submit --wait --for landed --timeout 30m --json` when one blocking submit call must include auto-publish too
-  - capture `submission_id` from JSON when a wrapper needs durable tracking
+  - default to `mq submit --wait --for landed --timeout 30m --json` when the job is not done until push succeeds
+  - treat plain `mq submit --wait` as `integrated`, not remote-published
+  - after any non-waiting submit, capture `submission_id` and follow that submission, not branch-name polling, logs, or sleeps
+  - use `mq submit --json` plus `mq wait --submission <id> --for landed --json --timeout 30m` when a wrapper wants a durable handle
   - use `mq submit --queue-only --json` only when the point is to let some other process, not submit, own the drain
-  - `mq wait --submission <id> --for landed --json --timeout 30m` when the
-    wrapper needs integrate-plus-publish confirmation by id
   - or `mq land --json --timeout 30m` when remote landing is the actual end of the job
   - `mq repo audit --repo /Users/devrel/Projects/recallnet/mainline --json`
 - Controllers and factory-style callers should prefer:
@@ -60,8 +58,9 @@ instructions.
 - Plain `mq submit` now opportunistically tries to drain after queueing. If the
   integration lock is already held, it exits cleanly and the active worker keeps
   draining.
-- Use `mq events --follow --json --lifecycle` from the protected worktree when a
-  long-running agent or controller needs push/integration notifications.
+- Default follow pattern: `submission_id` plus `mq wait --submission <id> --for landed --json --timeout 30m`.
+- Do not use `sleep`, branch-name polling, `mq logs`, or `mq events` as the primary way to decide whether a queued change finished.
+- Use `mq events --follow --json --lifecycle` only when a controller or operator needs deeper audit/debug notifications than the submission wait path.
 - Use `mq registry prune --json` if stale temp repos or deleted repos are
   polluting the optional global registry.
 - Treat `submission_id`, not branch name, as the stable factory handle for a

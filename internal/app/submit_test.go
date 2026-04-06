@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1250,6 +1251,90 @@ func TestSubmitWaitTextWarnsWhenPublishModeIsManual(t *testing.T) {
 	}
 	if !strings.Contains(text, "Publish mode is manual") {
 		t.Fatalf("expected manual publish warning in text output, got %q", text)
+	}
+}
+
+func TestSubmitWaitForLandedFailsFastOnManualPublishRepo(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-wait-landed-manual")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/wait-landed-manual", featurePath)
+	writeFileAndCommit(t, featurePath, "wait-landed.txt", "wait landed\n", "feature wait landed manual")
+	featureSHA := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	err := runSubmit([]string{"--repo", featurePath, "--wait", "--for", "landed", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&submitOut), &submitErr)
+	if err == nil {
+		t.Fatalf("expected manual publish landed wait to fail fast")
+	}
+
+	var result submitResult
+	if decodeErr := json.Unmarshal(submitOut.Bytes(), &result); decodeErr != nil {
+		t.Fatalf("Unmarshal: %v", decodeErr)
+	}
+	if result.SubmissionStatus != "succeeded" || result.Outcome != submissionOutcomeIntegrated {
+		t.Fatalf("expected integrated submission result, got %+v", result)
+	}
+	if result.PublishRequestID != 0 {
+		t.Fatalf("expected no publish request on manual repo, got %+v", result)
+	}
+	if !strings.Contains(result.Error, "publish mode is manual") {
+		t.Fatalf("expected manual publish error, got %+v", result)
+	}
+
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if localHead != featureSHA {
+		t.Fatalf("expected local protected head %q, got %q", featureSHA, localHead)
+	}
+	if remoteHead == featureSHA {
+		t.Fatalf("expected remote head to remain unpublished, got %q", remoteHead)
+	}
+}
+
+func TestWaitForLandedFailsFastOnManualPublishRepoWithoutPublishRequest(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-manual-wait")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/manual-wait", featurePath)
+	writeFileAndCommit(t, featurePath, "manual-wait.txt", "manual wait\n", "feature manual wait")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&submitOut), &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var submitResult submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &submitResult); err != nil {
+		t.Fatalf("Unmarshal submit result: %v", err)
+	}
+	if submitResult.SubmissionID == 0 {
+		t.Fatalf("expected submission id, got %+v", submitResult)
+	}
+
+	var waitOut bytes.Buffer
+	var waitErr bytes.Buffer
+	err := runWait([]string{"--repo", repoRoot, "--submission", fmt.Sprintf("%d", submitResult.SubmissionID), "--for", "landed", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&waitOut), &waitErr)
+	if err == nil {
+		t.Fatalf("expected wait --for landed to fail fast on manual publish repo")
+	}
+
+	var result submissionWaitResult
+	if decodeErr := json.Unmarshal(waitOut.Bytes(), &result); decodeErr != nil {
+		t.Fatalf("Unmarshal wait result: %v", decodeErr)
+	}
+	if result.SubmissionStatus != "succeeded" || result.Outcome != waitOutcome("integrated") {
+		t.Fatalf("expected integrated wait result, got %+v", result)
+	}
+	if result.PublishRequestID != 0 {
+		t.Fatalf("expected no publish request on manual repo, got %+v", result)
+	}
+	if !strings.Contains(result.Error, "publish mode is manual") {
+		t.Fatalf("expected manual publish error, got %+v", result)
 	}
 }
 

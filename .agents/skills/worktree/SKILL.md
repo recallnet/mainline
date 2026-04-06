@@ -148,10 +148,10 @@ Most agents should finish from the feature worktree with:
 
 ```bash
 mq submit --check-only --json
-mq submit --wait --timeout 15m --json
+mq submit --wait --for landed --timeout 30m --json
 ```
 
-Treat `mq submit --wait` as an integration answer, not a remote-publish answer.
+Treat plain `mq submit --wait` as an integration answer, not a remote-publish answer.
 If the repo keeps `[publish].Mode = 'manual'`, use `mq land` or
 `mq wait --for landed` when the job is not done until remote `main` moves.
 If the repo uses `[publish].Mode = 'auto'` and the wrapper wants one blocking
@@ -163,7 +163,7 @@ drain.
 That gives the agent:
 
 - a deterministic dry-run before expensive follow-up work
-- a blocking integrated-or-blocked answer without inventing a poll loop
+- a blocking landed-or-failed answer without inventing a poll loop
 - stable JSON for wrappers and orchestration
 
 If the wrapper needs a durable handle instead of waiting inline:
@@ -174,7 +174,9 @@ mq wait --submission <id> --for landed --json --timeout 30m
 ```
 
 Use that pattern when the caller wants to track a specific queued submission by
-id instead of polling by branch name.
+id instead of polling by branch name. Follow the submission, not the logs.
+Do not use sleeps, branch-name polling, `mq logs`, or `mq events` as the
+primary way to decide whether a queued change finished.
 
 If the branch is ready to hand off asynchronously instead:
 

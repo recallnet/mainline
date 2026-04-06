@@ -421,6 +421,15 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 				result.DurationMS = time.Since(start).Milliseconds()
 				return result, nil
 			}
+			if queued.Config.Publish.Mode != "auto" && info.PublishRequestID == 0 {
+				result.Outcome = waitOutcome("integrated")
+				result.DurationMS = time.Since(start).Milliseconds()
+				result.Error = fmt.Sprintf(
+					"submission %d integrated, but repo publish mode is manual; run mq publish or mq land when remote landing is required",
+					submission.ID,
+				)
+				return result, exitWithCode(1, fmt.Errorf("%s", result.Error))
+			}
 			if info.Outcome == submissionOutcomeLanded {
 				result.Outcome = waitOutcome("landed")
 				result.DurationMS = time.Since(start).Milliseconds()

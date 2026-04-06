@@ -30,14 +30,21 @@ Use a topic worktree, then land it:
 git worktree add ../feature-login -b feature/login main
 cd ../feature-login
 # edit, test, commit
-mq submit --json
-mq wait --submission 42 --for landed --json --timeout 30m
+mq submit --wait --for landed --json --timeout 30m
 mq repo audit --repo /path/to/protected-worktree --json
 mq status --repo . --json
 ```
 
-Use `mq wait --submission ...` as the normal follow path. `mq logs`,
-`mq events`, and `mq watch` are for audit/debugging when you need more detail.
+If the caller needs a durable handle instead of waiting inline:
+
+```bash
+mq submit --json
+mq wait --submission 42 --for landed --json --timeout 30m
+```
+
+Use `submission_id` plus `mq wait --submission ...` as the normal follow path.
+Do not use sleeps, branch-name polling, `mq logs`, `mq events`, or `mq watch`
+as the primary completion path.
 
 ## Worktree-Heavy Repo
 
@@ -114,6 +121,9 @@ cd /path/to/topic-worktree
 mq submit --json
 mq wait --submission 42 --for landed --json --timeout 30m
 ```
+
+That is the default agent/controller subscription model: submit once, keep the
+`submission_id`, and wait on that submission until it lands or fails.
 
 If you want to prove that some other process handled a specific submission, queue
 without opportunistic drain:

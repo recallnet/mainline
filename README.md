@@ -76,10 +76,10 @@ The agent path should feel like this:
 ```bash
 cd /path/to/topic-worktree
 mq submit --check-only --json
-mq submit --wait --timeout 15m --json
+mq submit --wait --for landed --timeout 30m --json
 ```
 
-Important: `mq submit --wait` stops at `integrated`. In a repo with
+Important: plain `mq submit --wait` stops at `integrated`. In a repo with
 `[publish].Mode = 'manual'`, that means the commit is on local protected
 `main` but not yet pushed to remote.
 
@@ -89,7 +89,7 @@ If the wrapper wants one blocking submit call that waits through auto-publish:
 mq submit --wait --for landed --timeout 30m --json
 ```
 
-Or, when the caller wants a durable machine handle instead of a one-shot wait:
+If the caller wants a durable machine handle instead of a one-shot wait:
 
 ```bash
 mq submit --json
@@ -97,8 +97,8 @@ mq wait --submission 42 --for landed --json --timeout 30m
 ```
 
 That is the primary follow path. Use the returned `submission_id` and wait on it.
-Treat `mq logs` and `mq events` as audit/debug surfaces, not the normal way to
-decide whether your land finished.
+Do not use sleeps, branch-name polling, `mq logs`, or `mq events` as the normal
+way to decide whether your land finished.
 
 If the wrapper expects remote landing as part of the same job, prefer:
 
