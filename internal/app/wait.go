@@ -10,6 +10,7 @@ import (
 
 	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
+	"github.com/recallnet/mainline/internal/state"
 )
 
 type waitOutcome string
@@ -24,21 +25,27 @@ const (
 )
 
 type integrationWaitResult struct {
-	SubmissionID     int64                   `json:"submission_id"`
-	Branch           string                  `json:"branch"`
-	SourceRef        string                  `json:"source_ref,omitempty"`
-	RefKind          domain.RefKind          `json:"ref_kind,omitempty"`
-	SourceWorktree   string                  `json:"source_worktree"`
-	SourceSHA        string                  `json:"source_sha"`
-	RepositoryRoot   string                  `json:"repository_root"`
-	ProtectedBranch  string                  `json:"protected_branch"`
-	SubmissionStatus domain.SubmissionStatus `json:"submission_status"`
-	PublishRequestID int64                   `json:"publish_request_id,omitempty"`
-	PublishStatus    domain.PublishStatus    `json:"publish_status,omitempty"`
-	Outcome          waitOutcome             `json:"outcome"`
-	DurationMS       int64                   `json:"duration_ms"`
-	LastWorkerResult string                  `json:"last_worker_result,omitempty"`
-	Error            string                  `json:"error,omitempty"`
+	SubmissionID          int64                   `json:"submission_id"`
+	Branch                string                  `json:"branch"`
+	SourceRef             string                  `json:"source_ref,omitempty"`
+	RefKind               domain.RefKind          `json:"ref_kind,omitempty"`
+	SourceWorktree        string                  `json:"source_worktree"`
+	SourceSHA             string                  `json:"source_sha"`
+	RepositoryRoot        string                  `json:"repository_root"`
+	ProtectedBranch       string                  `json:"protected_branch"`
+	SubmissionStatus      domain.SubmissionStatus `json:"submission_status"`
+	PublishRequestID      int64                   `json:"publish_request_id,omitempty"`
+	PublishStatus         domain.PublishStatus    `json:"publish_status,omitempty"`
+	Outcome               waitOutcome             `json:"outcome"`
+	DurationMS            int64                   `json:"duration_ms"`
+	QueueState            string                  `json:"queue_state,omitempty"`
+	QueueLength           int                     `json:"queue_length,omitempty"`
+	HasBlockedSubmissions bool                    `json:"has_blocked_submissions,omitempty"`
+	HasRunningPublishes   bool                    `json:"has_running_publishes,omitempty"`
+	HasRunningSubmissions bool                    `json:"has_running_submissions,omitempty"`
+	HasQueuedWork         bool                    `json:"has_queued_work,omitempty"`
+	LastWorkerResult      string                  `json:"last_worker_result,omitempty"`
+	Error                 string                  `json:"error,omitempty"`
 }
 
 type waitTarget string
@@ -63,6 +70,12 @@ type submissionWaitResult struct {
 	PublishStatus         domain.PublishStatus    `json:"publish_status,omitempty"`
 	Outcome               waitOutcome             `json:"outcome"`
 	DurationMS            int64                   `json:"duration_ms"`
+	QueueState            string                  `json:"queue_state,omitempty"`
+	QueueLength           int                     `json:"queue_length,omitempty"`
+	HasBlockedSubmissions bool                    `json:"has_blocked_submissions,omitempty"`
+	HasRunningPublishes   bool                    `json:"has_running_publishes,omitempty"`
+	HasRunningSubmissions bool                    `json:"has_running_submissions,omitempty"`
+	HasQueuedWork         bool                    `json:"has_queued_work,omitempty"`
 	LastWorkerResult      string                  `json:"last_worker_result,omitempty"`
 	PublishFailureCause   string                  `json:"publish_failure_cause,omitempty"`
 	PublishFailureSummary string                  `json:"publish_failure_summary,omitempty"`
@@ -163,6 +176,14 @@ Flags:
 		printer.Line("Publish status: %s", result.PublishStatus)
 	}
 	printer.Line("Outcome: %s", result.Outcome)
+	printer.Line("Queue summary: state=%s length=%d blocked=%t running_publishes=%t running_submissions=%t queued_work=%t",
+		result.QueueState,
+		result.QueueLength,
+		result.HasBlockedSubmissions,
+		result.HasRunningPublishes,
+		result.HasRunningSubmissions,
+		result.HasQueuedWork,
+	)
 	if result.LastWorkerResult != "" {
 		printer.Line("Last worker result: %s", result.LastWorkerResult)
 	}
@@ -178,11 +199,11 @@ Flags:
 	return waitErr
 }
 
-func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration, pollInterval time.Duration) (integrationWaitResult, error) {
+func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration, pollInterval time.Duration) (result integrationWaitResult, waitErr error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	result := integrationWaitResult{
+	result = integrationWaitResult{
 		SubmissionID:     queued.Submission.ID,
 		Branch:           submissionDisplayRef(queued.Submission),
 		SourceRef:        queued.Submission.SourceRef,
@@ -193,6 +214,7 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 		ProtectedBranch:  queued.Config.Repo.ProtectedBranch,
 		SubmissionStatus: queued.Submission.Status,
 	}
+	defer populateIntegrationWaitQueueSummary(queued.Store, queued.RepoRecord.ID, &result)
 	mainEngine := git.NewEngine(queued.Config.Repo.MainWorktree)
 
 	ticker := time.NewTicker(pollInterval)
@@ -313,11 +335,11 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 	}
 }
 
-func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout time.Duration, pollInterval time.Duration) (submissionWaitResult, error) {
+func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout time.Duration, pollInterval time.Duration) (result submissionWaitResult, waitErr error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	result := submissionWaitResult{
+	result = submissionWaitResult{
 		SubmissionID:     queued.Submission.ID,
 		Branch:           submissionDisplayRef(queued.Submission),
 		SourceRef:        queued.Submission.SourceRef,
@@ -328,6 +350,7 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 		ProtectedBranch:  queued.Config.Repo.ProtectedBranch,
 		SubmissionStatus: queued.Submission.Status,
 	}
+	defer populateSubmissionWaitQueueSummary(queued.Store, queued.RepoRecord.ID, &result)
 	mainEngine := git.NewEngine(queued.Config.Repo.MainWorktree)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -498,4 +521,49 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 		case <-ticker.C:
 		}
 	}
+}
+
+func populateIntegrationWaitQueueSummary(store state.Store, repoID int64, result *integrationWaitResult) {
+	if result == nil {
+		return
+	}
+	summary, ok := loadQueueSummary(store, repoID)
+	if !ok {
+		return
+	}
+	result.QueueState = summary.Headline
+	result.QueueLength = summary.QueueLength
+	result.HasBlockedSubmissions = summary.HasBlockedSubmissions
+	result.HasRunningPublishes = summary.HasRunningPublishes
+	result.HasRunningSubmissions = summary.HasRunningSubmissions
+	result.HasQueuedWork = summary.HasQueuedWork
+}
+
+func populateSubmissionWaitQueueSummary(store state.Store, repoID int64, result *submissionWaitResult) {
+	if result == nil {
+		return
+	}
+	summary, ok := loadQueueSummary(store, repoID)
+	if !ok {
+		return
+	}
+	result.QueueState = summary.Headline
+	result.QueueLength = summary.QueueLength
+	result.HasBlockedSubmissions = summary.HasBlockedSubmissions
+	result.HasRunningPublishes = summary.HasRunningPublishes
+	result.HasRunningSubmissions = summary.HasRunningSubmissions
+	result.HasQueuedWork = summary.HasQueuedWork
+}
+
+func loadQueueSummary(store state.Store, repoID int64) (queueSummary, bool) {
+	ctx := context.Background()
+	submissions, err := store.ListIntegrationSubmissions(ctx, repoID)
+	if err != nil {
+		return queueSummary{}, false
+	}
+	requests, err := store.ListPublishRequests(ctx, repoID)
+	if err != nil {
+		return queueSummary{}, false
+	}
+	return summarizeQueue(summarizeCounts(submissions, requests)), true
 }

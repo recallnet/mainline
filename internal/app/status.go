@@ -29,28 +29,42 @@ type statusCounts struct {
 	SucceededPublishes   int `json:"succeeded_publishes"`
 }
 
+type queueSummary struct {
+	Headline              string `json:"headline"`
+	QueueLength           int    `json:"queue_length"`
+	HasBlockedSubmissions bool   `json:"has_blocked_submissions"`
+	HasRunningPublishes   bool   `json:"has_running_publishes"`
+	HasRunningSubmissions bool   `json:"has_running_submissions"`
+	HasQueuedWork         bool   `json:"has_queued_work"`
+}
+
 type statusResult struct {
-	RepositoryRoot      string                `json:"repository_root"`
-	StatePath           string                `json:"state_path"`
-	CurrentWorktree     string                `json:"current_worktree"`
-	CurrentBranch       string                `json:"current_branch"`
-	CurrentBranchStatus *git.BranchComparison `json:"current_branch_status,omitempty"`
-	RebaseGuidance      *statusRebaseGuidance `json:"rebase_guidance,omitempty"`
-	Alerts              []string              `json:"alerts,omitempty"`
-	State               string                `json:"state"`
-	QueueLength         int                   `json:"queue_length"`
-	ProtectedBranch     string                `json:"protected_branch"`
-	ProtectedBranchSHA  string                `json:"protected_branch_sha"`
-	ProtectedUpstream   git.BranchStatus      `json:"protected_upstream"`
-	ExecutionEstimate   executionEstimate     `json:"execution_estimate"`
-	Counts              statusCounts          `json:"counts"`
-	LatestSubmission    *statusSubmission     `json:"latest_submission,omitempty"`
-	LatestPublish       *statusPublish        `json:"latest_publish,omitempty"`
-	ActiveSubmissions   []statusSubmission    `json:"active_submissions,omitempty"`
-	ActivePublishes     []statusPublish       `json:"active_publishes,omitempty"`
-	IntegrationWorker   *state.LeaseMetadata  `json:"integration_worker,omitempty"`
-	PublishWorker       *state.LeaseMetadata  `json:"publish_worker,omitempty"`
-	RecentEvents        []state.EventRecord   `json:"recent_events"`
+	RepositoryRoot        string                `json:"repository_root"`
+	StatePath             string                `json:"state_path"`
+	CurrentWorktree       string                `json:"current_worktree"`
+	CurrentBranch         string                `json:"current_branch"`
+	CurrentBranchStatus   *git.BranchComparison `json:"current_branch_status,omitempty"`
+	RebaseGuidance        *statusRebaseGuidance `json:"rebase_guidance,omitempty"`
+	Alerts                []string              `json:"alerts,omitempty"`
+	State                 string                `json:"state"`
+	QueueLength           int                   `json:"queue_length"`
+	HasBlockedSubmissions bool                  `json:"has_blocked_submissions"`
+	HasRunningPublishes   bool                  `json:"has_running_publishes"`
+	HasRunningSubmissions bool                  `json:"has_running_submissions"`
+	HasQueuedWork         bool                  `json:"has_queued_work"`
+	QueueSummary          queueSummary          `json:"queue_summary"`
+	ProtectedBranch       string                `json:"protected_branch"`
+	ProtectedBranchSHA    string                `json:"protected_branch_sha"`
+	ProtectedUpstream     git.BranchStatus      `json:"protected_upstream"`
+	ExecutionEstimate     executionEstimate     `json:"execution_estimate"`
+	Counts                statusCounts          `json:"counts"`
+	LatestSubmission      *statusSubmission     `json:"latest_submission,omitempty"`
+	LatestPublish         *statusPublish        `json:"latest_publish,omitempty"`
+	ActiveSubmissions     []statusSubmission    `json:"active_submissions,omitempty"`
+	ActivePublishes       []statusPublish       `json:"active_publishes,omitempty"`
+	IntegrationWorker     *state.LeaseMetadata  `json:"integration_worker,omitempty"`
+	PublishWorker         *state.LeaseMetadata  `json:"publish_worker,omitempty"`
+	RecentEvents          []state.EventRecord   `json:"recent_events"`
 }
 
 type statusRebaseGuidance struct {
@@ -298,7 +312,14 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 			result.RebaseGuidance = buildStatusRebaseGuidance(cfg, comparison, protectedStatus)
 		}
 	}
-	result.State, result.QueueLength = summarizeQueueState(result.Counts)
+	queue := summarizeQueue(result.Counts)
+	result.State = queue.Headline
+	result.QueueLength = queue.QueueLength
+	result.HasBlockedSubmissions = queue.HasBlockedSubmissions
+	result.HasRunningPublishes = queue.HasRunningPublishes
+	result.HasRunningSubmissions = queue.HasRunningSubmissions
+	result.HasQueuedWork = queue.HasQueuedWork
+	result.QueueSummary = queue
 	result.Alerts = buildStatusAlerts(result.Counts)
 	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
 	if metadata, ok := readActiveLease(lockManager, state.IntegrationLock); ok {
@@ -327,6 +348,12 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 	printer.Line("Current branch: %s", result.CurrentBranch)
 	printer.Line("State: %s", result.State)
 	printer.Line("Queue length: %d", result.QueueLength)
+	printer.Line("Queue summary: blocked=%t running_publishes=%t running_submissions=%t queued_work=%t",
+		result.HasBlockedSubmissions,
+		result.HasRunningPublishes,
+		result.HasRunningSubmissions,
+		result.HasQueuedWork,
+	)
 	printer.Line("Protected branch: %s", result.ProtectedBranch)
 	if result.ProtectedBranchSHA != "" {
 		printer.Line("Protected SHA: %s", result.ProtectedBranchSHA)
@@ -619,24 +646,34 @@ func summarizeCounts(submissions []state.IntegrationSubmission, requests []state
 	return counts
 }
 
-func summarizeQueueState(counts statusCounts) (string, int) {
+func summarizeQueue(counts statusCounts) queueSummary {
 	queueLength := counts.QueuedSubmissions +
 		counts.RunningSubmissions +
 		counts.BlockSubmissions +
 		counts.QueuedPublishes +
 		counts.RunningPublishes
+	summary := queueSummary{
+		QueueLength:           queueLength,
+		HasBlockedSubmissions: counts.BlockSubmissions > 0,
+		HasRunningPublishes:   counts.RunningPublishes > 0,
+		HasRunningSubmissions: counts.RunningSubmissions > 0,
+		HasQueuedWork:         queueLength > 0,
+	}
 	switch {
 	case counts.RunningPublishes > 0:
-		return "publishing", queueLength
+		summary.Headline = "publishing"
 	case counts.BlockSubmissions > 0:
-		return "blocked", queueLength
+		summary.Headline = "blocked"
 	case counts.RunningSubmissions > 0:
-		return "integrating", queueLength
+		summary.Headline = "integrating"
 	case counts.QueuedSubmissions > 0 || counts.QueuedPublishes > 0:
-		return "queued", queueLength
+		summary.Headline = "queued"
 	default:
-		return "idle", 0
+		summary.Headline = "idle"
+		summary.QueueLength = 0
+		summary.HasQueuedWork = false
 	}
+	return summary
 }
 
 func buildStatusAlerts(counts statusCounts) []string {

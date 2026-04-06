@@ -78,6 +78,11 @@ Returns one JSON object with these stable top-level keys:
 - `current_branch`
 - `state`
 - `queue_length`
+- `has_blocked_submissions`
+- `has_running_publishes`
+- `has_running_submissions`
+- `has_queued_work`
+- `queue_summary`
 - `protected_branch`
 - `protected_branch_sha`
 - `protected_upstream`
@@ -104,6 +109,19 @@ Optional top-level keys:
 
 `queue_length` is the current unfinished queue depth across queued/running/
 blocked submissions and queued/running publishes.
+
+`state` remains a derived human headline. Machine consumers should key off the
+explicit concurrent queue booleans plus `queue_summary` instead of inferring
+queue shape from `state` alone.
+
+`queue_summary` contains:
+
+- `headline`
+- `queue_length`
+- `has_blocked_submissions`
+- `has_running_publishes`
+- `has_running_submissions`
+- `has_queued_work`
 
 Repo policy and protected-worktree configuration come from `mainline.toml`.
 The SQLite store is the durable queue/event state and repo identity layer.
@@ -266,6 +284,12 @@ Stable fields:
 - `submission_status`
 - `outcome`
 - `duration_ms`
+- `queue_state`
+- `queue_length`
+- `has_blocked_submissions`
+- `has_running_publishes`
+- `has_running_submissions`
+- `has_queued_work`
 
 Optional fields:
 
@@ -293,6 +317,12 @@ Failure outcomes are:
 - `failed`
 - `cancelled`
 - `timed_out`
+
+`queue_state` is the same derived headline used by `mq status`.
+
+For machine consumers, prefer the explicit queue booleans to distinguish cases
+like “a publish is actively running while an older submission is separately
+blocked.”
 
 ## `mainlined --json`
 
