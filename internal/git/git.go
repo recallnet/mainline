@@ -59,6 +59,16 @@ type BranchStatus struct {
 	IsProtectedBranch bool   `json:"is_protected_branch"`
 }
 
+// BranchComparison describes how a branch compares to another local branch.
+type BranchComparison struct {
+	BaseBranch    string `json:"base_branch"`
+	Branch        string `json:"branch"`
+	BaseHeadSHA   string `json:"base_head_sha"`
+	BranchHeadSHA string `json:"branch_head_sha"`
+	BehindCount   int    `json:"behind_count"`
+	AheadCount    int    `json:"ahead_count"`
+}
+
 // Worktree describes a git worktree.
 type Worktree struct {
 	Path       string `json:"path"`
@@ -668,6 +678,37 @@ func (e Engine) symmetricDifferenceCounts(leftRef string, rightRef string) (behi
 		return behind, ahead, nil
 	}
 	return 0, 0, fmt.Errorf("parse symmetric difference counts from %q", text)
+}
+
+// CompareBranches reports ahead/behind counts for branch relative to baseBranch.
+func (e Engine) CompareBranches(baseBranch string, branch string) (BranchComparison, error) {
+	repo, err := e.open()
+	if err != nil {
+		return BranchComparison{}, err
+	}
+
+	baseRef, err := repo.Reference(plumbing.NewBranchReferenceName(baseBranch), true)
+	if err != nil {
+		return BranchComparison{}, err
+	}
+	branchRef, err := repo.Reference(plumbing.NewBranchReferenceName(branch), true)
+	if err != nil {
+		return BranchComparison{}, err
+	}
+
+	behind, ahead, err := e.symmetricDifferenceCounts(baseRef.Name().String(), branchRef.Name().String())
+	if err != nil {
+		return BranchComparison{}, err
+	}
+
+	return BranchComparison{
+		BaseBranch:    baseBranch,
+		Branch:        branch,
+		BaseHeadSHA:   baseRef.Hash().String(),
+		BranchHeadSHA: branchRef.Hash().String(),
+		BehindCount:   behind,
+		AheadCount:    ahead,
+	}, nil
 }
 
 // InspectHealth reports doctor-level repository health.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
+	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
 )
 
@@ -29,24 +30,38 @@ type statusCounts struct {
 }
 
 type statusResult struct {
-	RepositoryRoot     string               `json:"repository_root"`
-	StatePath          string               `json:"state_path"`
-	CurrentWorktree    string               `json:"current_worktree"`
-	CurrentBranch      string               `json:"current_branch"`
-	State              string               `json:"state"`
-	QueueLength        int                  `json:"queue_length"`
-	ProtectedBranch    string               `json:"protected_branch"`
-	ProtectedBranchSHA string               `json:"protected_branch_sha"`
-	ProtectedUpstream  git.BranchStatus     `json:"protected_upstream"`
-	ExecutionEstimate  executionEstimate    `json:"execution_estimate"`
-	Counts             statusCounts         `json:"counts"`
-	LatestSubmission   *statusSubmission    `json:"latest_submission,omitempty"`
-	LatestPublish      *statusPublish       `json:"latest_publish,omitempty"`
-	ActiveSubmissions  []statusSubmission   `json:"active_submissions,omitempty"`
-	ActivePublishes    []statusPublish      `json:"active_publishes,omitempty"`
-	IntegrationWorker  *state.LeaseMetadata `json:"integration_worker,omitempty"`
-	PublishWorker      *state.LeaseMetadata `json:"publish_worker,omitempty"`
-	RecentEvents       []state.EventRecord  `json:"recent_events"`
+	RepositoryRoot      string                `json:"repository_root"`
+	StatePath           string                `json:"state_path"`
+	CurrentWorktree     string                `json:"current_worktree"`
+	CurrentBranch       string                `json:"current_branch"`
+	CurrentBranchStatus *git.BranchComparison `json:"current_branch_status,omitempty"`
+	RebaseGuidance      *statusRebaseGuidance `json:"rebase_guidance,omitempty"`
+	State               string                `json:"state"`
+	QueueLength         int                   `json:"queue_length"`
+	ProtectedBranch     string                `json:"protected_branch"`
+	ProtectedBranchSHA  string                `json:"protected_branch_sha"`
+	ProtectedUpstream   git.BranchStatus      `json:"protected_upstream"`
+	ExecutionEstimate   executionEstimate     `json:"execution_estimate"`
+	Counts              statusCounts          `json:"counts"`
+	LatestSubmission    *statusSubmission     `json:"latest_submission,omitempty"`
+	LatestPublish       *statusPublish        `json:"latest_publish,omitempty"`
+	ActiveSubmissions   []statusSubmission    `json:"active_submissions,omitempty"`
+	ActivePublishes     []statusPublish       `json:"active_publishes,omitempty"`
+	IntegrationWorker   *state.LeaseMetadata  `json:"integration_worker,omitempty"`
+	PublishWorker       *state.LeaseMetadata  `json:"publish_worker,omitempty"`
+	RecentEvents        []state.EventRecord   `json:"recent_events"`
+}
+
+type statusRebaseGuidance struct {
+	NeedsRebase                 bool   `json:"needs_rebase"`
+	BaseBranch                  string `json:"base_branch"`
+	BaseSHA                     string `json:"base_sha,omitempty"`
+	BehindProtectedCount        int    `json:"behind_protected_count,omitempty"`
+	AheadProtectedCount         int    `json:"ahead_protected_count,omitempty"`
+	Command                     string `json:"command,omitempty"`
+	Message                     string `json:"message,omitempty"`
+	ProtectedBehindUpstream     bool   `json:"protected_behind_upstream,omitempty"`
+	ProtectedBehindUpstreamHint string `json:"protected_behind_upstream_hint,omitempty"`
 }
 
 type statusSubmission struct {
@@ -269,6 +284,13 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		ActivePublishes:    activePublishes(requests),
 		RecentEvents:       events,
 	}
+	if currentBranch != "(detached)" && currentBranch != "" && currentBranch != cfg.Repo.ProtectedBranch {
+		comparison, compareErr := engine.CompareBranches(cfg.Repo.ProtectedBranch, currentBranch)
+		if compareErr == nil {
+			result.CurrentBranchStatus = &comparison
+			result.RebaseGuidance = buildStatusRebaseGuidance(cfg, comparison, protectedStatus)
+		}
+	}
 	result.State, result.QueueLength = summarizeQueueState(result.Counts)
 	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
 	if metadata, ok := readActiveLease(lockManager, state.IntegrationLock); ok {
@@ -305,6 +327,18 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 		printer.Line("Protected upstream: %s (ahead %d, behind %d)", result.ProtectedUpstream.Upstream, result.ProtectedUpstream.AheadCount, result.ProtectedUpstream.BehindCount)
 	} else {
 		printer.Line("Protected upstream: none")
+	}
+	if result.CurrentBranchStatus != nil {
+		printer.Line("Current branch vs protected: ahead %d, behind %d", result.CurrentBranchStatus.AheadCount, result.CurrentBranchStatus.BehindCount)
+	}
+	if result.RebaseGuidance != nil && result.RebaseGuidance.Message != "" {
+		printer.Line("Rebase guidance: %s", result.RebaseGuidance.Message)
+		if result.RebaseGuidance.Command != "" {
+			printer.Line("Recommended command: %s", result.RebaseGuidance.Command)
+		}
+		if result.RebaseGuidance.ProtectedBehindUpstreamHint != "" {
+			printer.Line("Protected sync hint: %s", result.RebaseGuidance.ProtectedBehindUpstreamHint)
+		}
 	}
 	printer.Line("Queue: submissions queued=%d running=%d blocked=%d failed=%d cancelled=%d | publishes queued=%d running=%d failed=%d cancelled=%d succeeded=%d",
 		result.Counts.QueuedSubmissions,
@@ -411,6 +445,31 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 	}
 
 	return nil
+}
+
+func buildStatusRebaseGuidance(cfg policy.File, comparison git.BranchComparison, protectedStatus git.BranchStatus) *statusRebaseGuidance {
+	guidance := &statusRebaseGuidance{
+		NeedsRebase:          comparison.BehindCount > 0,
+		BaseBranch:           comparison.BaseBranch,
+		BaseSHA:              comparison.BaseHeadSHA,
+		BehindProtectedCount: comparison.BehindCount,
+		AheadProtectedCount:  comparison.AheadCount,
+	}
+	if comparison.BehindCount > 0 {
+		guidance.Command = fmt.Sprintf("git rebase %s", comparison.BaseBranch)
+		upstreamLabel := protectedStatus.Upstream
+		if !protectedStatus.HasUpstream || upstreamLabel == "" {
+			upstreamLabel = comparison.BaseBranch
+		}
+		guidance.Message = fmt.Sprintf("current branch is behind local protected branch %q by %d commit(s); rebase onto local %s, not directly onto %s", comparison.BaseBranch, comparison.BehindCount, comparison.BaseBranch, upstreamLabel)
+		if protectedStatus.HasUpstream && protectedStatus.BehindCount > 0 {
+			guidance.ProtectedBehindUpstream = true
+			guidance.ProtectedBehindUpstreamHint = fmt.Sprintf("local protected branch %q is behind %s by %d commit(s); sync protected %s first, then rebase this branch onto local %s", comparison.BaseBranch, protectedStatus.Upstream, protectedStatus.BehindCount, comparison.BaseBranch, comparison.BaseBranch)
+		}
+		return guidance
+	}
+	guidance.Message = fmt.Sprintf("current branch already includes local protected branch %q", comparison.BaseBranch)
+	return guidance
 }
 
 func readActiveLease(lockManager state.LockManager, domain string) (state.LeaseMetadata, bool) {

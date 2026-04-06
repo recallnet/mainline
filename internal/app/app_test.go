@@ -249,6 +249,86 @@ func TestStatusJSONIncludesOperatorSummaryFields(t *testing.T) {
 	}
 }
 
+func TestStatusJSONIncludesLocalProtectedRebaseGuidance(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-status-rebase")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/status-rebase", featurePath)
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+	writeFileAndCommit(t, repoRoot, "main.txt", "main\n", "main commit")
+
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWD); chdirErr != nil {
+			t.Fatalf("restore cwd: %v", chdirErr)
+		}
+	}()
+	if err := os.Chdir(featurePath); err != nil {
+		t.Fatalf("Chdir(featurePath): %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status", "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var status statusResult
+	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if status.RebaseGuidance == nil || !status.RebaseGuidance.NeedsRebase {
+		t.Fatalf("expected rebase guidance, got %+v", status)
+	}
+	if status.RebaseGuidance.BaseBranch != "main" || status.RebaseGuidance.Command != "git rebase main" {
+		t.Fatalf("expected local main rebase command, got %+v", status.RebaseGuidance)
+	}
+	if status.CurrentBranchStatus == nil || status.CurrentBranchStatus.BehindCount == 0 {
+		t.Fatalf("expected current branch behind local protected branch, got %+v", status.CurrentBranchStatus)
+	}
+}
+
+func TestStatusTextShowsLocalProtectedRebaseGuidance(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-status-rebase-text")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/status-rebase-text", featurePath)
+	writeFileAndCommit(t, featurePath, "feature.txt", "feature\n", "feature commit")
+	writeFileAndCommit(t, repoRoot, "main.txt", "main\n", "main commit")
+
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWD); chdirErr != nil {
+			t.Fatalf("restore cwd: %v", chdirErr)
+		}
+	}()
+	if err := os.Chdir(featurePath); err != nil {
+		t.Fatalf("Chdir(featurePath): %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status"}, newStepPrinter(&stdout), &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	text := stdout.String()
+	if !strings.Contains(text, `Rebase guidance: current branch is behind local protected branch "main"`) {
+		t.Fatalf("expected rebase guidance in text output, got %q", text)
+	}
+	if !strings.Contains(text, "Recommended command: git rebase main") {
+		t.Fatalf("expected local rebase command in text output, got %q", text)
+	}
+}
+
 func TestStatusAndSubmitJSONIncludeRollingExecutionEstimate(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
