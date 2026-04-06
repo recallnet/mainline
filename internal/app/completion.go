@@ -62,7 +62,7 @@ _mainline_completions()
   _init_completion || return
 
   if [[ ${cword} -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo registry" -- "$cur") )
+    COMPREPLY=( $(compgen -W "land submit status confidence run-once wait blocked retry cancel publish logs watch events doctor completion version config repo registry" -- "$cur") )
     return
   fi
 
@@ -102,8 +102,11 @@ _mainline_completions()
     wait)
       COMPREPLY=( $(compgen -W "--repo --submission --for --json --timeout --poll-interval" -- "$cur") )
       ;;
+    blocked)
+      COMPREPLY=( $(compgen -W "--repo --json" -- "$cur") )
+      ;;
     retry|cancel)
-      COMPREPLY=( $(compgen -W "--repo --submission --publish" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --submission --publish --all-safe --blocked --json" -- "$cur") )
       ;;
     logs)
       COMPREPLY=( $(compgen -W "--repo --json --lifecycle --follow --limit --poll-interval --idle-exit" -- "$cur") )
@@ -167,11 +170,12 @@ _mainline() {
     'submit:queue a source worktree'
     'land:submit and wait for integrate plus publish'
     'wait:wait on a durable submission id'
+    'blocked:list blocked submissions and recovery actions'
     'status:show queue and publish status'
     'confidence:show promotion confidence and evidence'
     'run-once:run one integration or publish cycle'
     'retry:requeue a blocked, failed, or cancelled item'
-    'cancel:cancel a queued or failed item'
+    'cancel:cancel a queued, blocked, or failed item'
     'publish:queue publish of the protected tip'
     'logs:show durable queue history'
     'watch:refresh queue status continuously'
@@ -232,8 +236,12 @@ _mainline() {
       _arguments '--repo[repository path]:path:_files -/' '--submission[submission id]:id:' '--for[wait target]:target:(integrated landed)' '--json[json output]' '--timeout[maximum wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
       return
       ;;
+    blocked)
+      _arguments '--repo[repository path]:path:_files -/' '--json[json output]'
+      return
+      ;;
     retry|cancel)
-      _arguments '--repo[repository path]:path:_files -/' '--submission[integration submission id]:id:' '--publish[publish request id]:id:'
+      _arguments '--repo[repository path]:path:_files -/' '--submission[integration submission id]:id:' '--publish[publish request id]:id:' '--all-safe[operate on all safe blocked submissions]' '--blocked[operate on all blocked submissions]' '--json[json output]'
       return
       ;;
     logs)

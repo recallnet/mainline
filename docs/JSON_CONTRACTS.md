@@ -324,6 +324,28 @@ For machine consumers, prefer the explicit queue booleans to distinguish cases
 like “a publish is actively running while an older submission is separately
 blocked.”
 
+## `mq blocked --json`
+
+Returns one JSON object with:
+
+- `repository_root`
+- `count`
+- `safe_retry_command`
+- `cancel_all_command`
+- `submissions`
+
+Each entry in `submissions` uses the same blocked-submission fields documented
+under `mq status --json`, including:
+
+- `blocked_reason`
+- `conflict_files`
+- `protected_tip_sha`
+- `retry_hint`
+- `next_actions`
+
+`safe_retry_command` and `cancel_all_command` are the canonical bulk operator
+commands for the current repo.
+
 ## `mainlined --json`
 
 Returns newline-delimited JSON log records.

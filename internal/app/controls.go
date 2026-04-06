@@ -6,10 +6,75 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/state"
 )
+
+func runBlocked(args []string, stdout *stepPrinter, stderr io.Writer) error {
+	fs := flag.NewFlagSet(currentCLIProgramName()+" blocked", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	setFlagUsage(fs, fmt.Sprintf(`Usage:
+  %s blocked [flags]
+
+List blocked submissions with their exact recovery commands.
+
+Examples:
+  mq blocked --repo /path/to/repo-root
+  mq blocked --repo /path/to/repo-root --json
+
+Flags:
+`, currentCLIProgramName()))
+
+	var repoPath string
+	var asJSON bool
+	fs.StringVar(&repoPath, "repo", ".", "repository path")
+	fs.BoolVar(&asJSON, "json", false, "output json")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	result, err := collectBlocked(repoPath)
+	if err != nil {
+		return err
+	}
+	if asJSON {
+		encoder := json.NewEncoder(stdout.Raw())
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(result)
+	}
+
+	printer := stdout
+	printer.Section("Blocked submissions")
+	printer.Line("Count: %d", result.Count)
+	printer.Line("Retry all safe: %s", result.SafeRetryCommand)
+	printer.Line("Cancel all blocked: %s", result.CancelAllCommand)
+	if len(result.Submissions) == 0 {
+		printer.Line("No blocked submissions.")
+		return nil
+	}
+	for _, submission := range result.Submissions {
+		printer.Section("Submission %d", submission.ID)
+		printer.Line("Branch: %s", submission.BranchName)
+		printer.Line("Source worktree: %s", submission.SourceWorktree)
+		printer.Line("Blocked reason: %s", submission.BlockedReason)
+		if submission.LastError != "" {
+			printer.Line("Error: %s", submission.LastError)
+		}
+		if len(submission.ConflictFiles) > 0 {
+			printer.Line("Conflict files: %s", strings.Join(submission.ConflictFiles, ", "))
+		}
+		for _, action := range submission.NextActions {
+			if action.Command != "" {
+				printer.Line("%s: %s", action.Label, action.Command)
+				continue
+			}
+			printer.Line("%s", action.Label)
+		}
+	}
+	return nil
+}
 
 func runRetry(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	return runControlAction("retry", args, stdout, stderr)
@@ -37,18 +102,41 @@ Flags:
 	var repoPath string
 	var submissionID int64
 	var publishID int64
+	var allSafe bool
+	var blockedOnly bool
 	var asJSON bool
 
 	fs.StringVar(&repoPath, "repo", ".", "repository path")
 	fs.Int64Var(&submissionID, "submission", 0, "integration submission id")
 	fs.Int64Var(&publishID, "publish", 0, "publish request id")
+	fs.BoolVar(&allSafe, "all-safe", false, "operate on all safe blocked submissions")
+	fs.BoolVar(&blockedOnly, "blocked", false, "operate on all blocked submissions")
 	fs.BoolVar(&asJSON, "json", false, "output json")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if (submissionID == 0 && publishID == 0) || (submissionID != 0 && publishID != 0) {
-		return fmt.Errorf("exactly one of --submission or --publish is required")
+	targetCount := 0
+	if submissionID != 0 {
+		targetCount++
+	}
+	if publishID != 0 {
+		targetCount++
+	}
+	if allSafe {
+		targetCount++
+	}
+	if blockedOnly {
+		targetCount++
+	}
+	if targetCount != 1 {
+		return fmt.Errorf("exactly one target is required: --submission, --publish, --all-safe, or --blocked")
+	}
+	if action == "retry" && blockedOnly {
+		return fmt.Errorf("--blocked is only supported with cancel; use --all-safe for bulk safe retries")
+	}
+	if action == "cancel" && allSafe {
+		return fmt.Errorf("--all-safe is only supported with retry; use --blocked for bulk blocked cancellation")
 	}
 
 	_, _, _, repoRecord, store, err := loadRepoContext(repoPath)
@@ -57,6 +145,12 @@ Flags:
 	}
 	ctx := context.Background()
 
+	if allSafe {
+		return controlBlockedBatch(ctx, action, repoRecord.MainWorktree, store, repoRecord.ID, true, stdout, asJSON)
+	}
+	if blockedOnly {
+		return controlBlockedBatch(ctx, action, repoRecord.MainWorktree, store, repoRecord.ID, false, stdout, asJSON)
+	}
 	if submissionID != 0 {
 		return controlSubmission(ctx, action, repoRecord.MainWorktree, store, repoRecord.ID, submissionID, stdout, asJSON)
 	}
@@ -73,6 +167,24 @@ type controlResult struct {
 	Status         string `json:"status"`
 	DrainAttempted bool   `json:"drain_attempted,omitempty"`
 	DrainResult    string `json:"drain_result,omitempty"`
+}
+
+type batchControlResult struct {
+	OK             bool            `json:"ok"`
+	Action         string          `json:"action"`
+	Selector       string          `json:"selector"`
+	Count          int             `json:"count"`
+	Results        []controlResult `json:"results"`
+	DrainAttempted bool            `json:"drain_attempted,omitempty"`
+	DrainResult    string          `json:"drain_result,omitempty"`
+}
+
+type blockedResult struct {
+	RepositoryRoot   string             `json:"repository_root"`
+	Count            int                `json:"count"`
+	SafeRetryCommand string             `json:"safe_retry_command"`
+	CancelAllCommand string             `json:"cancel_all_command"`
+	Submissions      []statusSubmission `json:"submissions"`
 }
 
 func controlSubmission(ctx context.Context, action string, repoPath string, store state.Store, repoID int64, submissionID int64, stdout *stepPrinter, asJSON bool) error {
@@ -303,4 +415,139 @@ func controlPublish(ctx context.Context, action string, repoPath string, store s
 	default:
 		return fmt.Errorf("unknown action %q", action)
 	}
+}
+
+func collectBlocked(repoPath string) (blockedResult, error) {
+	_, _, cfg, repoRecord, store, err := loadRepoContext(repoPath)
+	if err != nil {
+		return blockedResult{}, err
+	}
+	ctx := context.Background()
+	submissions, err := store.ListIntegrationSubmissions(ctx, repoRecord.ID)
+	if err != nil {
+		return blockedResult{}, err
+	}
+	enriched, err := enrichStatusSubmissions(ctx, store, repoRecord.ID, cfg.Repo.MainWorktree, cfg.Repo.ProtectedBranch, submissions)
+	if err != nil {
+		return blockedResult{}, err
+	}
+	var blocked []statusSubmission
+	for _, submission := range enriched {
+		if submission.Status == domain.SubmissionStatusBlocked {
+			blocked = append(blocked, submission)
+		}
+	}
+	return blockedResult{
+		RepositoryRoot:   repoRecord.CanonicalPath,
+		Count:            len(blocked),
+		SafeRetryCommand: fmt.Sprintf("mq retry --repo %s --all-safe", cfg.Repo.MainWorktree),
+		CancelAllCommand: fmt.Sprintf("mq cancel --repo %s --blocked", cfg.Repo.MainWorktree),
+		Submissions:      blocked,
+	}, nil
+}
+
+func controlBlockedBatch(ctx context.Context, action string, repoPath string, store state.Store, repoID int64, safeOnly bool, stdout *stepPrinter, asJSON bool) error {
+	submissions, err := store.ListIntegrationSubmissions(ctx, repoID)
+	if err != nil {
+		return err
+	}
+	var targets []state.IntegrationSubmission
+	for _, submission := range submissions {
+		if submission.Status != domain.SubmissionStatusBlocked {
+			continue
+		}
+		if safeOnly && !isSafeBlockedRetry(ctx, store, repoID, submission.ID) {
+			continue
+		}
+		targets = append(targets, submission)
+	}
+
+	result := batchControlResult{
+		OK:       true,
+		Action:   action,
+		Selector: "blocked",
+		Count:    len(targets),
+	}
+	if safeOnly {
+		result.Selector = "all_safe"
+	}
+
+	for _, submission := range targets {
+		buffer := newStepPrinter(io.Discard)
+		switch action {
+		case "retry":
+			if err := controlSubmission(ctx, action, repoPath, store, repoID, submission.ID, buffer, false); err != nil {
+				return err
+			}
+			refreshed, err := store.GetIntegrationSubmission(ctx, submission.ID)
+			if err != nil {
+				return err
+			}
+			result.Results = append(result.Results, controlResult{
+				OK:       true,
+				Action:   action,
+				ItemType: "submission",
+				ID:       refreshed.ID,
+				Branch:   submissionDisplayRef(refreshed),
+				Status:   string(refreshed.Status),
+			})
+		case "cancel":
+			if err := controlSubmission(ctx, action, repoPath, store, repoID, submission.ID, buffer, false); err != nil {
+				return err
+			}
+			refreshed, err := store.GetIntegrationSubmission(ctx, submission.ID)
+			if err != nil {
+				return err
+			}
+			result.Results = append(result.Results, controlResult{
+				OK:       true,
+				Action:   action,
+				ItemType: "submission",
+				ID:       refreshed.ID,
+				Branch:   submissionDisplayRef(refreshed),
+				Status:   string(refreshed.Status),
+			})
+		default:
+			return fmt.Errorf("unknown action %q", action)
+		}
+	}
+
+	if shouldTryDrainAfterMutation() && len(targets) > 0 {
+		result.DrainAttempted = true
+		drainResult, drainErr := drainRepoUntilSettled(repoPath)
+		if drainResult != "" {
+			result.DrainResult = drainResult
+		}
+		if drainErr != nil {
+			return drainErr
+		}
+	}
+
+	if asJSON {
+		return json.NewEncoder(stdout.Raw()).Encode(result)
+	}
+	printer := stdout
+	switch action {
+	case "retry":
+		printer.Section("Retried blocked submissions")
+	case "cancel":
+		printer.Section("Cancelled blocked submissions")
+	}
+	printer.Line("Selector: %s", result.Selector)
+	printer.Line("Count: %d", result.Count)
+	for _, item := range result.Results {
+		printer.Line("#%d %s (%s)", item.ID, item.Branch, item.Status)
+	}
+	if result.DrainResult != "" {
+		printer.Line("Drain result: %s", result.DrainResult)
+	}
+	return nil
+}
+
+func isSafeBlockedRetry(ctx context.Context, store state.Store, repoID int64, submissionID int64) bool {
+	details, err := latestBlockedSubmissionDetails(ctx, store, repoID, submissionID)
+	if err != nil {
+		return false
+	}
+	return details.BlockedReason == domain.BlockedReasonCheckTimeout
 }

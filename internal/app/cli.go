@@ -73,6 +73,7 @@ func newCLICommandTree(programName string, stdout *stepPrinter, stderr io.Writer
 		newLegacyCommand("confidence", "summarize evidence and promotion gates", true, stdout, stderr, runConfidence),
 		newLegacyCommand("run-once", "run one integration or publish cycle", true, stdout, stderr, runRunOnce),
 		newLegacyCommand("wait", "wait on a submission id for integration or landed outcome", true, stdout, stderr, runWait),
+		newLegacyCommand("blocked", "list blocked submissions and recovery actions", true, stdout, stderr, runBlocked),
 		newLegacyCommand("retry", "requeue a blocked, failed, or cancelled item", false, stdout, stderr, runRetry),
 		newLegacyCommand("cancel", "cancel a queued, blocked, or failed item", false, stdout, stderr, runCancel),
 		newLegacyCommand("publish", "queue publish of the protected tip", true, stdout, stderr, runPublish),
@@ -213,6 +214,7 @@ Commands:
   confidence    summarize evidence and promotion gates
   run-once      run one integration or publish cycle
   wait          wait on a submission id for integration or landed outcome
+  blocked       list blocked submissions and recovery actions
   retry         requeue a blocked, failed, or cancelled item
   cancel        cancel a queued, blocked, or failed item
   publish       queue publish of the protected tip

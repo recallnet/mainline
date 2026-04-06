@@ -211,11 +211,25 @@ If the repo has `[integration].MaxQueueDepth` set, `mq submit` will fail once th
 If a queue item needs operator intervention:
 
 ```bash
+mq blocked --repo /path/to/main --json
+mq retry --repo /path/to/main --all-safe --json
+mq cancel --repo /path/to/main --blocked --json
 mq cancel --repo /path/to/main --submission 17
 mq retry --repo /path/to/main --submission 17
 mq cancel --repo /path/to/main --publish 4
 mq retry --repo /path/to/main --publish 4
 ```
+
+Use `mq blocked` as the primary blocked-submission operator surface. It lists
+blocked submissions, their recovery commands, and the exact `retry` / `cancel`
+commands for each item.
+
+`mq retry --all-safe` is intentionally conservative: it only retries blocked
+submissions whose last blocked reason is currently considered safe to retry
+without human branch surgery.
+
+`mq cancel --blocked` bulk-cancels blocked submissions when they are obsolete
+and you want to clear them out of the active queue surface.
 
 `mq status --json` now projects publish correlation back onto succeeded
 submissions through `publish_request_id`, `publish_status`, and `outcome`, so a

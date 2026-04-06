@@ -1196,8 +1196,8 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "complete -F _mainline_completions mainline") {
 		t.Fatalf("expected completion script output, got %q", output)
 	}
-	if !strings.Contains(output, "land submit status confidence run-once wait retry cancel publish") {
-		t.Fatalf("expected completion script to include wait and confidence, got %q", output)
+	if !strings.Contains(output, "land submit status confidence run-once wait blocked retry cancel publish") {
+		t.Fatalf("expected completion script to include blocked workflow and confidence, got %q", output)
 	}
 	if !strings.Contains(output, "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --check --check-only --queue-only --wait --for --timeout --poll-interval") {
 		t.Fatalf("expected submit completion flags, got %q", output)
