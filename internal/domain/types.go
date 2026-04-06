@@ -43,6 +43,7 @@ type BlockedReason string
 const (
 	BlockedReasonCheckTimeout   BlockedReason = "check_timeout"
 	BlockedReasonRebaseConflict BlockedReason = "rebase_conflict"
+	BlockedReasonRebaseEmpty    BlockedReason = "rebase_empty"
 )
 
 type ItemType string

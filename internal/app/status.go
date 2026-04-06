@@ -74,6 +74,9 @@ type statusSubmission struct {
 	ConflictFiles         []string                 `json:"conflict_files,omitempty"`
 	ProtectedTipSHA       string                   `json:"protected_tip_sha,omitempty"`
 	RetryHint             string                   `json:"retry_hint,omitempty"`
+	PublishFailureCause   string                   `json:"publish_failure_cause,omitempty"`
+	PublishFailureSummary string                   `json:"publish_failure_summary,omitempty"`
+	PublishFailureError   string                   `json:"publish_failure_error,omitempty"`
 }
 
 type blockedSubmissionDetails struct {
@@ -242,7 +245,7 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		return statusResult{}, err
 	}
 
-	enrichedSubmissions, err := enrichStatusSubmissions(ctx, store, repoRecord.ID, submissions)
+	enrichedSubmissions, err := enrichStatusSubmissions(ctx, store, repoRecord.ID, cfg.Repo.MainWorktree, submissions)
 	if err != nil {
 		return statusResult{}, err
 	}
@@ -343,6 +346,9 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 		if result.LatestSubmission.RetryHint != "" {
 			printer.Line("retry hint: %s", result.LatestSubmission.RetryHint)
 		}
+		if result.LatestSubmission.PublishFailureSummary != "" {
+			printer.Line("publish failure: %s", result.LatestSubmission.PublishFailureSummary)
+		}
 		if result.LatestSubmission.QueuePosition > 0 && result.LatestSubmission.EstimatedCompletionMS > 0 {
 			printer.Line("queue position: %d", result.LatestSubmission.QueuePosition)
 			printer.Line("estimated completion: %s (%s basis)",
@@ -429,7 +435,8 @@ func activeSubmissions(submissions []statusSubmission) []statusSubmission {
 	return active
 }
 
-func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int64, submissions []state.IntegrationSubmission) ([]statusSubmission, error) {
+func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int64, mainWorktree string, submissions []state.IntegrationSubmission) ([]statusSubmission, error) {
+	mainEngine := git.NewEngine(mainWorktree)
 	enriched := make([]statusSubmission, 0, len(submissions))
 	for _, submission := range submissions {
 		item := newStatusSubmission(submission)
@@ -444,7 +451,7 @@ func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int6
 			item.RetryHint = details.RetryHint
 		}
 		if submission.Status == domain.SubmissionStatusSucceeded {
-			info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission)
+			info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission, mainEngine)
 			if err != nil {
 				return nil, err
 			}
@@ -452,6 +459,12 @@ func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int6
 			item.PublishRequestID = info.PublishRequestID
 			item.PublishStatus = domain.PublishStatus(info.PublishStatus)
 			item.Outcome = info.Outcome
+			item.PublishFailureCause = info.Failure.Cause
+			item.PublishFailureSummary = info.Failure.Summary
+			item.PublishFailureError = info.Failure.Error
+			if item.RetryHint == "" {
+				item.RetryHint = info.Failure.RetryHint
+			}
 		}
 		enriched = append(enriched, item)
 	}

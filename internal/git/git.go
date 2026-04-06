@@ -20,6 +20,7 @@ import (
 const noUpstream = "(no upstream)"
 
 var ErrRebaseConflict = errors.New("git rebase reported conflicts")
+var ErrRebaseEmpty = errors.New("git rebase stopped on an empty commit")
 var ErrFastForwardRejected = errors.New("fast-forward update was rejected")
 var ErrPushRejected = errors.New("git push was rejected")
 var ErrPushInterrupted = errors.New("git push was interrupted")
@@ -454,9 +455,12 @@ func (e Engine) ResetHardClean(worktreePath string, targetRef string) error {
 
 // RebaseCurrentBranch rebases the checked-out branch in a worktree onto upstreamRef.
 func (e Engine) RebaseCurrentBranch(worktreePath string, upstreamRef string) error {
-	output, err := e.runGit(worktreePath, "rebase", upstreamRef)
+	output, err := e.runGit(worktreePath, "rebase", "--reapply-cherry-picks", "--empty=stop", upstreamRef)
 	if err == nil {
 		return nil
+	}
+	if strings.Contains(output, "previous cherry-pick is now empty") || strings.Contains(output, "nothing to commit, working tree clean") {
+		return fmt.Errorf("%w: %s", ErrRebaseEmpty, strings.TrimSpace(output))
 	}
 	if strings.Contains(output, "CONFLICT") || strings.Contains(output, "Resolve all conflicts manually") {
 		return fmt.Errorf("%w: %s", ErrRebaseConflict, strings.TrimSpace(output))

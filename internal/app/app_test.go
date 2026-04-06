@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
@@ -417,6 +418,93 @@ func TestWaitBySubmissionIDReturnsFailedWhenCorrelatedPublishFails(t *testing.T)
 	}
 	if result.Outcome != waitOutcomeFailed || result.PublishStatus != "failed" || result.PublishRequestID == 0 {
 		t.Fatalf("expected failed landed wait with failed publish correlation, got %+v", result)
+	}
+}
+
+func TestWaitAndStatusClassifyFailedPublishWithDirtyProtectedRoot(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishMode(t, repoRoot, "auto")
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "1")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-wait-dirty-root")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/wait-dirty-root", featurePath)
+	writeFileAndCommit(t, featurePath, "wait.txt", "wait\n", "wait feature")
+	submitBranch(t, featurePath)
+	runOnce(t, repoRoot)
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(submissions) != 1 || len(requests) != 1 {
+		t.Fatalf("expected one submission and one publish request, got %+v %+v", submissions, requests)
+	}
+	if _, err := store.UpdatePublishRequestStatus(context.Background(), requests[0].ID, domain.PublishStatusFailed, sql.NullInt64{}); err != nil {
+		t.Fatalf("UpdatePublishRequestStatus: %v", err)
+	}
+	if err := appendStateEvent(context.Background(), store, state.EventRecord{
+		RepoID:    repoRecord.ID,
+		ItemType:  domain.ItemTypePublishRequest,
+		ItemID:    state.NullInt64(requests[0].ID),
+		EventType: domain.EventTypePublishFailed,
+		Payload: mustJSON(map[string]string{
+			"target_sha": requests[0].TargetSHA,
+			"error":      "git push was rejected: hook failed",
+		}),
+	}); err != nil {
+		t.Fatalf("appendStateEvent: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "dirty-root.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile dirty-root.txt: %v", err)
+	}
+
+	var waitOut bytes.Buffer
+	var waitErr bytes.Buffer
+	err = runCLI([]string{"wait", "--repo", repoRoot, "--submission", strconv.FormatInt(submissions[0].ID, 10), "--for", "landed", "--json", "--timeout", "1s"}, newStepPrinter(&waitOut), &waitErr)
+	if err == nil {
+		t.Fatalf("expected landed wait to fail")
+	}
+
+	var waitResult submissionWaitResult
+	if err := json.Unmarshal(waitOut.Bytes(), &waitResult); err != nil {
+		t.Fatalf("Unmarshal wait: %v", err)
+	}
+	if waitResult.PublishFailureCause != "protected_root_dirty" {
+		t.Fatalf("expected protected_root_dirty cause, got %+v", waitResult)
+	}
+	if waitResult.ResubmitRequired {
+		t.Fatalf("expected resubmit_required=false, got %+v", waitResult)
+	}
+	if !strings.Contains(waitResult.Error, "protected root checkout is dirty") {
+		t.Fatalf("expected dirty-root error, got %+v", waitResult)
+	}
+
+	var statusOut bytes.Buffer
+	var statusErr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, newStepPrinter(&statusOut), &statusErr); err != nil {
+		t.Fatalf("runCLI status returned error: %v", err)
+	}
+
+	var statusResult statusResult
+	if err := json.Unmarshal(statusOut.Bytes(), &statusResult); err != nil {
+		t.Fatalf("Unmarshal status: %v", err)
+	}
+	if statusResult.LatestSubmission == nil || statusResult.LatestSubmission.PublishFailureCause != "protected_root_dirty" {
+		t.Fatalf("expected status publish failure classification, got %+v", statusResult.LatestSubmission)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/recallnet/mainline/internal/domain"
+	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
 )
@@ -24,6 +25,7 @@ type executionEstimate struct {
 
 func collectExecutionEstimate(ctx context.Context, store state.Store, repoID int64, cfg policy.File, submissions []state.IntegrationSubmission) (executionEstimate, error) {
 	cutoff := time.Now().UTC().Add(-executionEstimateWindow)
+	mainEngine := git.NewEngine(cfg.Repo.MainWorktree)
 	var integrationDurations []int64
 	var landedDurations []int64
 
@@ -42,7 +44,7 @@ func collectExecutionEstimate(ctx context.Context, store state.Store, repoID int
 			integrationDurations = append(integrationDurations, succeededAt.Sub(startedAt).Milliseconds())
 		}
 
-		info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission)
+		info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission, mainEngine)
 		if err != nil {
 			return executionEstimate{}, err
 		}

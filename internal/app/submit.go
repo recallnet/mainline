@@ -97,6 +97,11 @@ type submitResult struct {
 	DurationMS            int64                    `json:"duration_ms,omitempty"`
 	DrainResult           string                   `json:"drain_result,omitempty"`
 	LastWorkerResult      string                   `json:"last_worker_result,omitempty"`
+	PublishFailureCause   string                   `json:"publish_failure_cause,omitempty"`
+	PublishFailureSummary string                   `json:"publish_failure_summary,omitempty"`
+	PublishFailureError   string                   `json:"publish_failure_error,omitempty"`
+	RetryHint             string                   `json:"retry_hint,omitempty"`
+	ResubmitRequired      bool                     `json:"resubmit_required,omitempty"`
 	ErrorCode             string                   `json:"error_code,omitempty"`
 	Error                 string                   `json:"error,omitempty"`
 }
@@ -356,11 +361,16 @@ Flags:
 			if loadErr == nil {
 				result.SubmissionStatus = submission.Status
 				if submission.Status == domain.SubmissionStatusSucceeded {
-					info, infoErr := resolveSubmissionPublishInfo(context.Background(), queued.Store, queued.RepoRecord.ID, submission)
+					info, infoErr := resolveSubmissionPublishInfo(context.Background(), queued.Store, queued.RepoRecord.ID, submission, git.NewEngine(queued.Config.Repo.MainWorktree))
 					if infoErr == nil {
 						result.PublishRequestID = info.PublishRequestID
 						result.PublishStatus = domain.PublishStatus(info.PublishStatus)
 						result.Outcome = info.Outcome
+						result.PublishFailureCause = info.Failure.Cause
+						result.PublishFailureSummary = info.Failure.Summary
+						result.PublishFailureError = info.Failure.Error
+						result.RetryHint = info.Failure.RetryHint
+						result.ResubmitRequired = info.Failure.ResubmitRequired
 					}
 					if result.Outcome == "" {
 						result.Outcome = submissionOutcomeIntegrated

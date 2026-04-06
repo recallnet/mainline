@@ -144,6 +144,23 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 				},
 			)
 		}
+		if errors.Is(err, git.ErrRebaseEmpty) {
+			return blockIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission.ID, syncResult,
+				fmt.Errorf("rebase stopped in %s because a queued commit became empty on top of %s; inspect the source worktree and resubmit if more changes are needed", submission.SourceWorktree, cfg.Repo.ProtectedBranch),
+				map[string]any{
+					"branch":             submissionDisplayRef(submission),
+					"source_ref":         submission.SourceRef,
+					"ref_kind":           submission.RefKind,
+					"blocked_reason":     domain.BlockedReasonRebaseEmpty,
+					"protected_tip_sha":  protectedTipSHA,
+					"retry_hint":         "inspect-empty-rebase-then-resubmit",
+					"retry_recommended":  false,
+					"source_worktree":    submission.SourceWorktree,
+					"protected_branch":   cfg.Repo.ProtectedBranch,
+					"protected_upstream": syncResult.Upstream,
+				},
+			)
+		}
 		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, err)
 	}
 

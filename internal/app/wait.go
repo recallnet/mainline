@@ -49,22 +49,27 @@ const (
 )
 
 type submissionWaitResult struct {
-	SubmissionID     int64                   `json:"submission_id"`
-	Branch           string                  `json:"branch"`
-	SourceRef        string                  `json:"source_ref,omitempty"`
-	RefKind          domain.RefKind          `json:"ref_kind,omitempty"`
-	SourceWorktree   string                  `json:"source_worktree"`
-	SourceSHA        string                  `json:"source_sha"`
-	RepositoryRoot   string                  `json:"repository_root"`
-	ProtectedBranch  string                  `json:"protected_branch"`
-	ProtectedSHA     string                  `json:"protected_sha,omitempty"`
-	SubmissionStatus domain.SubmissionStatus `json:"submission_status"`
-	PublishRequestID int64                   `json:"publish_request_id,omitempty"`
-	PublishStatus    domain.PublishStatus    `json:"publish_status,omitempty"`
-	Outcome          waitOutcome             `json:"outcome"`
-	DurationMS       int64                   `json:"duration_ms"`
-	LastWorkerResult string                  `json:"last_worker_result,omitempty"`
-	Error            string                  `json:"error,omitempty"`
+	SubmissionID          int64                   `json:"submission_id"`
+	Branch                string                  `json:"branch"`
+	SourceRef             string                  `json:"source_ref,omitempty"`
+	RefKind               domain.RefKind          `json:"ref_kind,omitempty"`
+	SourceWorktree        string                  `json:"source_worktree"`
+	SourceSHA             string                  `json:"source_sha"`
+	RepositoryRoot        string                  `json:"repository_root"`
+	ProtectedBranch       string                  `json:"protected_branch"`
+	ProtectedSHA          string                  `json:"protected_sha,omitempty"`
+	SubmissionStatus      domain.SubmissionStatus `json:"submission_status"`
+	PublishRequestID      int64                   `json:"publish_request_id,omitempty"`
+	PublishStatus         domain.PublishStatus    `json:"publish_status,omitempty"`
+	Outcome               waitOutcome             `json:"outcome"`
+	DurationMS            int64                   `json:"duration_ms"`
+	LastWorkerResult      string                  `json:"last_worker_result,omitempty"`
+	PublishFailureCause   string                  `json:"publish_failure_cause,omitempty"`
+	PublishFailureSummary string                  `json:"publish_failure_summary,omitempty"`
+	PublishFailureError   string                  `json:"publish_failure_error,omitempty"`
+	RetryHint             string                  `json:"retry_hint,omitempty"`
+	ResubmitRequired      bool                    `json:"resubmit_required,omitempty"`
+	Error                 string                  `json:"error,omitempty"`
 }
 
 func runWait(args []string, stdout *stepPrinter, stderr io.Writer) error {
@@ -161,6 +166,12 @@ Flags:
 	if result.LastWorkerResult != "" {
 		printer.Line("Last worker result: %s", result.LastWorkerResult)
 	}
+	if result.PublishFailureSummary != "" {
+		printer.Line("Publish failure: %s", result.PublishFailureSummary)
+	}
+	if result.RetryHint != "" {
+		printer.Line("Retry hint: %s", result.RetryHint)
+	}
 	if result.Error != "" {
 		printer.Warning("Error: %s", result.Error)
 	}
@@ -214,7 +225,7 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 				return result, exitWithCode(1, err)
 			}
 			_ = protectedSHA
-			info, err := resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission)
+			info, err := resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine)
 			if err != nil {
 				result.Outcome = waitOutcomeFailed
 				result.DurationMS = time.Since(start).Milliseconds()
@@ -233,7 +244,7 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 					result.Error = cycleErr.Error()
 					return result, cycleErr
 				}
-				info, err = resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission)
+				info, err = resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine)
 				if err != nil {
 					result.Outcome = waitOutcomeFailed
 					result.DurationMS = time.Since(start).Milliseconds()
@@ -376,7 +387,7 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 			}
 			result.ProtectedSHA = protectedSHA
 
-			info, err := resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission)
+			info, err := resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine)
 			if err != nil {
 				result.DurationMS = time.Since(start).Milliseconds()
 				result.Error = err.Error()
@@ -387,6 +398,11 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 			}
 			result.PublishRequestID = info.PublishRequestID
 			result.PublishStatus = domain.PublishStatus(info.PublishStatus)
+			result.PublishFailureCause = info.Failure.Cause
+			result.PublishFailureSummary = info.Failure.Summary
+			result.PublishFailureError = info.Failure.Error
+			result.RetryHint = info.Failure.RetryHint
+			result.ResubmitRequired = info.Failure.ResubmitRequired
 
 			if target == waitTargetIntegrated && queued.Config.Publish.Mode == "auto" && info.PublishRequestID != 0 && info.PublishStatus == string(domain.PublishStatusQueued) {
 				cycleResult, cycleErr := runOneCycle(queued.Config.Repo.MainWorktree)
@@ -398,7 +414,7 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 					result.Error = cycleErr.Error()
 					return result, cycleErr
 				}
-				info, err = resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission)
+				info, err = resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine)
 				if err != nil {
 					result.DurationMS = time.Since(start).Milliseconds()
 					result.Error = err.Error()
@@ -409,6 +425,11 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 				}
 				result.PublishRequestID = info.PublishRequestID
 				result.PublishStatus = domain.PublishStatus(info.PublishStatus)
+				result.PublishFailureCause = info.Failure.Cause
+				result.PublishFailureSummary = info.Failure.Summary
+				result.PublishFailureError = info.Failure.Error
+				result.RetryHint = info.Failure.RetryHint
+				result.ResubmitRequired = info.Failure.ResubmitRequired
 				if info.Outcome == submissionOutcomeLanded {
 					result.Outcome = waitOutcome("landed")
 					result.DurationMS = time.Since(start).Milliseconds()
@@ -439,8 +460,12 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 			case "failed":
 				result.Outcome = waitOutcomeFailed
 				result.DurationMS = time.Since(start).Milliseconds()
-				result.Error = fmt.Sprintf("publish request %d failed", info.PublishRequestID)
-				return result, exitWithCode(1, fmt.Errorf("publish request %d failed", info.PublishRequestID))
+				if info.Failure.Summary != "" {
+					result.Error = fmt.Sprintf("publish request %d failed: %s", info.PublishRequestID, info.Failure.Summary)
+				} else {
+					result.Error = fmt.Sprintf("publish request %d failed", info.PublishRequestID)
+				}
+				return result, exitWithCode(1, fmt.Errorf("%s", result.Error))
 			case "cancelled":
 				result.Outcome = waitOutcomeCancelled
 				result.DurationMS = time.Since(start).Milliseconds()

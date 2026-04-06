@@ -2,6 +2,7 @@ package git
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -185,11 +186,52 @@ func TestWorktreeIsCleanStillHonorsAstrochickenOverride(t *testing.T) {
 	}
 }
 
+func TestRebaseCurrentBranchStopsWhenQueuedCommitBecomesEmpty(t *testing.T) {
+	repoRoot := t.TempDir()
+	runGitCommand(t, repoRoot, "git", "init", "-b", "main")
+	runGitCommand(t, repoRoot, "git", "config", "user.name", "Test User")
+	runGitCommand(t, repoRoot, "git", "config", "user.email", "test@example.com")
+	runGitCommand(t, repoRoot, "git", "config", "core.hooksPath", ".git/hooks")
+
+	writeFile(t, filepath.Join(repoRoot, "README.md"), "# test\n")
+	runGitCommand(t, repoRoot, "git", "add", "README.md")
+	runGitCommand(t, repoRoot, "git", "commit", "-m", "initial")
+
+	featureOne := filepath.Join(t.TempDir(), "feature-one")
+	runGitCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/one", featureOne)
+	writeFile(t, filepath.Join(featureOne, "README.md"), "# shared\n")
+	runGitCommand(t, featureOne, "git", "add", "README.md")
+	runGitCommand(t, featureOne, "git", "commit", "-m", "feature one")
+
+	featureTwo := filepath.Join(t.TempDir(), "feature-two")
+	runGitCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/two", featureTwo)
+	writeFile(t, filepath.Join(featureTwo, "README.md"), "# shared\n")
+	runGitCommand(t, featureTwo, "git", "add", "README.md")
+	runGitCommand(t, featureTwo, "git", "commit", "-m", "feature two")
+
+	runGitCommand(t, repoRoot, "git", "merge", "--ff-only", "feature/one")
+
+	engine := NewEngine(repoRoot)
+	err := engine.RebaseCurrentBranch(featureTwo, "main")
+	if !errors.Is(err, ErrRebaseEmpty) {
+		t.Fatalf("expected ErrRebaseEmpty, got %v", err)
+	}
+
+	operation, opErr := engine.InProgressOperation(featureTwo)
+	if opErr != nil {
+		t.Fatalf("InProgressOperation: %v", opErr)
+	}
+	if operation != "rebase" {
+		t.Fatalf("expected rebase in progress, got %q", operation)
+	}
+}
+
 func runGitCommand(t *testing.T, dir string, name string, args ...string) string {
 	t.Helper()
 
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null")
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
