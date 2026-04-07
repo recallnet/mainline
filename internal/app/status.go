@@ -293,6 +293,10 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		return statusResult{}, err
 	}
 	enrichedSubmissions = annotateQueueEstimates(enrichedSubmissions, estimate)
+	queue, err := loadQueueSnapshot(store, repoRecord.ID)
+	if err != nil {
+		return statusResult{}, err
+	}
 
 	result := statusResult{
 		RepositoryRoot:     repoRecord.CanonicalPath,
@@ -304,7 +308,7 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		ProtectedUpstream:  protectedStatus,
 		ExecutionEstimate:  estimate,
 		PublishExecution:   buildPublishExecutionPolicy(cfg),
-		Counts:             summarizeCounts(submissions, requests),
+		Counts:             queue.Counts,
 		ActiveSubmissions:  activeSubmissions(enrichedSubmissions),
 		ActivePublishes:    activePublishes(requests),
 		RecentEvents:       events,
@@ -316,14 +320,13 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 			result.RebaseGuidance = buildStatusRebaseGuidance(cfg, comparison, protectedStatus, layout.WorktreeRoot, currentBranch)
 		}
 	}
-	queue := summarizeQueue(result.Counts)
-	result.State = queue.Headline
-	result.QueueLength = queue.QueueLength
-	result.HasBlockedSubmissions = queue.HasBlockedSubmissions
-	result.HasRunningPublishes = queue.HasRunningPublishes
-	result.HasRunningSubmissions = queue.HasRunningSubmissions
-	result.HasQueuedWork = queue.HasQueuedWork
-	result.QueueSummary = queue
+	result.State = queue.Summary.Headline
+	result.QueueLength = queue.Summary.QueueLength
+	result.HasBlockedSubmissions = queue.Summary.HasBlockedSubmissions
+	result.HasRunningPublishes = queue.Summary.HasRunningPublishes
+	result.HasRunningSubmissions = queue.Summary.HasRunningSubmissions
+	result.HasQueuedWork = queue.Summary.HasQueuedWork
+	result.QueueSummary = queue.Summary
 	result.Alerts = buildStatusAlerts(result.Counts)
 	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
 	if metadata, ok := readActiveLease(lockManager, state.IntegrationLock); ok {

@@ -873,6 +873,12 @@ func TestDoctorJSONListsConcreteUnfinishedQueueItems(t *testing.T) {
 	if strings.Join(result.UnfinishedQueueItems, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("unexpected unfinished queue items:\nwant: %v\ngot:  %v", want, result.UnfinishedQueueItems)
 	}
+	if result.QueueSummary.Headline != "publishing" || result.QueueSummary.QueueLength != 2 {
+		t.Fatalf("expected doctor queue summary to reflect publishing blocked mix, got %+v", result.QueueSummary)
+	}
+	if !result.QueueSummary.HasBlockedSubmissions || !result.QueueSummary.HasRunningPublishes || result.QueueSummary.HasRunningSubmissions || !result.QueueSummary.HasQueuedWork {
+		t.Fatalf("unexpected doctor queue summary flags: %+v", result.QueueSummary)
+	}
 	for _, item := range result.UnfinishedQueueItems {
 		if strings.TrimSpace(item) == "" {
 			t.Fatalf("unexpected blank unfinished queue item in %+v", result.UnfinishedQueueItems)

@@ -527,43 +527,30 @@ func populateIntegrationWaitQueueSummary(store state.Store, repoID int64, result
 	if result == nil {
 		return
 	}
-	summary, ok := loadQueueSummary(store, repoID)
-	if !ok {
+	snapshot, err := loadQueueSnapshot(store, repoID)
+	if err != nil {
 		return
 	}
-	result.QueueState = summary.Headline
-	result.QueueLength = summary.QueueLength
-	result.HasBlockedSubmissions = summary.HasBlockedSubmissions
-	result.HasRunningPublishes = summary.HasRunningPublishes
-	result.HasRunningSubmissions = summary.HasRunningSubmissions
-	result.HasQueuedWork = summary.HasQueuedWork
+	result.QueueState = snapshot.Summary.Headline
+	result.QueueLength = snapshot.Summary.QueueLength
+	result.HasBlockedSubmissions = snapshot.Summary.HasBlockedSubmissions
+	result.HasRunningPublishes = snapshot.Summary.HasRunningPublishes
+	result.HasRunningSubmissions = snapshot.Summary.HasRunningSubmissions
+	result.HasQueuedWork = snapshot.Summary.HasQueuedWork
 }
 
 func populateSubmissionWaitQueueSummary(store state.Store, repoID int64, result *submissionWaitResult) {
 	if result == nil {
 		return
 	}
-	summary, ok := loadQueueSummary(store, repoID)
-	if !ok {
+	snapshot, err := loadQueueSnapshot(store, repoID)
+	if err != nil {
 		return
 	}
-	result.QueueState = summary.Headline
-	result.QueueLength = summary.QueueLength
-	result.HasBlockedSubmissions = summary.HasBlockedSubmissions
-	result.HasRunningPublishes = summary.HasRunningPublishes
-	result.HasRunningSubmissions = summary.HasRunningSubmissions
-	result.HasQueuedWork = summary.HasQueuedWork
-}
-
-func loadQueueSummary(store state.Store, repoID int64) (queueSummary, bool) {
-	ctx := context.Background()
-	submissions, err := store.ListIntegrationSubmissions(ctx, repoID)
-	if err != nil {
-		return queueSummary{}, false
-	}
-	requests, err := store.ListPublishRequests(ctx, repoID)
-	if err != nil {
-		return queueSummary{}, false
-	}
-	return summarizeQueue(summarizeCounts(submissions, requests)), true
+	result.QueueState = snapshot.Summary.Headline
+	result.QueueLength = snapshot.Summary.QueueLength
+	result.HasBlockedSubmissions = snapshot.Summary.HasBlockedSubmissions
+	result.HasRunningPublishes = snapshot.Summary.HasRunningPublishes
+	result.HasRunningSubmissions = snapshot.Summary.HasRunningSubmissions
+	result.HasQueuedWork = snapshot.Summary.HasQueuedWork
 }

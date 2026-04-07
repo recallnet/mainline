@@ -831,16 +831,23 @@ Flags:
 		if record, _, err := ensureRepositoryRecord(ctx, store, repoRoot, cfg); err == nil {
 			repoRecord = record
 			hasRepoRecord = true
-			items, err := store.ListUnfinishedItems(ctx, record.ID)
+			queue, err := loadQueueSnapshot(store, record.ID)
 			if err != nil {
 				return err
 			}
-			report.UnfinishedQueueItems = items
+			report.UnfinishedQueueItems = queue.UnfinishedItems
 		}
 	}
 
 	lockManager := state.NewLockManager(repoRoot, layout.GitDir)
 	result := doctorResult{HealthReport: report, RootCheckout: rootInfo}
+	if hasRepoRecord {
+		queue, err := loadQueueSnapshot(store, repoRecord.ID)
+		if err != nil {
+			return err
+		}
+		result.QueueSummary = queue.Summary
+	}
 	if fix {
 		applied, skipped, err := runDoctorFix(ctx, engine, cfg, lockManager, store, repoRecord, hasRepoRecord)
 		if err != nil {
@@ -858,11 +865,12 @@ Flags:
 		result.HealthReport = report
 		result.RootCheckout = rootInfo
 		if store.Exists() && hasRepoRecord {
-			items, err := store.ListUnfinishedItems(ctx, repoRecord.ID)
+			queue, err := loadQueueSnapshot(store, repoRecord.ID)
 			if err != nil {
 				return err
 			}
-			result.UnfinishedQueueItems = items
+			result.UnfinishedQueueItems = queue.UnfinishedItems
+			result.QueueSummary = queue.Summary
 		}
 	}
 	result.QueueBlocked = !result.ProtectedBranchClean || result.MainWorktreeDetached || (result.MainWorktreeBranch != "" && result.MainWorktreeBranch != result.ProtectedBranch)
@@ -941,6 +949,7 @@ Flags:
 type doctorResult struct {
 	git.HealthReport
 	RootCheckout rootCheckoutInfo `json:"root_checkout,omitempty"`
+	QueueSummary queueSummary     `json:"queue_summary,omitempty"`
 	QueueBlocked bool             `json:"queue_blocked,omitempty"`
 	NextActions  []string         `json:"next_actions,omitempty"`
 	FixesApplied []string         `json:"fixes_applied,omitempty"`
