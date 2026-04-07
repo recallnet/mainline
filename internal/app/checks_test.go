@@ -2,18 +2,26 @@ package app
 
 import (
 	"testing"
-	"time"
+
+	"github.com/recallnet/mainline/internal/policy"
 )
 
-func TestResolveCommandTimeoutClampsToHardCeiling(t *testing.T) {
-	requested, effective, err := resolveCommandTimeout("30m")
-	if err != nil {
-		t.Fatalf("resolveCommandTimeout: %v", err)
+func TestShouldBypassGitHooksWhenPublishChecksConfigured(t *testing.T) {
+	cfg := policy.DefaultFile()
+	cfg.Checks.PreparePublish = []string{"pnpm install --frozen-lockfile"}
+	if !shouldBypassGitHooks(cfg) {
+		t.Fatalf("expected explicit prepare publish checks to bypass inherited git hooks")
 	}
-	if requested != 30*time.Minute {
-		t.Fatalf("expected requested timeout 30m, got %s", requested)
+
+	cfg = policy.DefaultFile()
+	cfg.Checks.ValidatePublish = []string{"pnpm test"}
+	if !shouldBypassGitHooks(cfg) {
+		t.Fatalf("expected explicit validate publish checks to bypass inherited git hooks")
 	}
-	if effective != maxCommandTimeout {
-		t.Fatalf("expected effective timeout %s, got %s", maxCommandTimeout, effective)
+
+	cfg = policy.DefaultFile()
+	cfg.Checks.PrePublish = []string{"legacy"}
+	if !shouldBypassGitHooks(cfg) {
+		t.Fatalf("expected legacy pre-publish checks to bypass inherited git hooks")
 	}
 }

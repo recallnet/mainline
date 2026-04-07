@@ -186,6 +186,47 @@ func TestWorktreeIsCleanStillHonorsAstrochickenOverride(t *testing.T) {
 	}
 }
 
+func TestPushBranchWithNoVerifyBypassesPrePushHook(t *testing.T) {
+	remoteDir := filepath.Join(t.TempDir(), "origin.git")
+	runGitCommand(t, t.TempDir(), "git", "init", "--bare", remoteDir)
+
+	repoRoot := t.TempDir()
+	runGitCommand(t, repoRoot, "git", "init", "-b", "main")
+	runGitCommand(t, repoRoot, "git", "config", "user.name", "Test User")
+	runGitCommand(t, repoRoot, "git", "config", "user.email", "test@example.com")
+	runGitCommand(t, repoRoot, "git", "config", "core.hooksPath", ".git/hooks")
+
+	writeFile(t, filepath.Join(repoRoot, "README.md"), "# test\n")
+	runGitCommand(t, repoRoot, "git", "add", "README.md")
+	runGitCommand(t, repoRoot, "git", "commit", "-m", "initial")
+	runGitCommand(t, repoRoot, "git", "remote", "add", "origin", remoteDir)
+	runGitCommand(t, repoRoot, "git", "push", "-u", "origin", "main")
+
+	hookMarker := filepath.Join(t.TempDir(), "pre-push-ran")
+	hookPath := filepath.Join(repoRoot, ".git", "hooks", "pre-push")
+	writeFile(t, hookPath, "#!/bin/sh\necho hook > "+hookMarker+"\nexit 9\n")
+	if err := os.Chmod(hookPath, 0o755); err != nil {
+		t.Fatalf("Chmod(pre-push): %v", err)
+	}
+
+	writeFile(t, filepath.Join(repoRoot, "second.txt"), "second\n")
+	runGitCommand(t, repoRoot, "git", "add", "second.txt")
+	runGitCommand(t, repoRoot, "git", "commit", "-m", "second")
+	localHead := strings.TrimSpace(runGitCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+
+	if err := NewEngine(repoRoot).PushBranch(repoRoot, "origin", "main", true); err != nil {
+		t.Fatalf("PushBranch: %v", err)
+	}
+
+	if _, err := os.Stat(hookMarker); !os.IsNotExist(err) {
+		t.Fatalf("expected pre-push hook to be bypassed, got %v", err)
+	}
+	remoteHead := strings.TrimSpace(runGitCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+}
+
 func TestRebaseCurrentBranchStopsWhenQueuedCommitBecomesEmpty(t *testing.T) {
 	repoRoot := t.TempDir()
 	runGitCommand(t, repoRoot, "git", "init", "-b", "main")

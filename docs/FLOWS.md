@@ -106,6 +106,9 @@ may leave ignored caches behind, but they must not leave tracked or other
 non-ignored drift; `mq` now fails the publish if prepare commands dirty
 protected `main`. Legacy `[checks].PrePublish` still works for compatibility,
 but new configs should use the explicit prepare/validate split.
+When explicit publish checks are configured, `mq` bypasses inherited local
+`pre-push` hooks for the final push. That keeps protected `main` from being
+mutated by hook side effects and makes `mainline.toml` the single publish gate.
 
 If the repo uses `[publish].Mode = 'auto'` and the caller wants one blocking
 submit call through publish:

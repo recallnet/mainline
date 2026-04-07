@@ -271,6 +271,9 @@ like `pnpm install --frozen-lockfile`. Put read-only publish verification in
 `[checks].ValidatePublish`. Prepare commands run in protected `main`
 immediately before push. They may warm ignored caches, but they must not leave
 tracked or other non-ignored drift behind.
+Once explicit publish checks are configured, `mq` bypasses inherited local
+`pre-push` hooks for the final push. Do not rely on hook side effects in
+protected `main`; put publish-time prep and validation in `mainline.toml`.
 
 ## Review and fix loop
 

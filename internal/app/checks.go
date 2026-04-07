@@ -122,6 +122,9 @@ func resolveCommandTimeout(timeoutSetting string) (time.Duration, time.Duration,
 }
 
 func shouldBypassGitHooks(cfg policy.File) bool {
+	if len(cfg.Checks.PreparePublish) > 0 || len(cfg.Checks.ValidatePublish) > 0 || len(cfg.Checks.PrePublish) > 0 {
+		return true
+	}
 	switch cfg.Repo.HookPolicy {
 	case "replace-with-mainline-checks", "bypass-with-explicit-command":
 		return true

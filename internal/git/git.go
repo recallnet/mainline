@@ -531,6 +531,9 @@ func (e Engine) StartPushBranch(worktreePath string, remote string, branch strin
 	cmd := exec.Command("git", args...)
 	cmd.Dir = filepath.Clean(worktreePath)
 	cmd.SysProcAttr = pushSysProcAttr()
+	if noVerify {
+		cmd.Env = append(os.Environ(), "HUSKY=0")
+	}
 
 	var output bytes.Buffer
 	cmd.Stdout = &output

@@ -74,6 +74,9 @@ instructions.
   mutations. Put read-only publish verification in `[checks].ValidatePublish`.
   Prepare commands may warm ignored caches, but they must not leave tracked or
   other non-ignored drift in protected `main`.
+- Once a repo configures explicit publish checks, `mq` bypasses inherited local
+  `pre-push` hooks for the final push. Treat `mainline.toml` as the supported
+  place for publish-time preparation and validation.
 - Use `mq events --follow --json --lifecycle` only when a controller or operator needs deeper audit/debug notifications than the submission wait path.
 - Use `mq registry prune --json` if stale temp repos or deleted repos are
   polluting the optional global registry.

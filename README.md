@@ -141,6 +141,10 @@ other non-ignored drift in protected `main`; `mq` fails publish if prepare
 commands dirty the protected worktree. Legacy `[checks].PrePublish` still runs,
 but it is now compatibility-only and should be migrated to `PreparePublish` or
 `ValidatePublish`.
+Once a repo configures explicit publish checks, `mq` treats those checks as the
+authoritative publish gate and bypasses inherited local `pre-push` hooks for
+the final `git push`. Keep publish-time preparation and validation in
+`mainline.toml`, not in hook side effects on protected `main`.
 
 If you want to prove that some other process, not `submit`, handled a specific change:
 
