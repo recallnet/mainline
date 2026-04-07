@@ -6,12 +6,6 @@ import (
 	"github.com/recallnet/mainline/internal/state"
 )
 
-type queueSnapshot struct {
-	Counts          statusCounts `json:"counts"`
-	Summary         queueSummary `json:"summary"`
-	UnfinishedItems []string     `json:"unfinished_items"`
-}
-
 func loadQueueSnapshot(store state.Store, repoID int64) (queueSnapshot, error) {
 	ctx := context.Background()
 	submissions, err := store.ListIntegrationSubmissions(ctx, repoID)

@@ -29,15 +29,6 @@ type statusCounts struct {
 	SucceededPublishes   int `json:"succeeded_publishes"`
 }
 
-type queueSummary struct {
-	Headline              string `json:"headline"`
-	QueueLength           int    `json:"queue_length"`
-	HasBlockedSubmissions bool   `json:"has_blocked_submissions"`
-	HasRunningPublishes   bool   `json:"has_running_publishes"`
-	HasRunningSubmissions bool   `json:"has_running_submissions"`
-	HasQueuedWork         bool   `json:"has_queued_work"`
-}
-
 type statusResult struct {
 	RepositoryRoot            string                     `json:"repository_root"`
 	StatePath                 string                     `json:"state_path"`
