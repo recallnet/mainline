@@ -59,6 +59,13 @@ Flags:
 	return nil
 }
 
+func publishCheckStages(checks policy.ChecksConfig) (prepare []string, validate []string) {
+	if len(checks.PreparePublish) == 0 && len(checks.ValidatePublish) == 0 && len(checks.PrePublish) > 0 {
+		return checks.PrePublish, nil
+	}
+	return checks.PreparePublish, checks.ValidatePublish
+}
+
 func runOneCycle(repoPath string) (string, error) {
 	if err := applyAppTestFault("daemon.cycle"); err != nil {
 		return "", err
@@ -227,7 +234,8 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 		return fmt.Sprintf("Superseded older publish requests; latest target is %s", currentProtectedSHA), nil
 	}
 
-	if err := runConfiguredChecks(cfg.Checks.PrePublish, cfg.Repo.MainWorktree, cfg.Checks.CommandTimeout); err != nil {
+	preparePublish, validatePublish := publishCheckStages(cfg.Checks)
+	if err := runConfiguredChecks(preparePublish, cfg.Repo.MainWorktree, cfg.Checks.CommandTimeout); err != nil {
 		if _, updateErr := store.UpdatePublishRequestStatus(ctx, request.ID, "failed", sql.NullInt64{}); updateErr != nil {
 			return "", updateErr
 		}
@@ -243,13 +251,13 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 		}); eventErr != nil {
 			return "", eventErr
 		}
-		return fmt.Sprintf("Failed publish request %d: pre-publish checks failed: %s", request.ID, err.Error()), nil
+		return fmt.Sprintf("Failed publish request %d: publish prepare failed: %s", request.ID, err.Error()), nil
 	}
-	cleanAfterPrePublish, err := mainEngine.WorktreeIsClean(cfg.Repo.MainWorktree)
+	cleanAfterPrepare, err := mainEngine.WorktreeIsClean(cfg.Repo.MainWorktree)
 	if err != nil {
 		return "", err
 	}
-	if !cleanAfterPrePublish {
+	if !cleanAfterPrepare {
 		dirtyPaths, pathsErr := mainEngine.WorktreeDirtyPaths(cfg.Repo.MainWorktree)
 		if pathsErr != nil {
 			return "", pathsErr
@@ -271,6 +279,24 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 			return "", eventErr
 		}
 		return fmt.Sprintf("Failed publish request %d: %s", request.ID, err.Error()), nil
+	}
+	if err := runConfiguredChecks(validatePublish, cfg.Repo.MainWorktree, cfg.Checks.CommandTimeout); err != nil {
+		if _, updateErr := store.UpdatePublishRequestStatus(ctx, request.ID, "failed", sql.NullInt64{}); updateErr != nil {
+			return "", updateErr
+		}
+		if eventErr := appendStateEvent(ctx, store, state.EventRecord{
+			RepoID:    repoRecord.ID,
+			ItemType:  "publish_request",
+			ItemID:    state.NullInt64(request.ID),
+			EventType: "publish.failed",
+			Payload: mustJSON(map[string]string{
+				"target_sha": request.TargetSHA,
+				"error":      fmt.Sprintf("publish validation failed: %s", err.Error()),
+			}),
+		}); eventErr != nil {
+			return "", eventErr
+		}
+		return fmt.Sprintf("Failed publish request %d: publish validation failed: %s", request.ID, err.Error()), nil
 	}
 
 	if err := applyAppTestFault("publish.push"); err != nil {

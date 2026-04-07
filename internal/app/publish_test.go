@@ -280,7 +280,7 @@ func TestRunOncePrePublishChecksFailBeforePush(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadOrDefault: %v", err)
 	}
-	cfg.Checks.PrePublish = []string{"exit 9"}
+	cfg.Checks.ValidatePublish = []string{"exit 9"}
 	if err := policy.SaveFile(repoRoot, cfg); err != nil {
 		t.Fatalf("SaveFile: %v", err)
 	}
@@ -296,8 +296,8 @@ func TestRunOncePrePublishChecksFailBeforePush(t *testing.T) {
 	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
-	if !strings.Contains(runOut.String(), "pre-publish checks failed") {
-		t.Fatalf("expected pre-publish check failure output, got %q", runOut.String())
+	if !strings.Contains(runOut.String(), "publish validation failed") {
+		t.Fatalf("expected publish validation failure output, got %q", runOut.String())
 	}
 
 	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
@@ -320,7 +320,7 @@ func TestRunOncePrePublishAllowsIgnoredCacheWarmup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadOrDefault: %v", err)
 	}
-	cfg.Checks.PrePublish = []string{"mkdir -p .next/cache && printf warm > .next/cache/replay-lab"}
+	cfg.Checks.PreparePublish = []string{"mkdir -p .next/cache && printf warm > .next/cache/replay-lab"}
 	if err := policy.SaveFile(repoRoot, cfg); err != nil {
 		t.Fatalf("SaveFile: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestRunOncePrePublishRejectsTrackedDriftFromPrepareCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadOrDefault: %v", err)
 	}
-	cfg.Checks.PrePublish = []string{"printf drift >> tracked.txt"}
+	cfg.Checks.PreparePublish = []string{"printf drift >> tracked.txt"}
 	if err := policy.SaveFile(repoRoot, cfg); err != nil {
 		t.Fatalf("SaveFile: %v", err)
 	}
@@ -385,6 +385,40 @@ func TestRunOncePrePublishRejectsTrackedDriftFromPrepareCommand(t *testing.T) {
 	}
 	if clean {
 		t.Fatalf("expected tracked drift to remain visible after rejected pre-publish prepare")
+	}
+}
+
+func TestRunOnceLegacyPrePublishConfigStillRuns(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Checks.PrePublish = []string{"exit 9"}
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "configure legacy pre publish check")
+
+	writeFileAndCommit(t, repoRoot, "one.txt", "one\n", "main change one")
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if !strings.Contains(runOut.String(), "publish prepare failed") {
+		t.Fatalf("expected legacy pre-publish config to run as prepare stage, got %q", runOut.String())
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead == localHead {
+		t.Fatalf("expected remote head to remain behind local head %q", localHead)
 	}
 }
 

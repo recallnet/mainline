@@ -95,12 +95,17 @@ For unattended agent repos, set `[publish].Mode = 'auto'`. Otherwise
 updated.
 
 If a repo needs local environment repair or cache warmup after integration and
-before push, configure that in `[checks].PrePublish`. This is the right place
-for commands like `pnpm install --frozen-lockfile` or targeted build-cache
-warmup. Those commands run in the protected worktree immediately before push.
-They may leave ignored caches behind, but they must not leave tracked or other
-non-ignored drift; `mq` now fails the publish if pre-publish commands dirty
-protected `main`.
+before push, configure that in `[checks].PreparePublish`. This is the right
+place for commands like `pnpm install --frozen-lockfile` or targeted build-cache
+warmup.
+
+Put read-only publish-time verification commands in `[checks].ValidatePublish`.
+
+Prepare commands run in the protected worktree immediately before push. They
+may leave ignored caches behind, but they must not leave tracked or other
+non-ignored drift; `mq` now fails the publish if prepare commands dirty
+protected `main`. Legacy `[checks].PrePublish` still works for compatibility,
+but new configs should use the explicit prepare/validate split.
 
 If the repo uses `[publish].Mode = 'auto'` and the caller wants one blocking
 submit call through publish:

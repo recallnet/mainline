@@ -35,9 +35,11 @@ type PublishConfig struct {
 
 // ChecksConfig holds configured shell checks and timeout policy.
 type ChecksConfig struct {
-	PreIntegrate   []string
-	PrePublish     []string
-	CommandTimeout string
+	PreIntegrate    []string
+	PreparePublish  []string
+	ValidatePublish []string
+	PrePublish      []string
+	CommandTimeout  string
 }
 
 // DefaultConfig returns the default milestone-zero policy scaffold.
@@ -63,9 +65,11 @@ func DefaultConfig() Config {
 			InterruptInflight: false,
 		},
 		Checks: ChecksConfig{
-			PreIntegrate:   []string{},
-			PrePublish:     []string{},
-			CommandTimeout: "5m",
+			PreIntegrate:    []string{},
+			PreparePublish:  []string{},
+			ValidatePublish: []string{},
+			PrePublish:      []string{},
+			CommandTimeout:  "5m",
 		},
 	}
 }

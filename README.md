@@ -130,12 +130,17 @@ queue identity and history; it should not be treated as the source of repo
 policy truth.
 
 If a repo needs cache/build preparation after integration and before push, use
-`[checks].PrePublish` in `mainline.toml` instead of relying only on inherited
-`pre-push` hooks. This is the right place for commands like repo-local
-`pnpm install --frozen-lockfile` or cache warmup steps that make push-time
-validation reproducible. Those commands may warm ignored caches, but they must
-not leave tracked or other non-ignored drift in protected `main`; `mq` now
-fails publish if a pre-publish command dirties the protected worktree.
+`[checks].PreparePublish` in `mainline.toml`. This is the right place for
+commands like repo-local `pnpm install --frozen-lockfile` or cache warmup steps
+that make push-time validation reproducible.
+
+Put read-only verification commands in `[checks].ValidatePublish`.
+
+Prepare commands may warm ignored caches, but they must not leave tracked or
+other non-ignored drift in protected `main`; `mq` fails publish if prepare
+commands dirty the protected worktree. Legacy `[checks].PrePublish` still runs,
+but it is now compatibility-only and should be migrated to `PreparePublish` or
+`ValidatePublish`.
 
 If you want to prove that some other process, not `submit`, handled a specific change:
 
