@@ -860,6 +860,8 @@ func TestDaemonProcessesWorkFromBareCloneLinkedWorktree(t *testing.T) {
 	if err := runRepoInit([]string{"--repo", worktreePath}, newStepPrinter(&initOut), &initErr); err != nil {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
+	runTestCommand(t, worktreePath, "git", "add", "mainline.toml")
+	runTestCommand(t, worktreePath, "git", "commit", "-m", "init mainline")
 	featurePath := filepath.Join(t.TempDir(), "bare-feature")
 	runTestCommand(t, worktreePath, "git", "worktree", "add", "-b", "feature/bare-daemon", featurePath)
 	writeFileAndCommit(t, featurePath, "bare.txt", "bare\n", "bare feature")

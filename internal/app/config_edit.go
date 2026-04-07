@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/kballard/go-shellquote"
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
+	"github.com/recallnet/mainline/internal/state"
 )
 
 func runConfigEdit(args []string, stdout *stepPrinter, stderr io.Writer) error {
@@ -47,13 +49,17 @@ Flags:
 	if err != nil {
 		return err
 	}
-	repoRoot := layout.RepositoryRoot
 
 	if err := ensureConfigScaffold(layout); err != nil {
 		return err
 	}
 
-	configPath := policy.ConfigPath(repoRoot)
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	cfgAuthority, err := loadConfigAuthority(context.Background(), layout, store, "")
+	if err != nil {
+		return err
+	}
+	configPath := cfgAuthority.Path
 	printer := stdout
 	if printPath && !asJSON {
 		printer.Line("%s", configPath)
@@ -65,7 +71,7 @@ Flags:
 	}
 
 	cmd := exec.Command(editorCommand[0], append(editorCommand[1:], configPath)...)
-	cmd.Dir = repoRoot
+	cmd.Dir = filepath.Dir(configPath)
 	cmd.Stdin = os.Stdin
 	if asJSON {
 		cmd.Stdout = stderr
@@ -84,7 +90,7 @@ Flags:
 		return encoder.Encode(map[string]any{
 			"ok":              true,
 			"config_path":     configPath,
-			"repository_root": repoRoot,
+			"repository_root": layout.RepositoryRoot,
 			"editor":          editorCommand[0],
 			"printed_path":    printPath,
 		})
@@ -95,8 +101,8 @@ Flags:
 }
 
 func ensureConfigScaffold(layout git.RepositoryLayout) error {
-	repoRoot := layout.RepositoryRoot
-	if _, err := os.Stat(policy.ConfigPath(repoRoot)); err == nil {
+	configRoot := resolveConfigAuthorityRoot(context.Background(), layout, state.Store{}, "")
+	if _, err := os.Stat(policy.ConfigPath(configRoot)); err == nil {
 		return nil
 	} else if !os.IsNotExist(err) {
 		return err
@@ -112,8 +118,8 @@ func ensureConfigScaffold(layout git.RepositoryLayout) error {
 	if currentBranch != "" {
 		cfg.Repo.ProtectedBranch = currentBranch
 	}
-	cfg.Repo.MainWorktree = filepath.Clean(layout.WorktreeRoot)
-	return policy.SaveFile(repoRoot, cfg)
+	cfg.Repo.MainWorktree = canonicalRegistryPath(layout.WorktreeRoot)
+	return saveConfigAuthority(configRoot, cfg)
 }
 
 func resolveEditorCommand(flagValue string) ([]string, error) {

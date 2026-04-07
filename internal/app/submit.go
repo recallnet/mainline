@@ -457,14 +457,12 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		}
 	}
 	repoRoot := layout.RepositoryRoot
-
-	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	cfgAuthority, err := loadConfigAuthority(context.Background(), layout, store, "")
 	if err != nil {
 		return preparedSubmission{}, err
 	}
-	if cfg.Repo.MainWorktree == "" {
-		cfg.Repo.MainWorktree = layout.WorktreeRoot
-	}
+	cfg := cfgAuthority.File
 
 	worktreePath := opts.worktreePath
 	if worktreePath == "" {
@@ -629,7 +627,7 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		}
 	}
 
-	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	store = state.NewStore(state.DefaultPath(layout.GitDir))
 	if !store.Exists() {
 		return preparedSubmission{}, &submitValidationError{
 			Code:    "repository_not_initialized",

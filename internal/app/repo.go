@@ -139,7 +139,8 @@ Flags:
 	cfg.Repo.RemoteName = remote
 	cfg.Repo.MainWorktree = mainWorktree
 
-	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+	configRoot := resolveConfigAuthorityRoot(context.Background(), layout, state.NewStore(state.DefaultPath(layout.GitDir)), mainWorktree)
+	if err := saveConfigAuthority(configRoot, cfg); err != nil {
 		return err
 	}
 
@@ -184,7 +185,7 @@ Flags:
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(map[string]any{
 			"ok":                         true,
-			"config_path":                policy.ConfigPath(repoRoot),
+			"config_path":                policy.ConfigPath(configRoot),
 			"protected_branch":           cfg.Repo.ProtectedBranch,
 			"main_worktree":              cfg.Repo.MainWorktree,
 			"state_path":                 state.DefaultPath(layout.GitDir),
@@ -205,7 +206,7 @@ Flags:
 	}
 
 	printer := stdout
-	printer.Section("Initialized %s", policy.ConfigPath(repoRoot))
+	printer.Section("Initialized %s", policy.ConfigPath(configRoot))
 	printer.Line("Protected branch: %s", cfg.Repo.ProtectedBranch)
 	printer.Line("Main worktree: %s", cfg.Repo.MainWorktree)
 	printer.Line("State path: %s", state.DefaultPath(layout.GitDir))
@@ -321,17 +322,13 @@ Flags:
 	}
 	repoRoot := layout.RepositoryRoot
 
-	cfg, present, err := policy.LoadOrDefault(repoRoot)
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	ctx := context.Background()
+	cfgAuthority, err := loadConfigAuthority(ctx, layout, store, "")
 	if err != nil {
 		return err
 	}
-
-	if cfg.Repo.MainWorktree == "" {
-		cfg.Repo.MainWorktree = layout.WorktreeRoot
-	}
-
-	store := state.NewStore(state.DefaultPath(layout.GitDir))
-	ctx := context.Background()
+	cfg := cfgAuthority.File
 	var record state.RepositoryRecord
 	if store.Exists() {
 		if found, _, err := ensureRepositoryRecord(ctx, store, repoRoot, cfg); err == nil {
@@ -361,8 +358,8 @@ Flags:
 
 	result := repoShowResult{
 		RepositoryRoot: repoRoot,
-		ConfigPresent:  present,
-		ConfigPath:     policy.ConfigPath(repoRoot),
+		ConfigPresent:  cfgAuthority.Present,
+		ConfigPath:     cfgAuthority.Path,
 		Config:         cfg,
 		Worktrees:      worktrees,
 		Branch:         branch,
@@ -445,24 +442,22 @@ Flags:
 		return err
 	}
 	repoRoot := layout.RepositoryRoot
-
-	cfg, present, err := policy.LoadOrDefault(repoRoot)
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	cfgAuthority, err := loadConfigAuthority(context.Background(), layout, store, "")
 	if err != nil {
 		return err
 	}
-	if cfg.Repo.MainWorktree == "" {
-		cfg.Repo.MainWorktree = layout.WorktreeRoot
-	}
+	cfg := cfgAuthority.File
 
 	fixesApplied := []string{}
 	if adoptRoot {
-		if err := adoptRepositoryRoot(repoRoot, layout, &cfg, present); err != nil {
+		if err := adoptRepositoryRoot(repoRoot, layout, cfgAuthority.Root, &cfg, cfgAuthority.Present); err != nil {
 			return err
 		}
 		fixesApplied = append(fixesApplied, fmt.Sprintf("set canonical main worktree to repository root %s", filepath.Clean(layout.RepositoryRoot)))
 	}
 
-	result := buildRepoRootResult(repoRoot, cfg, layout)
+	result := buildRepoRootResult(repoRoot, cfgAuthority.Path, cfg, layout)
 	result.FixesApplied = fixesApplied
 
 	if asJSON {
@@ -500,7 +495,7 @@ Flags:
 	return nil
 }
 
-func adoptRepositoryRoot(repoRoot string, layout git.RepositoryLayout, cfg *policy.File, configPresent bool) error {
+func adoptRepositoryRoot(repoRoot string, layout git.RepositoryLayout, configRoot string, cfg *policy.File, configPresent bool) error {
 	if !configPresent {
 		return fmt.Errorf("repository is not initialized; run `mq repo init --repo %s` before adopting the root checkout", repoRoot)
 	}
@@ -510,13 +505,13 @@ func adoptRepositoryRoot(repoRoot string, layout git.RepositoryLayout, cfg *poli
 		return fmt.Errorf("repository is not initialized; run `mq repo init --repo %s` before adopting the root checkout", repoRoot)
 	}
 
-	result := buildRepoRootResult(repoRoot, *cfg, layout)
+	result := buildRepoRootResult(repoRoot, policy.ConfigPath(configRoot), *cfg, layout)
 	if !result.CanAdoptRoot {
 		return fmt.Errorf("cannot adopt repository root as canonical main worktree yet; run `mq repo root --repo %s --json` and complete the recommended actions first", repoRoot)
 	}
 
 	cfg.Repo.MainWorktree = canonicalRegistryPath(layout.RepositoryRoot)
-	if err := policy.SaveFile(repoRoot, *cfg); err != nil {
+	if err := saveConfigAuthority(configRoot, *cfg); err != nil {
 		return err
 	}
 
@@ -539,14 +534,14 @@ func adoptRepositoryRoot(repoRoot string, layout git.RepositoryLayout, cfg *poli
 	return registerRepo(cfg.Repo.MainWorktree, repoRoot, state.DefaultPath(layout.GitDir))
 }
 
-func buildRepoRootResult(repoRoot string, cfg policy.File, layout git.RepositoryLayout) repoRootResult {
+func buildRepoRootResult(repoRoot string, configPath string, cfg policy.File, layout git.RepositoryLayout) repoRootResult {
 	rootInfo, warnings := inspectCanonicalRootCheckout(cfg, layout)
 	warnings = appendMainWorktreeWarnings(git.NewEngine(layout.WorktreeRoot), cfg, warnings)
 	recommended := recommendedRootActions(repoRoot, cfg, rootInfo)
 	canAdopt := canAdoptRootCheckout(cfg, rootInfo)
 	return repoRootResult{
 		RepositoryRoot:     repoRoot,
-		ConfigPath:         policy.ConfigPath(repoRoot),
+		ConfigPath:         configPath,
 		ProtectedBranch:    cfg.Repo.ProtectedBranch,
 		MainWorktree:       cfg.Repo.MainWorktree,
 		RootCheckout:       rootInfo,
@@ -778,15 +773,12 @@ Flags:
 		return err
 	}
 	repoRoot := layout.RepositoryRoot
-
-	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	cfgAuthority, err := loadConfigAuthority(context.Background(), layout, store, "")
 	if err != nil {
 		return err
 	}
-
-	if cfg.Repo.MainWorktree == "" {
-		cfg.Repo.MainWorktree = layout.WorktreeRoot
-	}
+	cfg := cfgAuthority.File
 
 	engine := git.NewEngine(layout.WorktreeRoot)
 	report, err := engine.InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
@@ -823,7 +815,6 @@ Flags:
 		}
 	}
 
-	store := state.NewStore(state.DefaultPath(layout.GitDir))
 	ctx := context.Background()
 	var repoRecord state.RepositoryRecord
 	var hasRepoRecord bool

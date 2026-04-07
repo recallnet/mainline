@@ -167,14 +167,6 @@ func loadRepoContext(repoPath string) (git.RepositoryLayout, string, policy.File
 	}
 	repoRoot := layout.RepositoryRoot
 
-	cfg, _, err := policy.LoadOrDefault(repoRoot)
-	if err != nil {
-		return git.RepositoryLayout{}, "", policy.File{}, state.RepositoryRecord{}, state.Store{}, err
-	}
-	if cfg.Repo.MainWorktree == "" {
-		cfg.Repo.MainWorktree = layout.WorktreeRoot
-	}
-
 	store := state.NewStore(state.DefaultPath(layout.GitDir))
 	if !store.Exists() {
 		return git.RepositoryLayout{}, "", policy.File{}, state.RepositoryRecord{}, state.Store{}, fmt.Errorf("repository is not initialized; run `mainline repo init` first")
@@ -182,6 +174,12 @@ func loadRepoContext(repoPath string) (git.RepositoryLayout, string, policy.File
 	if err := store.EnsureSchema(context.Background()); err != nil {
 		return git.RepositoryLayout{}, "", policy.File{}, state.RepositoryRecord{}, state.Store{}, err
 	}
+
+	cfgAuthority, err := loadConfigAuthority(context.Background(), layout, store, "")
+	if err != nil {
+		return git.RepositoryLayout{}, "", policy.File{}, state.RepositoryRecord{}, state.Store{}, err
+	}
+	cfg := cfgAuthority.File
 
 	repoRecord, _, err := ensureRepositoryRecord(context.Background(), store, repoRoot, cfg)
 	if err != nil {

@@ -958,8 +958,12 @@ func TestRepoInitFromBareCloneWorktreeUsesSharedStorage(t *testing.T) {
 		t.Fatalf("runRepoInit returned error: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(bareDir, "mainline.toml")); err != nil {
-		t.Fatalf("expected config in bare repo storage: %v", err)
+	if _, err := os.Stat(filepath.Join(worktreePath, "mainline.toml")); err != nil {
+		t.Fatalf("expected config in protected worktree: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(bareDir, "mainline.toml")); !os.IsNotExist(err) {
+		t.Fatalf("expected no config in bare repo storage, got err=%v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(bareDir, "mainline", "state.db")); err != nil {
@@ -1047,6 +1051,76 @@ func TestRepoShowReportsBareStorageTopologyForRootCheckout(t *testing.T) {
 	}
 	if !strings.Contains(joined, "mq repo init --repo") {
 		t.Fatalf("expected explicit bare init guidance, got %#v", result.Warnings)
+	}
+}
+
+func TestRepoShowUsesProtectedWorktreeConfigAuthorityForBareCloneFeatureWorktree(t *testing.T) {
+	bareDir, worktreePath := createBareCloneWorktree(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", worktreePath, "--protected-branch", "main"}, newStepPrinter(&initOut), &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	worktreeCfg, _, err := policy.LoadOrDefault(worktreePath)
+	if err != nil {
+		t.Fatalf("LoadOrDefault(worktreePath): %v", err)
+	}
+	worktreeCfg.Publish.Mode = "auto"
+	if err := policy.SaveFile(worktreePath, worktreeCfg); err != nil {
+		t.Fatalf("SaveFile(worktreePath): %v", err)
+	}
+
+	staleCfg := worktreeCfg
+	staleCfg.Publish.Mode = "manual"
+	if err := policy.SaveFile(bareDir, staleCfg); err != nil {
+		t.Fatalf("SaveFile(bareDir): %v", err)
+	}
+
+	featurePath := filepath.Join(t.TempDir(), "feature-worktree")
+	runTestCommand(t, worktreePath, "git", "worktree", "add", "-b", "feature/config-authority", featurePath, "main")
+
+	var showOut bytes.Buffer
+	var showErr bytes.Buffer
+	if err := runRepoShow([]string{"--repo", featurePath, "--json"}, newStepPrinter(&showOut), &showErr); err != nil {
+		t.Fatalf("runRepoShow returned error: %v", err)
+	}
+
+	var result repoShowResult
+	if err := json.Unmarshal(showOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	wantConfigPath := filepath.Join(canonicalRegistryPath(worktreePath), "mainline.toml")
+	if result.ConfigPath != wantConfigPath {
+		t.Fatalf("expected config path %q, got %q", wantConfigPath, result.ConfigPath)
+	}
+	if result.Config.Publish.Mode != "auto" {
+		t.Fatalf("expected publish mode from protected worktree config, got %+v", result.Config.Publish)
+	}
+}
+
+func TestConfigEditPrintPathUsesProtectedWorktreeConfigAuthorityForBareCloneFeatureWorktree(t *testing.T) {
+	_, worktreePath := createBareCloneWorktree(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", worktreePath, "--protected-branch", "main"}, newStepPrinter(&initOut), &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	featurePath := filepath.Join(t.TempDir(), "feature-edit")
+	runTestCommand(t, worktreePath, "git", "worktree", "add", "-b", "feature/edit-config", featurePath, "main")
+
+	var editOut bytes.Buffer
+	var editErr bytes.Buffer
+	if err := runConfigEdit([]string{"--repo", featurePath, "--print-path", "--editor", "true"}, newStepPrinter(&editOut), &editErr); err != nil {
+		t.Fatalf("runConfigEdit returned error: %v", err)
+	}
+
+	want := filepath.Join(canonicalRegistryPath(worktreePath), "mainline.toml")
+	if !strings.Contains(editOut.String(), want) {
+		t.Fatalf("expected config edit to point at protected worktree config %q, got %q", want, editOut.String())
 	}
 }
 
