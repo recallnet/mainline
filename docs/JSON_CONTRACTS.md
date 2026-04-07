@@ -346,6 +346,38 @@ under `mq status --json`, including:
 `safe_retry_command` and `cancel_all_command` are the canonical bulk operator
 commands for the current repo.
 
+## `mq rebase --json`
+
+Returns one JSON object with:
+
+- `ok`
+- `submission_id` when `--submission` was used
+- `branch`
+- `source_worktree`
+- `repository_root`
+- `protected_branch`
+- `protected_sha`
+- `protected_upstream`
+- `synced_protected`
+- `rebased`
+- `aborted_operation`
+- `conflict_files`
+- `retry_command`
+- `status`
+- `error`
+
+`status` is one of:
+
+- `rebased`
+- `up_to_date`
+- `conflict`
+- `empty`
+- `failed`
+
+Use `mq rebase` as the canonical machine-visible repair path for branches that
+are behind local protected `main` or blocked submissions that need a repo-aware
+rebase before retry.
+
 ## `mainlined --json`
 
 Returns newline-delimited JSON log records.

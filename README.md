@@ -108,6 +108,21 @@ If the wrapper expects remote landing as part of the same job, prefer:
 mq land --json --timeout 30m
 ```
 
+If a submission blocks because its topic branch is behind local protected
+`main`, use `mq rebase` instead of hand-rolling the Git repair:
+
+```bash
+mq blocked --repo /path/to/main --json
+mq rebase --repo /path/to/topic-worktree --submission 23 --json
+mq retry --repo /path/to/topic-worktree --submission 23 --json
+```
+
+For branch-oriented repair without a submission id:
+
+```bash
+mq rebase --repo /path/to/topic-worktree --branch feature/login --json
+```
+
 For agent-heavy and factory-style repos, set `[publish].Mode = 'auto'` in
 `mainline.toml` unless there is a real operator reason to keep publish manual.
 That file is the runtime config authority for the repo. The SQLite store keeps

@@ -177,6 +177,18 @@ id instead of polling by branch name. Follow the submission, not the logs.
 Do not use sleeps, branch-name polling, `mq logs`, `mq events`, or `mq watch` as the
 primary way to decide whether a queued change finished.
 
+If the branch is behind local protected `main` or a submission blocks on a
+rebase conflict, use `mq rebase` as the default repair path:
+
+```bash
+mq rebase --repo ~/Projects/_wt/recallnet/mainline/<branch-name> --branch <branch-name> --json
+mq rebase --repo ~/Projects/_wt/recallnet/mainline/<branch-name> --submission <id> --json
+mq retry --repo ~/Projects/_wt/recallnet/mainline/<branch-name> --submission <id> --json
+```
+
+That keeps the repair repo-aware, syncs protected `main` first when needed, and
+avoids guessing between rebasing onto local `main` vs `origin/main`.
+
 If the branch is ready to hand off asynchronously instead:
 
 ```bash

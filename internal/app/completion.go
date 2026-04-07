@@ -62,7 +62,7 @@ _mainline_completions()
   _init_completion || return
 
   if [[ ${cword} -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "land submit status confidence run-once wait blocked retry cancel publish logs watch events doctor completion version config repo registry" -- "$cur") )
+    COMPREPLY=( $(compgen -W "land submit status confidence run-once wait rebase blocked retry cancel publish logs watch events doctor completion version config repo registry" -- "$cur") )
     return
   fi
 
@@ -101,6 +101,9 @@ _mainline_completions()
       ;;
     wait)
       COMPREPLY=( $(compgen -W "--repo --submission --for --json --timeout --poll-interval" -- "$cur") )
+      ;;
+    rebase)
+      COMPREPLY=( $(compgen -W "--repo --submission --branch --worktree --json" -- "$cur") )
       ;;
     blocked)
       COMPREPLY=( $(compgen -W "--repo --json" -- "$cur") )
@@ -170,6 +173,7 @@ _mainline() {
     'submit:queue a source worktree'
     'land:submit and wait for integrate plus publish'
     'wait:wait on a durable submission id'
+    'rebase:rebase a topic branch onto protected main'
     'blocked:list blocked submissions and recovery actions'
     'status:show queue and publish status'
     'confidence:show promotion confidence and evidence'
@@ -234,6 +238,10 @@ _mainline() {
       ;;
     wait)
       _arguments '--repo[repository path]:path:_files -/' '--submission[submission id]:id:' '--for[wait target]:target:(integrated landed)' '--json[json output]' '--timeout[maximum wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
+      return
+      ;;
+    rebase)
+      _arguments '--repo[repository path]:path:_files -/' '--submission[blocked submission id]:id:' '--branch[branch name]:branch:' '--worktree[source worktree override]:path:_files -/' '--json[json output]'
       return
       ;;
     blocked)

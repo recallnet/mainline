@@ -309,7 +309,7 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		comparison, compareErr := engine.CompareBranches(cfg.Repo.ProtectedBranch, currentBranch)
 		if compareErr == nil {
 			result.CurrentBranchStatus = &comparison
-			result.RebaseGuidance = buildStatusRebaseGuidance(cfg, comparison, protectedStatus)
+			result.RebaseGuidance = buildStatusRebaseGuidance(cfg, comparison, protectedStatus, layout.WorktreeRoot, currentBranch)
 		}
 	}
 	queue := summarizeQueue(result.Counts)
@@ -495,7 +495,7 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 	return nil
 }
 
-func buildStatusRebaseGuidance(cfg policy.File, comparison git.BranchComparison, protectedStatus git.BranchStatus) *statusRebaseGuidance {
+func buildStatusRebaseGuidance(cfg policy.File, comparison git.BranchComparison, protectedStatus git.BranchStatus, repoPath string, branch string) *statusRebaseGuidance {
 	guidance := &statusRebaseGuidance{
 		NeedsRebase:          comparison.BehindCount > 0,
 		BaseBranch:           comparison.BaseBranch,
@@ -504,7 +504,7 @@ func buildStatusRebaseGuidance(cfg policy.File, comparison git.BranchComparison,
 		AheadProtectedCount:  comparison.AheadCount,
 	}
 	if comparison.BehindCount > 0 {
-		guidance.Command = fmt.Sprintf("git rebase %s", comparison.BaseBranch)
+		guidance.Command = fmt.Sprintf("mq rebase --repo %s --branch %s", repoPath, branch)
 		upstreamLabel := protectedStatus.Upstream
 		if !protectedStatus.HasUpstream || upstreamLabel == "" {
 			upstreamLabel = comparison.BaseBranch
@@ -556,7 +556,7 @@ func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int6
 			item.ConflictFiles = details.ConflictFiles
 			item.ProtectedTipSHA = details.ProtectedTipSHA
 			item.RetryHint = details.RetryHint
-			item.NextActions = buildBlockedSubmissionActions(item, protectedBranch)
+			item.NextActions = buildBlockedSubmissionActions(item)
 		}
 		if submission.Status == domain.SubmissionStatusSucceeded {
 			info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission, mainEngine)
@@ -687,11 +687,11 @@ func buildStatusAlerts(counts statusCounts) []string {
 	return alerts
 }
 
-func buildBlockedSubmissionActions(submission statusSubmission, protectedBranch string) []statusNextAction {
+func buildBlockedSubmissionActions(submission statusSubmission) []statusNextAction {
 	if submission.SourceWorktree == "" {
 		return nil
 	}
-	rebaseCommand := fmt.Sprintf("cd %s && git rebase %s", submission.SourceWorktree, protectedBranch)
+	rebaseCommand := fmt.Sprintf("mq rebase --repo %s --submission %d", submission.SourceWorktree, submission.ID)
 	retryCommand := fmt.Sprintf("mq retry --submission %d --repo %s", submission.ID, submission.SourceWorktree)
 	cancelCommand := fmt.Sprintf("mq cancel --submission %d --repo %s", submission.ID, submission.SourceWorktree)
 

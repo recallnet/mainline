@@ -361,8 +361,8 @@ func TestRunOnceBlocksConflictAndLeavesProtectedBranchUntouched(t *testing.T) {
 	if report.LatestSubmission.RetryHint != "manual-rebase-from-tip" {
 		t.Fatalf("expected retry hint, got %+v", report.LatestSubmission)
 	}
-	if len(report.LatestSubmission.NextActions) == 0 || !strings.Contains(report.LatestSubmission.NextActions[0].Command, "git rebase main") {
-		t.Fatalf("expected blocked next actions with local rebase command, got %+v", report.LatestSubmission.NextActions)
+	if len(report.LatestSubmission.NextActions) == 0 || !strings.Contains(report.LatestSubmission.NextActions[0].Command, "mq rebase --repo") || !strings.Contains(report.LatestSubmission.NextActions[0].Command, "--submission") {
+		t.Fatalf("expected blocked next actions with mq rebase command, got %+v", report.LatestSubmission.NextActions)
 	}
 	if len(report.LatestSubmission.ConflictFiles) == 0 || report.LatestSubmission.ConflictFiles[0] != "README.md" {
 		t.Fatalf("expected conflict files for blocked submission, got %+v", report.LatestSubmission)

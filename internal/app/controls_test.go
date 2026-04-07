@@ -283,8 +283,8 @@ func TestBlockedListsBlockedSubmissionsWithActions(t *testing.T) {
 	if result.Submissions[0].BlockedReason != domain.BlockedReasonRebaseConflict {
 		t.Fatalf("expected rebase conflict blocked reason, got %+v", result.Submissions[0])
 	}
-	if len(result.Submissions[0].NextActions) == 0 || !strings.Contains(result.Submissions[0].NextActions[0].Command, "git rebase main") {
-		t.Fatalf("expected local rebase action, got %+v", result.Submissions[0].NextActions)
+	if len(result.Submissions[0].NextActions) == 0 || !strings.Contains(result.Submissions[0].NextActions[0].Command, "mq rebase --repo") || !strings.Contains(result.Submissions[0].NextActions[0].Command, "--submission") {
+		t.Fatalf("expected mq rebase action, got %+v", result.Submissions[0].NextActions)
 	}
 }
 

@@ -699,14 +699,16 @@ func prepareSubmission(opts submitOptions) (preparedSubmission, error) {
 		}
 		if !descended {
 			target := sourceRef
+			rebaseTarget := branch
 			if branch != "" {
 				target = fmt.Sprintf("branch %q", branch)
 			} else {
 				target = fmt.Sprintf("commit %s", sourceRef)
+				rebaseTarget = sourceRef
 			}
 			return preparedSubmission{}, &submitValidationError{
 				Code:    "branch_needs_rebase",
-				Message: fmt.Sprintf("%s does not include local protected branch %q at %s; rebase onto local %s first with `git rebase %s`, then resubmit", target, cfg.Repo.ProtectedBranch, protectedHeadSHA, cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch),
+				Message: fmt.Sprintf("%s does not include local protected branch %q at %s; run `mq rebase --repo %s --branch %s`, then resubmit", target, cfg.Repo.ProtectedBranch, protectedHeadSHA, worktree.Path, rebaseTarget),
 			}
 		}
 	}

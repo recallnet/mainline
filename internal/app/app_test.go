@@ -295,8 +295,8 @@ func TestStatusJSONIncludesLocalProtectedRebaseGuidance(t *testing.T) {
 	if status.RebaseGuidance == nil || !status.RebaseGuidance.NeedsRebase {
 		t.Fatalf("expected rebase guidance, got %+v", status)
 	}
-	if status.RebaseGuidance.BaseBranch != "main" || status.RebaseGuidance.Command != "git rebase main" {
-		t.Fatalf("expected local main rebase command, got %+v", status.RebaseGuidance)
+	if status.RebaseGuidance.BaseBranch != "main" || !strings.Contains(status.RebaseGuidance.Command, "mq rebase --repo") || !strings.Contains(status.RebaseGuidance.Command, "--branch feature/status-rebase") {
+		t.Fatalf("expected mq rebase command, got %+v", status.RebaseGuidance)
 	}
 	if status.CurrentBranchStatus == nil || status.CurrentBranchStatus.BehindCount == 0 {
 		t.Fatalf("expected current branch behind local protected branch, got %+v", status.CurrentBranchStatus)
@@ -335,8 +335,8 @@ func TestStatusTextShowsLocalProtectedRebaseGuidance(t *testing.T) {
 	if !strings.Contains(text, `Rebase guidance: current branch is behind local protected branch "main"`) {
 		t.Fatalf("expected rebase guidance in text output, got %q", text)
 	}
-	if !strings.Contains(text, "Recommended command: git rebase main") {
-		t.Fatalf("expected local rebase command in text output, got %q", text)
+	if !strings.Contains(text, "Recommended command: mq rebase --repo") || !strings.Contains(text, "--branch feature/status-rebase-text") {
+		t.Fatalf("expected mq rebase command in text output, got %q", text)
 	}
 }
 
@@ -1196,8 +1196,8 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "complete -F _mainline_completions mainline") {
 		t.Fatalf("expected completion script output, got %q", output)
 	}
-	if !strings.Contains(output, "land submit status confidence run-once wait blocked retry cancel publish") {
-		t.Fatalf("expected completion script to include blocked workflow and confidence, got %q", output)
+	if !strings.Contains(output, "land submit status confidence run-once wait rebase blocked retry cancel publish") {
+		t.Fatalf("expected completion script to include rebase and blocked workflow, got %q", output)
 	}
 	if !strings.Contains(output, "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --check --check-only --queue-only --wait --for --timeout --poll-interval") {
 		t.Fatalf("expected submit completion flags, got %q", output)

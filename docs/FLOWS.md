@@ -212,6 +212,7 @@ If a queue item needs operator intervention:
 
 ```bash
 mq blocked --repo /path/to/main --json
+mq rebase --repo /path/to/topic-worktree --submission 17 --json
 mq retry --repo /path/to/main --all-safe --json
 mq cancel --repo /path/to/main --blocked --json
 mq cancel --repo /path/to/main --submission 17
@@ -223,6 +224,12 @@ mq retry --repo /path/to/main --publish 4
 Use `mq blocked` as the primary blocked-submission operator surface. It lists
 blocked submissions, their recovery commands, and the exact `retry` / `cancel`
 commands for each item.
+
+Use `mq rebase` as the canonical repair path when a topic branch is behind the
+local protected branch or a submission is blocked on rebase conflict. It finds
+the right source worktree, syncs protected `main` first when needed, and rebases
+onto local protected `main` instead of asking operators to guess whether they
+should use `main` or `origin/main`.
 
 `mq retry --all-safe` is intentionally conservative: it only retries blocked
 submissions whose last blocked reason is currently considered safe to retry

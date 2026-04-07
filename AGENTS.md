@@ -60,6 +60,12 @@ instructions.
   draining.
 - Default follow pattern: `submission_id` plus `mq wait --submission <id> --for landed --json --timeout 30m`.
 - Do not use `sleep`, branch-name polling, `mq logs`, or `mq events` as the primary way to decide whether a queued change finished.
+- If a topic branch is behind local protected `main` or a submission blocks on
+  rebase conflict, use `mq rebase --repo <topic-worktree> --branch <branch>` or
+  `mq rebase --repo <topic-worktree> --submission <id>` instead of raw
+  `git rebase` commands. `mq rebase` uses repo policy, syncs protected `main`
+  first when needed, and targets local protected `main` rather than guessing at
+  `origin/main`.
 - `mainline.toml` is the runtime config authority for protected branch, remote,
   and main worktree. Treat SQLite as queue/history state, not as the place to
   hand-edit or reason about repo policy.
