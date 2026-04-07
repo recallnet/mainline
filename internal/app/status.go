@@ -16,19 +16,6 @@ import (
 	"github.com/recallnet/mainline/internal/state"
 )
 
-type statusCounts struct {
-	QueuedSubmissions    int `json:"queued_submissions"`
-	RunningSubmissions   int `json:"running_submissions"`
-	BlockSubmissions     int `json:"blocked_submissions"`
-	FailedSubmissions    int `json:"failed_submissions"`
-	CancelledSubmissions int `json:"cancelled_submissions"`
-	QueuedPublishes      int `json:"queued_publishes"`
-	RunningPublishes     int `json:"running_publishes"`
-	FailedPublishes      int `json:"failed_publishes"`
-	CancelledPublishes   int `json:"cancelled_publishes"`
-	SucceededPublishes   int `json:"succeeded_publishes"`
-}
-
 type statusResult struct {
 	RepositoryRoot            string                     `json:"repository_root"`
 	StatePath                 string                     `json:"state_path"`
@@ -43,7 +30,7 @@ type statusResult struct {
 	ProtectedUpstream         git.BranchStatus           `json:"protected_upstream"`
 	ExecutionEstimate         executionEstimate          `json:"execution_estimate"`
 	PublishExecution          publishExecutionPolicy     `json:"publish_execution"`
-	Counts                    statusCounts               `json:"counts"`
+	Counts                    queueCounts                `json:"counts"`
 	LatestSubmission          *statusSubmission          `json:"latest_submission,omitempty"`
 	LatestPublish             *statusPublish             `json:"latest_publish,omitempty"`
 	ActiveSubmissions         []statusSubmission         `json:"active_submissions,omitempty"`
@@ -629,8 +616,8 @@ func activePublishes(requests []state.PublishRequest) []statusPublish {
 	return active
 }
 
-func summarizeCounts(submissions []state.IntegrationSubmission, requests []state.PublishRequest) statusCounts {
-	var counts statusCounts
+func summarizeCounts(submissions []state.IntegrationSubmission, requests []state.PublishRequest) queueCounts {
+	var counts queueCounts
 	for _, submission := range submissions {
 		switch submission.Status {
 		case domain.SubmissionStatusQueued:
@@ -664,7 +651,7 @@ func summarizeCounts(submissions []state.IntegrationSubmission, requests []state
 	return counts
 }
 
-func summarizeQueue(counts statusCounts) queueSummary {
+func summarizeQueue(counts queueCounts) queueSummary {
 	queueLength := counts.QueuedSubmissions +
 		counts.RunningSubmissions +
 		counts.BlockSubmissions +
@@ -694,7 +681,7 @@ func summarizeQueue(counts statusCounts) queueSummary {
 	return summary
 }
 
-func buildStatusAlerts(counts statusCounts) []string {
+func buildStatusAlerts(counts queueCounts) []string {
 	var alerts []string
 	if counts.RunningPublishes > 0 && counts.BlockSubmissions > 0 {
 		alerts = append(alerts, "A publish is actively running. Separate blocked submissions still need attention, but they are not stopping the current publish.")
