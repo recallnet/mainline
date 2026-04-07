@@ -39,32 +39,34 @@ type queueSummary struct {
 }
 
 type statusResult struct {
-	RepositoryRoot        string                `json:"repository_root"`
-	StatePath             string                `json:"state_path"`
-	CurrentWorktree       string                `json:"current_worktree"`
-	CurrentBranch         string                `json:"current_branch"`
-	CurrentBranchStatus   *git.BranchComparison `json:"current_branch_status,omitempty"`
-	RebaseGuidance        *statusRebaseGuidance `json:"rebase_guidance,omitempty"`
-	Alerts                []string              `json:"alerts,omitempty"`
-	State                 string                `json:"state"`
-	QueueLength           int                   `json:"queue_length"`
-	HasBlockedSubmissions bool                  `json:"has_blocked_submissions"`
-	HasRunningPublishes   bool                  `json:"has_running_publishes"`
-	HasRunningSubmissions bool                  `json:"has_running_submissions"`
-	HasQueuedWork         bool                  `json:"has_queued_work"`
-	QueueSummary          queueSummary          `json:"queue_summary"`
-	ProtectedBranch       string                `json:"protected_branch"`
-	ProtectedBranchSHA    string                `json:"protected_branch_sha"`
-	ProtectedUpstream     git.BranchStatus      `json:"protected_upstream"`
-	ExecutionEstimate     executionEstimate     `json:"execution_estimate"`
-	Counts                statusCounts          `json:"counts"`
-	LatestSubmission      *statusSubmission     `json:"latest_submission,omitempty"`
-	LatestPublish         *statusPublish        `json:"latest_publish,omitempty"`
-	ActiveSubmissions     []statusSubmission    `json:"active_submissions,omitempty"`
-	ActivePublishes       []statusPublish       `json:"active_publishes,omitempty"`
-	IntegrationWorker     *state.LeaseMetadata  `json:"integration_worker,omitempty"`
-	PublishWorker         *state.LeaseMetadata  `json:"publish_worker,omitempty"`
-	RecentEvents          []state.EventRecord   `json:"recent_events"`
+	RepositoryRoot            string                     `json:"repository_root"`
+	StatePath                 string                     `json:"state_path"`
+	CurrentWorktree           string                     `json:"current_worktree"`
+	CurrentBranch             string                     `json:"current_branch"`
+	CurrentBranchStatus       *git.BranchComparison      `json:"current_branch_status,omitempty"`
+	RebaseGuidance            *statusRebaseGuidance      `json:"rebase_guidance,omitempty"`
+	Alerts                    []string                   `json:"alerts,omitempty"`
+	State                     string                     `json:"state"`
+	QueueLength               int                        `json:"queue_length"`
+	HasBlockedSubmissions     bool                       `json:"has_blocked_submissions"`
+	HasRunningPublishes       bool                       `json:"has_running_publishes"`
+	HasRunningSubmissions     bool                       `json:"has_running_submissions"`
+	HasQueuedWork             bool                       `json:"has_queued_work"`
+	QueueSummary              queueSummary               `json:"queue_summary"`
+	ProtectedBranch           string                     `json:"protected_branch"`
+	ProtectedBranchSHA        string                     `json:"protected_branch_sha"`
+	ProtectedUpstream         git.BranchStatus           `json:"protected_upstream"`
+	ExecutionEstimate         executionEstimate          `json:"execution_estimate"`
+	PublishExecution          publishExecutionPolicy     `json:"publish_execution"`
+	Counts                    statusCounts               `json:"counts"`
+	LatestSubmission          *statusSubmission          `json:"latest_submission,omitempty"`
+	LatestPublish             *statusPublish             `json:"latest_publish,omitempty"`
+	ActiveSubmissions         []statusSubmission         `json:"active_submissions,omitempty"`
+	ActivePublishes           []statusPublish            `json:"active_publishes,omitempty"`
+	IntegrationWorker         *state.LeaseMetadata       `json:"integration_worker,omitempty"`
+	PublishWorker             *state.LeaseMetadata       `json:"publish_worker,omitempty"`
+	ProtectedWorktreeActivity *protectedWorktreeActivity `json:"protected_worktree_activity,omitempty"`
+	RecentEvents              []state.EventRecord        `json:"recent_events"`
 }
 
 type statusRebaseGuidance struct {
@@ -134,6 +136,7 @@ type statusPublish struct {
 	SupersededBy   int64                `json:"superseded_by,omitempty"`
 	CreatedAt      time.Time            `json:"created_at"`
 	UpdatedAt      time.Time            `json:"updated_at"`
+	ActiveStage    string               `json:"active_stage,omitempty"`
 }
 
 func newStatusSubmission(submission state.IntegrationSubmission) statusSubmission {
@@ -300,6 +303,7 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		ProtectedBranchSHA: protectedSHA,
 		ProtectedUpstream:  protectedStatus,
 		ExecutionEstimate:  estimate,
+		PublishExecution:   buildPublishExecutionPolicy(cfg),
 		Counts:             summarizeCounts(submissions, requests),
 		ActiveSubmissions:  activeSubmissions(enrichedSubmissions),
 		ActivePublishes:    activePublishes(requests),
@@ -328,13 +332,24 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 	if metadata, ok := readActiveLease(lockManager, state.PublishLock); ok {
 		result.PublishWorker = &metadata
 	}
+	result.ProtectedWorktreeActivity = buildProtectedWorktreeActivity(cfg.Repo.MainWorktree, result.IntegrationWorker, result.PublishWorker)
 	if len(enrichedSubmissions) > 0 {
 		latest := enrichedSubmissions[len(enrichedSubmissions)-1]
 		result.LatestSubmission = &latest
 	}
 	if len(requests) > 0 {
 		latest := newStatusPublish(requests[len(requests)-1])
+		if result.PublishWorker != nil && result.PublishWorker.RequestID == latest.ID {
+			latest.ActiveStage = result.PublishWorker.Stage
+		}
 		result.LatestPublish = &latest
+	}
+	if result.PublishWorker != nil {
+		for i := range result.ActivePublishes {
+			if result.ActivePublishes[i].ID == result.PublishWorker.RequestID {
+				result.ActivePublishes[i].ActiveStage = result.PublishWorker.Stage
+			}
+		}
 	}
 
 	return result, nil
@@ -355,6 +370,13 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 		result.HasQueuedWork,
 	)
 	printer.Line("Protected branch: %s", result.ProtectedBranch)
+	printer.Line("Publish execution: configured_hook_policy=%s effective_hook_policy=%s hooks_bypassed_for_push=%t prepare=%t validate=%t",
+		result.PublishExecution.ConfiguredHookPolicy,
+		result.PublishExecution.EffectiveHookPolicy,
+		result.PublishExecution.HooksBypassedForPush,
+		result.PublishExecution.PreparePublishEnabled,
+		result.PublishExecution.ValidatePublishEnabled,
+	)
 	if result.ProtectedBranchSHA != "" {
 		printer.Line("Protected SHA: %s", result.ProtectedBranchSHA)
 	}
@@ -447,6 +469,9 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 			result.LatestPublish.TargetSHA,
 			result.LatestPublish.Status,
 		)
+		if result.LatestPublish.ActiveStage != "" {
+			printer.Line("latest publish stage: %s", result.LatestPublish.ActiveStage)
+		}
 	} else {
 		printer.Line("Latest publish: none")
 	}
@@ -459,12 +484,16 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 		)
 	}
 	if result.PublishWorker != nil {
-		printer.Line("Publish worker: owner=%s request=%d pid=%d started=%s",
+		printer.Line("Publish worker: owner=%s request=%d pid=%d started=%s stage=%s",
 			result.PublishWorker.Owner,
 			result.PublishWorker.RequestID,
 			result.PublishWorker.PID,
 			result.PublishWorker.CreatedAt.UTC().Format(time.RFC3339),
+			emptyDash(result.PublishWorker.Stage),
 		)
+	}
+	if result.ProtectedWorktreeActivity != nil {
+		printer.Line("Protected worktree activity: %s", result.ProtectedWorktreeActivity.Summary)
 	}
 	if len(result.ActiveSubmissions) > 0 {
 		printer.Section("Active submissions:")
@@ -529,6 +558,13 @@ func readActiveLease(lockManager state.LockManager, domain string) (state.LeaseM
 		return state.LeaseMetadata{}, false
 	}
 	return metadata, true
+}
+
+func emptyDash(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "-"
+	}
+	return value
 }
 
 func activeSubmissions(submissions []statusSubmission) []statusSubmission {

@@ -145,6 +145,9 @@ Once a repo configures explicit publish checks, `mq` treats those checks as the
 authoritative publish gate and bypasses inherited local `pre-push` hooks for
 the final `git push`. Keep publish-time preparation and validation in
 `mainline.toml`, not in hook side effects on protected `main`.
+`mq status --json` and `mq repo show --json` expose that effective publish
+execution policy and, when publish is active, whether the worker is in
+`prepare`, `validate`, or `push`.
 
 If you want to prove that some other process, not `submit`, handled a specific change:
 

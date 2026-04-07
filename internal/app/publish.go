@@ -55,11 +55,13 @@ Flags:
 	if err != nil {
 		return err
 	}
+	lockManager := state.NewLockManager(repoRoot, layout.GitDir)
 
 	mainEngine := git.NewEngine(cfg.Repo.MainWorktree)
 	if _, err := ensureProtectedRootHealthy(
 		context.Background(),
 		mainEngine,
+		lockManager,
 		cfg,
 		store,
 		repoRecord,
@@ -144,8 +146,13 @@ func shouldTryDrainAfterMutation() bool {
 	return os.Getenv("MAINLINE_DISABLE_MUTATION_DRAIN") == ""
 }
 
-func protectedWorktreeDirtyError(mainWorktree string, dirtyPaths []string) error {
-	queueBlockedGuidance := "; mainline is blocked until the protected root checkout is clean. Take ownership of the protected root checkout, run `mq doctor --repo " + mainWorktree + "`, and if the queue is idle use `mq doctor --repo " + mainWorktree + " --fix` to restore shipped main. Otherwise save, clean, or resolve the dirty state before retrying"
+func protectedWorktreeDirtyError(mainWorktree string, dirtyPaths []string, activity *protectedWorktreeActivity) error {
+	queueBlockedGuidance := "; inspect with `mq status --repo " + mainWorktree + " --json` and `mq doctor --repo " + mainWorktree + "` before mutating the protected root checkout"
+	if activity != nil {
+		queueBlockedGuidance = fmt.Sprintf("; mq is currently active in the protected root checkout (%s). Wait and retry. Do NOT `git stash`, `git checkout`, or `mq doctor --fix` while this critical section is active", activity.Summary)
+	} else {
+		queueBlockedGuidance += ". If the queue is idle and no mq worker owns protected main, `mq doctor --repo " + mainWorktree + " --fix` can restore shipped main. Otherwise wait and retry before touching files"
+	}
 	if len(dirtyPaths) == 0 {
 		return fmt.Errorf("protected branch worktree %s is dirty%s", mainWorktree, queueBlockedGuidance)
 	}

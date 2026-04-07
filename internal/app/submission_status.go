@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/recallnet/mainline/internal/domain"
@@ -100,15 +101,35 @@ func resolvePublishFailureInfo(ctx context.Context, store state.Store, repoID in
 		if events[i].EventType != domain.EventTypePublishFailed {
 			continue
 		}
-		var payload struct {
-			Error string `json:"error"`
-		}
+		var payload publishFailurePayload
 		if len(events[i].Payload) > 0 {
 			if err := json.Unmarshal(events[i].Payload, &payload); err != nil {
 				return publishFailureInfo{}, err
 			}
 		}
 		info.Error = strings.TrimSpace(payload.Error)
+		switch payload.Kind {
+		case publishFailureKindPrepareFailed:
+			info.Cause = publishFailureKindPrepareFailed
+			info.Summary = "publish prepare step failed"
+			info.RetryHint = "fix-prepare-step-then-retry-publish"
+		case publishFailureKindPrepareDirtiedProtectedRoot:
+			info.Cause = publishFailureKindPrepareDirtiedProtectedRoot
+			info.Summary = "publish prepare step left tracked or non-ignored drift in the protected root checkout"
+			info.RetryHint = "fix-prepare-step-then-retry-publish"
+		case publishFailureKindValidateFailed:
+			info.Cause = publishFailureKindValidateFailed
+			info.Summary = "publish validation step failed"
+			info.RetryHint = "fix-validation-then-retry-publish"
+		case publishFailureKindInheritedHookFailed:
+			info.Cause = publishFailureKindInheritedHookFailed
+			info.Summary = "publish failed in an inherited git pre-push hook"
+			info.RetryHint = "inspect-inherited-hook-and-retry"
+		case publishFailureKindGitPushFailed:
+			info.Cause = publishFailureKindGitPushFailed
+			info.Summary = "git push failed during publish"
+			info.RetryHint = "inspect-push-failure-and-retry"
+		}
 		break
 	}
 
@@ -121,9 +142,13 @@ func resolvePublishFailureInfo(ctx context.Context, store state.Store, repoID in
 	}
 
 	if info.Error != "" {
-		info.Cause = "publish_rejected"
-		info.Summary = summarizePublishFailure(info.Error)
-		info.RetryHint = "inspect-publish-failure-and-retry"
+		if info.Cause == "" {
+			info.Cause = "publish_rejected"
+			info.Summary = summarizePublishFailure(info.Error)
+			info.RetryHint = "inspect-publish-failure-and-retry"
+		} else if info.Summary != "" {
+			info.Summary = fmt.Sprintf("%s: %s", info.Summary, summarizePublishFailure(info.Error))
+		}
 		info.ResubmitRequired = false
 	}
 	return info, nil

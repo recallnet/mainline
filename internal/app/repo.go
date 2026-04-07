@@ -21,15 +21,16 @@ import (
 )
 
 type repoShowResult struct {
-	RepositoryRoot string           `json:"repository_root"`
-	ConfigPresent  bool             `json:"config_present"`
-	ConfigPath     string           `json:"config_path"`
-	Config         policy.File      `json:"config"`
-	Worktrees      []git.Worktree   `json:"worktrees"`
-	Branch         string           `json:"branch"`
-	BranchStatus   git.BranchStatus `json:"branch_status"`
-	RootCheckout   rootCheckoutInfo `json:"root_checkout,omitempty"`
-	Warnings       []string         `json:"warnings,omitempty"`
+	RepositoryRoot   string                 `json:"repository_root"`
+	ConfigPresent    bool                   `json:"config_present"`
+	ConfigPath       string                 `json:"config_path"`
+	Config           policy.File            `json:"config"`
+	PublishExecution publishExecutionPolicy `json:"publish_execution"`
+	Worktrees        []git.Worktree         `json:"worktrees"`
+	Branch           string                 `json:"branch"`
+	BranchStatus     git.BranchStatus       `json:"branch_status"`
+	RootCheckout     rootCheckoutInfo       `json:"root_checkout,omitempty"`
+	Warnings         []string               `json:"warnings,omitempty"`
 }
 
 type repoRootResult struct {
@@ -357,13 +358,14 @@ Flags:
 	}
 
 	result := repoShowResult{
-		RepositoryRoot: repoRoot,
-		ConfigPresent:  cfgAuthority.Present,
-		ConfigPath:     cfgAuthority.Path,
-		Config:         cfg,
-		Worktrees:      worktrees,
-		Branch:         branch,
-		BranchStatus:   branchStatus,
+		RepositoryRoot:   repoRoot,
+		ConfigPresent:    cfgAuthority.Present,
+		ConfigPath:       cfgAuthority.Path,
+		Config:           cfg,
+		PublishExecution: buildPublishExecutionPolicy(cfg),
+		Worktrees:        worktrees,
+		Branch:           branch,
+		BranchStatus:     branchStatus,
 	}
 	rootInfo, warnings := inspectCanonicalRootCheckout(cfg, layout)
 	warnings = appendMainWorktreeWarnings(engine, cfg, warnings)
@@ -385,6 +387,13 @@ Flags:
 	printer.Line("Protected branch: %s", result.Config.Repo.ProtectedBranch)
 	printer.Line("Main worktree: %s", result.Config.Repo.MainWorktree)
 	printer.Line("Remote: %s", result.Config.Repo.RemoteName)
+	printer.Line("Publish execution: configured_hook_policy=%s effective_hook_policy=%s hooks_bypassed_for_push=%t prepare=%t validate=%t",
+		result.PublishExecution.ConfiguredHookPolicy,
+		result.PublishExecution.EffectiveHookPolicy,
+		result.PublishExecution.HooksBypassedForPush,
+		result.PublishExecution.PreparePublishEnabled,
+		result.PublishExecution.ValidatePublishEnabled,
+	)
 	printer.Line("Worktrees: %d", len(result.Worktrees))
 	if result.RootCheckout.Path != "" {
 		printer.Line("Root checkout: %s", result.RootCheckout.Path)

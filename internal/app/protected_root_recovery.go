@@ -17,7 +17,7 @@ const (
 	protectedRootRecoveryAllowQueued
 )
 
-func ensureProtectedRootHealthy(ctx context.Context, engine git.Engine, cfg policy.File, store state.Store, repoRecord state.RepositoryRecord, mode protectedRootRecoveryMode) (git.HealthReport, error) {
+func ensureProtectedRootHealthy(ctx context.Context, engine git.Engine, lockManager state.LockManager, cfg policy.File, store state.Store, repoRecord state.RepositoryRecord, mode protectedRootRecoveryMode) (git.HealthReport, error) {
 	report, err := engine.InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
 	if err != nil {
 		return git.HealthReport{}, err
@@ -50,12 +50,27 @@ func ensureProtectedRootHealthy(ctx context.Context, engine git.Engine, cfg poli
 	}
 
 	if !report.ProtectedBranchClean {
-		return git.HealthReport{}, protectedWorktreeDirtyError(cfg.Repo.MainWorktree, report.ProtectedDirtyPaths)
+		integrationWorker, _ := readActiveLease(lockManager, state.IntegrationLock)
+		publishWorker, _ := readActiveLease(lockManager, state.PublishLock)
+		activity := buildProtectedWorktreeActivity(
+			cfg.Repo.MainWorktree,
+			leaseMetadataPtr(integrationWorker),
+			leaseMetadataPtr(publishWorker),
+		)
+		return git.HealthReport{}, protectedWorktreeDirtyError(cfg.Repo.MainWorktree, report.ProtectedDirtyPaths, activity)
 	}
 	if report.HasDivergedUpstream {
 		return git.HealthReport{}, fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, report.UpstreamRef)
 	}
 	return report, nil
+}
+
+func leaseMetadataPtr(metadata state.LeaseMetadata) *state.LeaseMetadata {
+	if metadata.Domain == "" && metadata.Owner == "" && metadata.RequestID == 0 && metadata.PID == 0 && metadata.CreatedAt.IsZero() {
+		return nil
+	}
+	copy := metadata
+	return &copy
 }
 
 func tryRepairCanonicalProtectedRootWithMode(ctx context.Context, engine git.Engine, cfg policy.File, store state.Store, repoRecord state.RepositoryRecord, mode protectedRootRecoveryMode) (bool, string, error) {

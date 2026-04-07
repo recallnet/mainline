@@ -109,6 +109,9 @@ but new configs should use the explicit prepare/validate split.
 When explicit publish checks are configured, `mq` bypasses inherited local
 `pre-push` hooks for the final push. That keeps protected `main` from being
 mutated by hook side effects and makes `mainline.toml` the single publish gate.
+Use `mq status --json` when publish is slow or blocked; it now shows the
+effective hook policy plus the active publish phase (`prepare`, `validate`, or
+`push`).
 
 If the repo uses `[publish].Mode = 'auto'` and the caller wants one blocking
 submit call through publish:

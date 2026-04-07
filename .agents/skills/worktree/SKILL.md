@@ -274,6 +274,8 @@ tracked or other non-ignored drift behind.
 Once explicit publish checks are configured, `mq` bypasses inherited local
 `pre-push` hooks for the final push. Do not rely on hook side effects in
 protected `main`; put publish-time prep and validation in `mainline.toml`.
+Use `mq status --json` to see whether publish is currently in `prepare`,
+`validate`, or `push` before deciding how to recover a slow publish.
 
 ## Review and fix loop
 

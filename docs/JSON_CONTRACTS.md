@@ -86,6 +86,7 @@ Returns one JSON object with these stable top-level keys:
 - `protected_branch`
 - `protected_branch_sha`
 - `protected_upstream`
+- `publish_execution`
 - `counts`
 - `recent_events`
 
@@ -97,6 +98,7 @@ Optional top-level keys:
 - `active_publishes`
 - `integration_worker`
 - `publish_worker`
+- `protected_worktree_activity`
 - `execution_estimate`
 
 `state` is the operator summary for the repo right now:
@@ -122,6 +124,14 @@ queue shape from `state` alone.
 - `has_running_publishes`
 - `has_running_submissions`
 - `has_queued_work`
+
+`publish_execution` contains:
+
+- `configured_hook_policy`
+- `effective_hook_policy`
+- `hooks_bypassed_for_push`
+- `prepare_publish_enabled`
+- `validate_publish_enabled`
 
 Repo policy and protected-worktree configuration come from `mainline.toml`.
 The SQLite store is the durable queue/event state and repo identity layer.
@@ -194,9 +204,22 @@ worker is currently holding that lease:
 - `domain`
 - `repo_root`
 - `owner`
+- `stage`
 - `request_id`
 - `pid`
 - `created_at`
+
+`protected_worktree_activity` is the operator-facing summary for whichever mq
+worker is currently mutating the protected worktree:
+
+- `domain`
+- `stage`
+- `owner`
+- `request_id`
+- `pid`
+- `started_at`
+- `main_worktree`
+- `summary`
 
 If the same protected worktree was accidentally registered under multiple repo
 rows in one state database, `mq` may consolidate those rows by protected

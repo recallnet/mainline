@@ -718,6 +718,71 @@ func TestStatusJSONCorrelatesSubmissionToPublish(t *testing.T) {
 	}
 }
 
+func TestStatusJSONReportsPublishExecutionAndProtectedWorktreeActivity(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Repo.HookPolicy = "replace-with-mainline-checks"
+	cfg.Checks.PreparePublish = []string{"pnpm install --frozen-lockfile"}
+	cfg.Checks.ValidatePublish = []string{"pnpm test --filter smoke"}
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "configure publish stages")
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	lockDir := filepath.Join(layout.GitDir, "mainline", "locks")
+	if err := os.MkdirAll(lockDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(lockDir): %v", err)
+	}
+	payload, err := json.Marshal(state.LeaseMetadata{
+		Domain:    state.PublishLock,
+		RepoRoot:  layout.RepositoryRoot,
+		Owner:     "publish-worker",
+		Stage:     publishStageValidate,
+		RequestID: 88,
+		PID:       5150,
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(lockDir, state.PublishLock+".lock.json"), payload, 0o644); err != nil {
+		t.Fatalf("WriteFile(lock): %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var result statusResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.PublishExecution.HooksBypassedForPush || result.PublishExecution.EffectiveHookPolicy != "replace-with-mainline-checks" {
+		t.Fatalf("expected publish execution policy in status, got %+v", result.PublishExecution)
+	}
+	if !result.PublishExecution.PreparePublishEnabled || !result.PublishExecution.ValidatePublishEnabled {
+		t.Fatalf("expected prepare/validate enabled, got %+v", result.PublishExecution)
+	}
+	if result.PublishWorker == nil || result.PublishWorker.Stage != publishStageValidate {
+		t.Fatalf("expected publish worker stage, got %+v", result.PublishWorker)
+	}
+	if result.ProtectedWorktreeActivity == nil || result.ProtectedWorktreeActivity.Stage != publishStageValidate {
+		t.Fatalf("expected protected worktree activity stage, got %+v", result.ProtectedWorktreeActivity)
+	}
+}
+
 func TestEventsLifecycleJSONContractContainsStableFields(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

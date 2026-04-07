@@ -144,6 +144,7 @@ func validateLandPreflight(repoPath string) error {
 	if err != nil {
 		return err
 	}
+	lockManager := state.NewLockManager(repoRoot, layout.GitDir)
 
 	mainLayout, err := git.DiscoverRepositoryLayout(cfg.Repo.MainWorktree)
 	if err != nil {
@@ -156,6 +157,7 @@ func validateLandPreflight(repoPath string) error {
 	if _, err := ensureProtectedRootHealthy(
 		context.Background(),
 		git.NewEngine(mainLayout.WorktreeRoot),
+		lockManager,
 		cfg,
 		store,
 		repoRecord,

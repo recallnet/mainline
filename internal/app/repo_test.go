@@ -1098,6 +1098,9 @@ func TestRepoShowUsesProtectedWorktreeConfigAuthorityForBareCloneFeatureWorktree
 	if result.Config.Publish.Mode != "auto" {
 		t.Fatalf("expected publish mode from protected worktree config, got %+v", result.Config.Publish)
 	}
+	if result.PublishExecution.EffectiveHookPolicy != "inherit" || result.PublishExecution.HooksBypassedForPush {
+		t.Fatalf("expected inherited hook policy summary, got %+v", result.PublishExecution)
+	}
 }
 
 func TestConfigEditPrintPathUsesProtectedWorktreeConfigAuthorityForBareCloneFeatureWorktree(t *testing.T) {

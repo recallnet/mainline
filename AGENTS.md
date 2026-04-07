@@ -77,6 +77,10 @@ instructions.
 - Once a repo configures explicit publish checks, `mq` bypasses inherited local
   `pre-push` hooks for the final push. Treat `mainline.toml` as the supported
   place for publish-time preparation and validation.
+- If `mq` reports the protected checkout is dirty, check `mq status --json`
+  first. When `mq` shows active protected-worktree activity, wait and retry;
+  do not stash, checkout, or `mq doctor --fix` while publish/integration is
+  still operating there.
 - Use `mq events --follow --json --lifecycle` only when a controller or operator needs deeper audit/debug notifications than the submission wait path.
 - Use `mq registry prune --json` if stale temp repos or deleted repos are
   polluting the optional global registry.

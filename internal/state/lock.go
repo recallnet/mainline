@@ -21,6 +21,7 @@ type LeaseMetadata struct {
 	Domain    string    `json:"domain"`
 	RepoRoot  string    `json:"repo_root"`
 	Owner     string    `json:"owner"`
+	Stage     string    `json:"stage,omitempty"`
 	RequestID int64     `json:"request_id,omitempty"`
 	PID       int       `json:"pid,omitempty"`
 	CreatedAt time.Time `json:"created_at"`

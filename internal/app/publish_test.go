@@ -76,8 +76,57 @@ func TestPublishRejectsDirtyCanonicalRootCheckout(t *testing.T) {
 	if !strings.Contains(err.Error(), "DIRTY.txt") {
 		t.Fatalf("expected dirty file path in error, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "mainline is blocked") || !strings.Contains(err.Error(), "mq doctor --repo") {
-		t.Fatalf("expected blocked queue guidance in error, got %v", err)
+	if !strings.Contains(err.Error(), "mq status --repo") || !strings.Contains(err.Error(), "mq doctor --repo") {
+		t.Fatalf("expected queue inspection guidance in error, got %v", err)
+	}
+}
+
+func TestPublishDirtyProtectedRootWarnsToWaitWhenPublishWorkerActive(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	if err := os.WriteFile(filepath.Join(repoRoot, "DIRTY.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(DIRTY.txt): %v", err)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	lockDir := filepath.Join(layout.GitDir, "mainline", "locks")
+	if err := os.MkdirAll(lockDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(lockDir): %v", err)
+	}
+	payload, err := json.Marshal(state.LeaseMetadata{
+		Domain:    state.PublishLock,
+		RepoRoot:  layout.RepositoryRoot,
+		Owner:     "publish-worker",
+		Stage:     publishStagePrepare,
+		RequestID: 77,
+		PID:       4242,
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(lockDir, state.PublishLock+".lock.json"), payload, 0o644); err != nil {
+		t.Fatalf("WriteFile(lock): %v", err)
+	}
+
+	var publishOut bytes.Buffer
+	var publishErr bytes.Buffer
+	err = runPublish([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&publishOut), &publishErr)
+	if err == nil {
+		t.Fatalf("expected publish to fail when canonical root is dirty")
+	}
+	if !strings.Contains(err.Error(), "Wait and retry") {
+		t.Fatalf("expected wait guidance, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "Do NOT `git stash`, `git checkout`, or `mq doctor --fix`") {
+		t.Fatalf("expected do-not-mutate guidance, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "publish request #77 (prepare)") {
+		t.Fatalf("expected active publish stage in guidance, got %v", err)
 	}
 }
 
@@ -300,6 +349,32 @@ func TestRunOncePrePublishChecksFailBeforePush(t *testing.T) {
 		t.Fatalf("expected publish validation failure output, got %q", runOut.String())
 	}
 
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	events, err := store.ListEventsForItem(context.Background(), repoRecord.ID, string(domain.ItemTypePublishRequest), requests[len(requests)-1].ID, 10)
+	if err != nil {
+		t.Fatalf("ListEventsForItem: %v", err)
+	}
+	last := events[len(events)-1]
+	var payload publishFailurePayload
+	if err := json.Unmarshal(last.Payload, &payload); err != nil {
+		t.Fatalf("Unmarshal payload: %v", err)
+	}
+	if payload.Kind != publishFailureKindValidateFailed || payload.Stage != publishStageValidate {
+		t.Fatalf("expected validate failure payload, got %+v", payload)
+	}
+
 	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
 	if remoteHead == localHead {
 		t.Fatalf("expected remote head to remain behind local head %q", localHead)
@@ -375,6 +450,32 @@ func TestRunOncePrePublishRejectsTrackedDriftFromPrepareCommand(t *testing.T) {
 		t.Fatalf("expected tracked drift rejection output, got %q", runOut.String())
 	}
 
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	events, err := store.ListEventsForItem(context.Background(), repoRecord.ID, string(domain.ItemTypePublishRequest), requests[len(requests)-1].ID, 10)
+	if err != nil {
+		t.Fatalf("ListEventsForItem: %v", err)
+	}
+	last := events[len(events)-1]
+	var payload publishFailurePayload
+	if err := json.Unmarshal(last.Payload, &payload); err != nil {
+		t.Fatalf("Unmarshal payload: %v", err)
+	}
+	if payload.Kind != publishFailureKindPrepareDirtiedProtectedRoot || payload.Stage != publishStagePrepare {
+		t.Fatalf("expected prepare dirtied-root failure payload, got %+v", payload)
+	}
+
 	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
 	if remoteHead == localHead {
 		t.Fatalf("expected remote head to remain behind local head %q", localHead)
@@ -412,7 +513,7 @@ func TestRunOnceLegacyPrePublishConfigStillRuns(t *testing.T) {
 	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
 		t.Fatalf("runRunOnce returned error: %v", err)
 	}
-	if !strings.Contains(runOut.String(), "publish prepare failed") {
+	if !strings.Contains(runOut.String(), "pre-publish checks failed") {
 		t.Fatalf("expected legacy pre-publish config to run as prepare stage, got %q", runOut.String())
 	}
 
