@@ -831,22 +831,18 @@ Flags:
 		if record, _, err := ensureRepositoryRecord(ctx, store, repoRoot, cfg); err == nil {
 			repoRecord = record
 			hasRepoRecord = true
-			queue, err := loadQueueSnapshot(store, record.ID)
-			if err != nil {
-				return err
-			}
-			report.UnfinishedQueueItems = queue.UnfinishedItems
 		}
 	}
 
 	lockManager := state.NewLockManager(repoRoot, layout.GitDir)
 	result := doctorResult{HealthReport: report, RootCheckout: rootInfo}
 	if hasRepoRecord {
-		queue, err := loadQueueSnapshot(store, repoRecord.ID)
+		snapshot, err := loadRepoStatusSnapshot(ctx, store, repoRecord, cfg, 0)
 		if err != nil {
 			return err
 		}
-		result.QueueSummary = queue.Summary
+		result.UnfinishedQueueItems = snapshot.UnfinishedQueueItems
+		result.QueueSummary = snapshot.QueueSummary
 	}
 	if fix {
 		applied, skipped, err := runDoctorFix(ctx, engine, cfg, lockManager, store, repoRecord, hasRepoRecord)
@@ -865,12 +861,12 @@ Flags:
 		result.HealthReport = report
 		result.RootCheckout = rootInfo
 		if store.Exists() && hasRepoRecord {
-			queue, err := loadQueueSnapshot(store, repoRecord.ID)
+			snapshot, err := loadRepoStatusSnapshot(ctx, store, repoRecord, cfg, 0)
 			if err != nil {
 				return err
 			}
-			result.UnfinishedQueueItems = queue.UnfinishedItems
-			result.QueueSummary = queue.Summary
+			result.UnfinishedQueueItems = snapshot.UnfinishedQueueItems
+			result.QueueSummary = snapshot.QueueSummary
 		}
 	}
 	result.QueueBlocked = !result.ProtectedBranchClean || result.MainWorktreeDetached || (result.MainWorktreeBranch != "" && result.MainWorktreeBranch != result.ProtectedBranch)

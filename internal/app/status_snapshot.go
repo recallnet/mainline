@@ -12,6 +12,7 @@ type repoStatusSnapshot struct {
 	ExecutionEstimate         executionEstimate
 	Counts                    queueCounts
 	QueueSummary              queueSummary
+	UnfinishedQueueItems      []string
 	Alerts                    []string
 	LatestSubmission          *statusSubmission
 	LatestPublish             *statusPublish
@@ -52,13 +53,14 @@ func loadRepoStatusSnapshot(ctx context.Context, store state.Store, repoRecord s
 	}
 
 	snapshot := repoStatusSnapshot{
-		ExecutionEstimate: estimate,
-		Counts:            queue.Counts,
-		QueueSummary:      queue.Summary,
-		Alerts:            buildStatusAlerts(queue.Counts),
-		ActiveSubmissions: activeSubmissions(enrichedSubmissions),
-		ActivePublishes:   activePublishes(requests),
-		RecentEvents:      events,
+		ExecutionEstimate:    estimate,
+		Counts:               queue.Counts,
+		QueueSummary:         queue.Summary,
+		UnfinishedQueueItems: queue.UnfinishedItems,
+		Alerts:               buildStatusAlerts(queue.Counts),
+		ActiveSubmissions:    activeSubmissions(enrichedSubmissions),
+		ActivePublishes:      activePublishes(requests),
+		RecentEvents:         events,
 	}
 
 	lockManager := state.NewLockManager(repoRecord.CanonicalPath, stateGitDirFromStorePath(store.Path))

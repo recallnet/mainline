@@ -10,6 +10,7 @@ import (
 
 	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
+	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
 )
 
@@ -204,7 +205,7 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 		ProtectedBranch:  queued.Config.Repo.ProtectedBranch,
 		SubmissionStatus: queued.Submission.Status,
 	}
-	defer populateIntegrationWaitQueueSummary(queued.Store, queued.RepoRecord.ID, &result)
+	defer populateIntegrationWaitQueueSummary(context.Background(), queued.Store, queued.RepoRecord, queued.Config, &result)
 	mainEngine := git.NewEngine(queued.Config.Repo.MainWorktree)
 
 	ticker := time.NewTicker(pollInterval)
@@ -340,7 +341,7 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 		ProtectedBranch:  queued.Config.Repo.ProtectedBranch,
 		SubmissionStatus: queued.Submission.Status,
 	}
-	defer populateSubmissionWaitQueueSummary(queued.Store, queued.RepoRecord.ID, &result)
+	defer populateSubmissionWaitQueueSummary(context.Background(), queued.Store, queued.RepoRecord, queued.Config, &result)
 	mainEngine := git.NewEngine(queued.Config.Repo.MainWorktree)
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -513,24 +514,24 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 	}
 }
 
-func populateIntegrationWaitQueueSummary(store state.Store, repoID int64, result *integrationWaitResult) {
+func populateIntegrationWaitQueueSummary(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File, result *integrationWaitResult) {
 	if result == nil {
 		return
 	}
-	snapshot, err := loadQueueSnapshot(store, repoID)
+	snapshot, err := loadRepoStatusSnapshot(ctx, store, repoRecord, cfg, 0)
 	if err != nil {
 		return
 	}
-	result.QueueSummary = snapshot.Summary
+	result.QueueSummary = snapshot.QueueSummary
 }
 
-func populateSubmissionWaitQueueSummary(store state.Store, repoID int64, result *submissionWaitResult) {
+func populateSubmissionWaitQueueSummary(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File, result *submissionWaitResult) {
 	if result == nil {
 		return
 	}
-	snapshot, err := loadQueueSnapshot(store, repoID)
+	snapshot, err := loadRepoStatusSnapshot(ctx, store, repoRecord, cfg, 0)
 	if err != nil {
 		return
 	}
-	result.QueueSummary = snapshot.Summary
+	result.QueueSummary = snapshot.QueueSummary
 }
