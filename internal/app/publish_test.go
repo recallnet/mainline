@@ -306,6 +306,88 @@ func TestRunOncePrePublishChecksFailBeforePush(t *testing.T) {
 	}
 }
 
+func TestRunOncePrePublishAllowsIgnoredCacheWarmup(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	if err := os.WriteFile(filepath.Join(repoRoot, ".gitignore"), []byte(".next/\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(.gitignore): %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", ".gitignore")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "ignore next cache")
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Checks.PrePublish = []string{"mkdir -p .next/cache && printf warm > .next/cache/replay-lab"}
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "configure cache warm pre publish")
+
+	writeFileAndCommit(t, repoRoot, "one.txt", "one\n", "main change one")
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, ".next", "cache", "replay-lab")); err != nil {
+		t.Fatalf("expected warmed ignored cache file, got %v", err)
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+}
+
+func TestRunOncePrePublishRejectsTrackedDriftFromPrepareCommand(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Checks.PrePublish = []string{"printf drift >> tracked.txt"}
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "configure drifting pre publish")
+
+	writeFileAndCommit(t, repoRoot, "tracked.txt", "base\n", "add tracked file")
+	writeFileAndCommit(t, repoRoot, "one.txt", "one\n", "main change one")
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	queuePublish(t, repoRoot)
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if !strings.Contains(runOut.String(), "pre-publish commands dirtied protected branch worktree") {
+		t.Fatalf("expected tracked drift rejection output, got %q", runOut.String())
+	}
+
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead == localHead {
+		t.Fatalf("expected remote head to remain behind local head %q", localHead)
+	}
+	clean, err := git.NewEngine(repoRoot).WorktreeIsClean(repoRoot)
+	if err != nil {
+		t.Fatalf("WorktreeIsClean: %v", err)
+	}
+	if clean {
+		t.Fatalf("expected tracked drift to remain visible after rejected pre-publish prepare")
+	}
+}
+
 func TestRunOnceSchedulesRetryForTransientPublishFailure(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

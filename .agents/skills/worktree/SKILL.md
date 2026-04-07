@@ -265,6 +265,12 @@ Expected:
 - `mainline.toml` remains the authority for repo config; SQLite state is queue
   identity and history only
 
+If a managed repo needs cache or environment preparation after integration and
+before push, prefer `[checks].PrePublish` in `mainline.toml` for commands like
+`pnpm install --frozen-lockfile`. Those commands run in protected `main`
+immediately before push. They may warm ignored caches, but they must not leave
+tracked or other non-ignored drift behind.
+
 ## Review and fix loop
 
 If code review finds an issue after submission-ready work:

@@ -69,6 +69,10 @@ instructions.
 - `mainline.toml` is the runtime config authority for protected branch, remote,
   and main worktree. Treat SQLite as queue/history state, not as the place to
   hand-edit or reason about repo policy.
+- If a repo needs cache or environment preparation after integration and before
+  push, prefer `[checks].PrePublish` in `mainline.toml` over ad hoc root
+  mutations. That hook point may warm ignored caches, but it must not leave
+  tracked or other non-ignored drift in protected `main`.
 - Use `mq events --follow --json --lifecycle` only when a controller or operator needs deeper audit/debug notifications than the submission wait path.
 - Use `mq registry prune --json` if stale temp repos or deleted repos are
   polluting the optional global registry.

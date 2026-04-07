@@ -94,6 +94,14 @@ For unattended agent repos, set `[publish].Mode = 'auto'`. Otherwise
 `mq submit --wait` only proves `integrated`, not that remote `main` has been
 updated.
 
+If a repo needs local environment repair or cache warmup after integration and
+before push, configure that in `[checks].PrePublish`. This is the right place
+for commands like `pnpm install --frozen-lockfile` or targeted build-cache
+warmup. Those commands run in the protected worktree immediately before push.
+They may leave ignored caches behind, but they must not leave tracked or other
+non-ignored drift; `mq` now fails the publish if pre-publish commands dirty
+protected `main`.
+
 If the repo uses `[publish].Mode = 'auto'` and the caller wants one blocking
 submit call through publish:
 

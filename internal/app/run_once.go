@@ -245,6 +245,33 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 		}
 		return fmt.Sprintf("Failed publish request %d: pre-publish checks failed: %s", request.ID, err.Error()), nil
 	}
+	cleanAfterPrePublish, err := mainEngine.WorktreeIsClean(cfg.Repo.MainWorktree)
+	if err != nil {
+		return "", err
+	}
+	if !cleanAfterPrePublish {
+		dirtyPaths, pathsErr := mainEngine.WorktreeDirtyPaths(cfg.Repo.MainWorktree)
+		if pathsErr != nil {
+			return "", pathsErr
+		}
+		err := fmt.Errorf("pre-publish commands dirtied protected branch worktree %s; they may warm ignored caches, but they must not leave tracked or non-ignored drift (%s)", cfg.Repo.MainWorktree, strings.Join(dirtyPaths, ", "))
+		if _, updateErr := store.UpdatePublishRequestStatus(ctx, request.ID, "failed", sql.NullInt64{}); updateErr != nil {
+			return "", updateErr
+		}
+		if eventErr := appendStateEvent(ctx, store, state.EventRecord{
+			RepoID:    repoRecord.ID,
+			ItemType:  "publish_request",
+			ItemID:    state.NullInt64(request.ID),
+			EventType: "publish.failed",
+			Payload: mustJSON(map[string]string{
+				"target_sha": request.TargetSHA,
+				"error":      err.Error(),
+			}),
+		}); eventErr != nil {
+			return "", eventErr
+		}
+		return fmt.Sprintf("Failed publish request %d: %s", request.ID, err.Error()), nil
+	}
 
 	if err := applyAppTestFault("publish.push"); err != nil {
 		return handlePublishFailure(ctx, store, repoRecord.ID, request, err)

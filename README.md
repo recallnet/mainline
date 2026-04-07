@@ -129,6 +129,14 @@ That file is the runtime config authority for the repo. The SQLite store keeps
 queue identity and history; it should not be treated as the source of repo
 policy truth.
 
+If a repo needs cache/build preparation after integration and before push, use
+`[checks].PrePublish` in `mainline.toml` instead of relying only on inherited
+`pre-push` hooks. This is the right place for commands like repo-local
+`pnpm install --frozen-lockfile` or cache warmup steps that make push-time
+validation reproducible. Those commands may warm ignored caches, but they must
+not leave tracked or other non-ignored drift in protected `main`; `mq` now
+fails publish if a pre-publish command dirties the protected worktree.
+
 If you want to prove that some other process, not `submit`, handled a specific change:
 
 ```bash
