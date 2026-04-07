@@ -123,6 +123,13 @@ For branch-oriented repair without a submission id:
 mq rebase --repo /path/to/topic-worktree --branch feature/login --json
 ```
 
+If you only need the next protected-main advance, use:
+
+```bash
+mq next --json
+mq next commit --json
+```
+
 For agent-heavy and factory-style repos, set `[publish].Mode = 'auto'` in
 `mainline.toml` unless there is a real operator reason to keep publish manual.
 That file is the runtime config authority for the repo. The SQLite store keeps

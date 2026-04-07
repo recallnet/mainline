@@ -49,6 +49,17 @@ Use `submission_id` plus `mq wait --submission ...` as the normal follow path.
 Do not use sleeps, branch-name polling, `mq logs`, `mq events`, or `mq watch`
 as the primary completion path.
 
+If you do not care which submission lands next and only need the next protected
+`main` advance:
+
+```bash
+mq next --json
+mq next commit --json
+```
+
+- `mq next` / `mq next push` waits for the next successful publish
+- `mq next commit` waits for the next local protected-branch integration
+
 ## Worktree-Heavy Repo
 
 Keep one canonical protected-branch worktree and many topic worktrees:

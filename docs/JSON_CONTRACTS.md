@@ -347,6 +347,40 @@ For machine consumers, prefer the explicit queue booleans to distinguish cases
 like “a publish is actively running while an older submission is separately
 blocked.”
 
+## `mq next --json`
+
+Returns one JSON object for the next protected-branch advance observed after the
+command starts.
+
+Stable fields:
+
+- `repository_root`
+- `protected_branch`
+- `target`
+- `protected_sha`
+- `commit_subject`
+- `committed_at`
+- `queue_state`
+- `queue_length`
+- `has_blocked_submissions`
+- `has_running_publishes`
+- `has_running_submissions`
+- `has_queued_work`
+- `observed_at`
+
+Optional fields:
+
+- `submission_id`
+- `publish_request_id`
+- `branch`
+- `source_ref`
+- `ref_kind`
+
+`target` is:
+
+- `push` for `mq next` / `mq next push`
+- `commit` for `mq next commit`
+
 ## `mq blocked --json`
 
 Returns one JSON object with:

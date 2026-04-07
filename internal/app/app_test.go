@@ -49,6 +49,9 @@ func TestCLIHelp(t *testing.T) {
 	if !strings.Contains(stdout.String(), "wait --submission 42 --for landed --json --timeout 30m") {
 		t.Fatalf("expected wait guidance in help, got %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "next --json") {
+		t.Fatalf("expected next guidance in help, got %q", stdout.String())
+	}
 }
 
 func TestMQHelpUsesMQIdentity(t *testing.T) {
@@ -144,6 +147,122 @@ func TestGlobalJSONCompletionReportsStructuredScript(t *testing.T) {
 	}
 	if result.Shell != "bash" || !strings.Contains(result.Script, "complete -F _mainline_completions mainline") {
 		t.Fatalf("unexpected completion json: %+v", result)
+	}
+}
+
+func TestNextCommitReportsNextIntegratedProtectedAdvance(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-next-commit")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/next-commit", featurePath)
+	writeFileAndCommit(t, featurePath, "next-commit.txt", "next commit\n", "next commit feature")
+	featureHead := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+
+	resultCh := make(chan nextResult, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		err := runNext([]string{"commit", "--repo", repoRoot, "--json", "--timeout", "10s", "--poll-interval", "10ms"}, newStepPrinter(&stdout), &stderr)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		var result nextResult
+		if unmarshalErr := json.Unmarshal(stdout.Bytes(), &result); unmarshalErr != nil {
+			errCh <- unmarshalErr
+			return
+		}
+		resultCh <- result
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	submitBranch(t, featurePath)
+	runOnce(t, repoRoot)
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("runNext returned error: %v", err)
+	case result := <-resultCh:
+		if result.Target != nextTargetCommit {
+			t.Fatalf("expected commit target, got %+v", result)
+		}
+		if result.ProtectedSHA != featureHead {
+			t.Fatalf("expected protected sha %q, got %+v", featureHead, result)
+		}
+		if result.CommitSubject != "next commit feature" {
+			t.Fatalf("expected commit subject, got %+v", result)
+		}
+		if result.Branch != "feature/next-commit" {
+			t.Fatalf("expected branch in result, got %+v", result)
+		}
+		if result.QueueState == "" {
+			t.Fatalf("expected queue state summary, got %+v", result)
+		}
+	case <-time.After(12 * time.Second):
+		t.Fatal("timed out waiting for mq next commit result")
+	}
+}
+
+func TestNextPushReportsNextPublishedProtectedAdvance(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishMode(t, repoRoot, "auto")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-next-push")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/next-push", featurePath)
+	writeFileAndCommit(t, featurePath, "next-push.txt", "next push\n", "next push feature")
+	featureHead := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+
+	resultCh := make(chan nextResult, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		err := runNext([]string{"--repo", repoRoot, "--json", "--timeout", "10s", "--poll-interval", "10ms"}, newStepPrinter(&stdout), &stderr)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		var result nextResult
+		if unmarshalErr := json.Unmarshal(stdout.Bytes(), &result); unmarshalErr != nil {
+			errCh <- unmarshalErr
+			return
+		}
+		resultCh <- result
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	submitBranch(t, featurePath)
+	runOnce(t, repoRoot)
+	runOnce(t, repoRoot)
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("runNext returned error: %v", err)
+	case result := <-resultCh:
+		if result.Target != nextTargetPush {
+			t.Fatalf("expected push target, got %+v", result)
+		}
+		if result.ProtectedSHA != featureHead {
+			t.Fatalf("expected protected sha %q, got %+v", featureHead, result)
+		}
+		if result.CommitSubject != "next push feature" {
+			t.Fatalf("expected commit subject, got %+v", result)
+		}
+		if result.PublishRequestID == 0 {
+			t.Fatalf("expected publish request id, got %+v", result)
+		}
+		if result.QueueState == "" {
+			t.Fatalf("expected queue state summary, got %+v", result)
+		}
+		remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+		if remoteHead != featureHead {
+			t.Fatalf("expected remote head %q, got %q", featureHead, remoteHead)
+		}
+	case <-time.After(12 * time.Second):
+		t.Fatal("timed out waiting for mq next push result")
 	}
 }
 
@@ -1254,7 +1373,7 @@ func TestCLIAcceptsSubcommandFlagsForPlannedCommands(t *testing.T) {
 	if !strings.Contains(output, "complete -F _mainline_completions mainline") {
 		t.Fatalf("expected completion script output, got %q", output)
 	}
-	if !strings.Contains(output, "land submit status confidence run-once wait rebase blocked retry cancel publish") {
+	if !strings.Contains(output, "land submit status next confidence run-once wait rebase blocked retry cancel publish") {
 		t.Fatalf("expected completion script to include rebase and blocked workflow, got %q", output)
 	}
 	if !strings.Contains(output, "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --check --check-only --queue-only --wait --for --timeout --poll-interval") {

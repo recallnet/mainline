@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -77,6 +78,12 @@ type Worktree struct {
 	IsBare     bool   `json:"is_bare"`
 	IsDetached bool   `json:"is_detached"`
 	IsCurrent  bool   `json:"is_current"`
+}
+
+type CommitInfo struct {
+	SHA         string    `json:"sha"`
+	Subject     string    `json:"subject"`
+	CommittedAt time.Time `json:"committed_at"`
 }
 
 // HealthReport captures repository health relevant to Milestone 1.
@@ -186,6 +193,27 @@ func (e Engine) BranchHeadSHA(ref string) (string, error) {
 	}
 
 	return hash.String(), nil
+}
+
+// CommitInfo returns the commit sha, subject, and committer timestamp for a ref.
+func (e Engine) CommitInfo(ref string) (CommitInfo, error) {
+	output, err := e.runGit(e.RepositoryRoot, "show", "-s", "--format=%H%x00%s%x00%cI", ref)
+	if err != nil {
+		return CommitInfo{}, err
+	}
+	parts := strings.Split(strings.TrimSpace(output), "\x00")
+	if len(parts) != 3 {
+		return CommitInfo{}, fmt.Errorf("unexpected git show output for %q", ref)
+	}
+	committedAt, err := time.Parse(time.RFC3339, parts[2])
+	if err != nil {
+		return CommitInfo{}, err
+	}
+	return CommitInfo{
+		SHA:         parts[0],
+		Subject:     parts[1],
+		CommittedAt: committedAt,
+	}, nil
 }
 
 // IsAncestor reports whether ancestorRef is an ancestor of descendantRef.

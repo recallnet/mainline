@@ -62,7 +62,7 @@ _mainline_completions()
   _init_completion || return
 
   if [[ ${cword} -eq 1 ]]; then
-    COMPREPLY=( $(compgen -W "land submit status confidence run-once wait rebase blocked retry cancel publish logs watch events doctor completion version config repo registry" -- "$cur") )
+    COMPREPLY=( $(compgen -W "land submit status next confidence run-once wait rebase blocked retry cancel publish logs watch events doctor completion version config repo registry" -- "$cur") )
     return
   fi
 
@@ -95,6 +95,9 @@ _mainline_completions()
       ;;
     status)
       COMPREPLY=( $(compgen -W "--repo --json --events" -- "$cur") )
+      ;;
+    next)
+      COMPREPLY=( $(compgen -W "commit push --repo --json --timeout --poll-interval" -- "$cur") )
       ;;
     confidence)
       COMPREPLY=( $(compgen -W "--repo --json --events --soak-summary --cert-report" -- "$cur") )
@@ -172,6 +175,7 @@ _mainline() {
   commands=(
     'submit:queue a source worktree'
     'land:submit and wait for integrate plus publish'
+    'next:wait for the next protected-main commit or push'
     'wait:wait on a durable submission id'
     'rebase:rebase a topic branch onto protected main'
     'blocked:list blocked submissions and recovery actions'
@@ -238,6 +242,10 @@ _mainline() {
       ;;
     wait)
       _arguments '--repo[repository path]:path:_files -/' '--submission[submission id]:id:' '--for[wait target]:target:(integrated landed)' '--json[json output]' '--timeout[maximum wait time]:duration:' '--poll-interval[wait interval between worker checks]:duration:'
+      return
+      ;;
+    next)
+      _arguments '1:target:(commit push)' '--repo[repository path]:path:_files -/' '--json[json output]' '--timeout[maximum wait time]:duration:' '--poll-interval[poll interval while waiting for events]:duration:'
       return
       ;;
     rebase)
@@ -308,8 +316,8 @@ _mainline "$@"
 }
 
 func fishCompletionScript() string {
-	return `complete -c mainline -f -n "__fish_use_subcommand" -a "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo registry"
-complete -c mq -f -n "__fish_use_subcommand" -a "land submit status confidence run-once wait retry cancel publish logs watch events doctor completion version config repo registry"
+	return `complete -c mainline -f -n "__fish_use_subcommand" -a "land submit status next confidence run-once wait retry cancel publish logs watch events doctor completion version config repo registry"
+complete -c mq -f -n "__fish_use_subcommand" -a "land submit status next confidence run-once wait retry cancel publish logs watch events doctor completion version config repo registry"
 
 complete -c mainline -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit root" -a "init show audit root"
 complete -c mq -f -n "__fish_seen_subcommand_from repo; and not __fish_seen_subcommand_from init show audit root" -a "init show audit root"
@@ -325,6 +333,14 @@ complete -c mainline -l repo
 complete -c mq -l repo
 complete -c mainline -n "__fish_seen_subcommand_from status doctor repo show repo audit repo root" -l json
 complete -c mq -n "__fish_seen_subcommand_from status doctor repo show repo audit repo root" -l json
+complete -c mainline -n "__fish_seen_subcommand_from next" -l json
+complete -c mq -n "__fish_seen_subcommand_from next" -l json
+complete -c mainline -f -n "__fish_seen_subcommand_from next; and not __fish_seen_subcommand_from commit push" -a "commit push"
+complete -c mq -f -n "__fish_seen_subcommand_from next; and not __fish_seen_subcommand_from commit push" -a "commit push"
+complete -c mainline -n "__fish_seen_subcommand_from next" -l timeout
+complete -c mq -n "__fish_seen_subcommand_from next" -l timeout
+complete -c mainline -n "__fish_seen_subcommand_from next" -l poll-interval
+complete -c mq -n "__fish_seen_subcommand_from next" -l poll-interval
 complete -c mainline -n "__fish_seen_subcommand_from doctor" -l fix
 complete -c mq -n "__fish_seen_subcommand_from doctor" -l fix
 complete -c mainline -n "__fish_seen_subcommand_from logs events" -l json

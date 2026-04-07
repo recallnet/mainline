@@ -70,6 +70,7 @@ func newCLICommandTree(programName string, stdout *stepPrinter, stderr io.Writer
 		newLegacyCommand("land", "submit and wait for integrate plus publish", true, stdout, stderr, runLand),
 		newLegacyCommand("submit", "queue a topic worktree or detached sha", true, stdout, stderr, runSubmit),
 		newLegacyCommand("status", "show queue and protected-branch state", true, stdout, stderr, runStatus),
+		newLegacyCommand("next", "wait for the next protected-main commit or push", true, stdout, stderr, runNext),
 		newLegacyCommand("confidence", "summarize evidence and promotion gates", true, stdout, stderr, runConfidence),
 		newLegacyCommand("run-once", "run one integration or publish cycle", true, stdout, stderr, runRunOnce),
 		newLegacyCommand("wait", "wait on a submission id for integration or landed outcome", true, stdout, stderr, runWait),
@@ -196,6 +197,7 @@ Turbo paths:
     %s land --json --timeout 30m
     %s submit --wait --for landed --timeout 30m --json
     %s wait --submission 42 --for landed --json --timeout 30m
+    %s next --json
     %s events --follow --json --lifecycle --repo /path/to/repo-root
 
   Operator:
@@ -212,6 +214,7 @@ Commands:
   land          submit and wait for integrate plus publish
   submit        queue a topic worktree or detached sha
   status        show queue and protected-branch state
+  next          wait for the next protected-main commit or push
   confidence    summarize evidence and promotion gates
   run-once      run one integration or publish cycle
   wait          wait on a submission id for integration or landed outcome
@@ -234,7 +237,7 @@ Commands:
   repo show     inspect repo config and worktrees
 
 Use "%s <command> --help" for command-specific examples.
-`, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName)
+`, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName, programName)
 }
 
 func appendJSONFlag(args []string) []string {
