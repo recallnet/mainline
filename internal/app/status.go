@@ -243,29 +243,7 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 	}
 
 	ctx := context.Background()
-	submissions, err := store.ListIntegrationSubmissions(ctx, repoRecord.ID)
-	if err != nil {
-		return statusResult{}, err
-	}
-	requests, err := store.ListPublishRequests(ctx, repoRecord.ID)
-	if err != nil {
-		return statusResult{}, err
-	}
-	events, err := store.ListEvents(ctx, repoRecord.ID, limit)
-	if err != nil {
-		return statusResult{}, err
-	}
-
-	enrichedSubmissions, err := enrichStatusSubmissions(ctx, store, repoRecord.ID, cfg.Repo.MainWorktree, cfg.Repo.ProtectedBranch, submissions)
-	if err != nil {
-		return statusResult{}, err
-	}
-	estimate, err := collectExecutionEstimate(ctx, store, repoRecord.ID, cfg, submissions)
-	if err != nil {
-		return statusResult{}, err
-	}
-	enrichedSubmissions = annotateQueueEstimates(enrichedSubmissions, estimate)
-	queue, err := loadQueueSnapshot(store, repoRecord.ID)
+	snapshot, err := loadRepoStatusSnapshot(ctx, store, repoRecord, cfg, limit)
 	if err != nil {
 		return statusResult{}, err
 	}
@@ -278,12 +256,12 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		ProtectedBranch:    cfg.Repo.ProtectedBranch,
 		ProtectedBranchSHA: protectedSHA,
 		ProtectedUpstream:  protectedStatus,
-		ExecutionEstimate:  estimate,
+		ExecutionEstimate:  snapshot.ExecutionEstimate,
 		PublishExecution:   buildPublishExecutionPolicy(cfg),
-		Counts:             queue.Counts,
-		ActiveSubmissions:  activeSubmissions(enrichedSubmissions),
-		ActivePublishes:    activePublishes(requests),
-		RecentEvents:       events,
+		Counts:             snapshot.Counts,
+		ActiveSubmissions:  snapshot.ActiveSubmissions,
+		ActivePublishes:    snapshot.ActivePublishes,
+		RecentEvents:       snapshot.RecentEvents,
 	}
 	if currentBranch != "(detached)" && currentBranch != "" && currentBranch != cfg.Repo.ProtectedBranch {
 		comparison, compareErr := engine.CompareBranches(cfg.Repo.ProtectedBranch, currentBranch)
@@ -292,34 +270,13 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 			result.RebaseGuidance = buildStatusRebaseGuidance(cfg, comparison, protectedStatus, layout.WorktreeRoot, currentBranch)
 		}
 	}
-	result.QueueSummary = queue.Summary
-	result.Alerts = buildStatusAlerts(result.Counts)
-	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
-	if metadata, ok := readActiveLease(lockManager, state.IntegrationLock); ok {
-		result.IntegrationWorker = &metadata
-	}
-	if metadata, ok := readActiveLease(lockManager, state.PublishLock); ok {
-		result.PublishWorker = &metadata
-	}
-	result.ProtectedWorktreeActivity = buildProtectedWorktreeActivity(cfg.Repo.MainWorktree, result.IntegrationWorker, result.PublishWorker)
-	if len(enrichedSubmissions) > 0 {
-		latest := enrichedSubmissions[len(enrichedSubmissions)-1]
-		result.LatestSubmission = &latest
-	}
-	if len(requests) > 0 {
-		latest := newStatusPublish(requests[len(requests)-1])
-		if result.PublishWorker != nil && result.PublishWorker.RequestID == latest.ID {
-			latest.ActiveStage = result.PublishWorker.Stage
-		}
-		result.LatestPublish = &latest
-	}
-	if result.PublishWorker != nil {
-		for i := range result.ActivePublishes {
-			if result.ActivePublishes[i].ID == result.PublishWorker.RequestID {
-				result.ActivePublishes[i].ActiveStage = result.PublishWorker.Stage
-			}
-		}
-	}
+	result.QueueSummary = snapshot.QueueSummary
+	result.Alerts = snapshot.Alerts
+	result.IntegrationWorker = snapshot.IntegrationWorker
+	result.PublishWorker = snapshot.PublishWorker
+	result.ProtectedWorktreeActivity = snapshot.ProtectedWorktreeActivity
+	result.LatestSubmission = snapshot.LatestSubmission
+	result.LatestPublish = snapshot.LatestPublish
 
 	return result, nil
 }
