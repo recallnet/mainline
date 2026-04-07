@@ -25,27 +25,22 @@ const (
 )
 
 type integrationWaitResult struct {
-	SubmissionID          int64                   `json:"submission_id"`
-	Branch                string                  `json:"branch"`
-	SourceRef             string                  `json:"source_ref,omitempty"`
-	RefKind               domain.RefKind          `json:"ref_kind,omitempty"`
-	SourceWorktree        string                  `json:"source_worktree"`
-	SourceSHA             string                  `json:"source_sha"`
-	RepositoryRoot        string                  `json:"repository_root"`
-	ProtectedBranch       string                  `json:"protected_branch"`
-	SubmissionStatus      domain.SubmissionStatus `json:"submission_status"`
-	PublishRequestID      int64                   `json:"publish_request_id,omitempty"`
-	PublishStatus         domain.PublishStatus    `json:"publish_status,omitempty"`
-	Outcome               waitOutcome             `json:"outcome"`
-	DurationMS            int64                   `json:"duration_ms"`
-	QueueState            string                  `json:"queue_state,omitempty"`
-	QueueLength           int                     `json:"queue_length,omitempty"`
-	HasBlockedSubmissions bool                    `json:"has_blocked_submissions,omitempty"`
-	HasRunningPublishes   bool                    `json:"has_running_publishes,omitempty"`
-	HasRunningSubmissions bool                    `json:"has_running_submissions,omitempty"`
-	HasQueuedWork         bool                    `json:"has_queued_work,omitempty"`
-	LastWorkerResult      string                  `json:"last_worker_result,omitempty"`
-	Error                 string                  `json:"error,omitempty"`
+	SubmissionID     int64                   `json:"submission_id"`
+	Branch           string                  `json:"branch"`
+	SourceRef        string                  `json:"source_ref,omitempty"`
+	RefKind          domain.RefKind          `json:"ref_kind,omitempty"`
+	SourceWorktree   string                  `json:"source_worktree"`
+	SourceSHA        string                  `json:"source_sha"`
+	RepositoryRoot   string                  `json:"repository_root"`
+	ProtectedBranch  string                  `json:"protected_branch"`
+	SubmissionStatus domain.SubmissionStatus `json:"submission_status"`
+	PublishRequestID int64                   `json:"publish_request_id,omitempty"`
+	PublishStatus    domain.PublishStatus    `json:"publish_status,omitempty"`
+	Outcome          waitOutcome             `json:"outcome"`
+	DurationMS       int64                   `json:"duration_ms"`
+	QueueSummary     queueSummary            `json:"queue_summary,omitempty"`
+	LastWorkerResult string                  `json:"last_worker_result,omitempty"`
+	Error            string                  `json:"error,omitempty"`
 }
 
 type waitTarget string
@@ -70,12 +65,7 @@ type submissionWaitResult struct {
 	PublishStatus         domain.PublishStatus    `json:"publish_status,omitempty"`
 	Outcome               waitOutcome             `json:"outcome"`
 	DurationMS            int64                   `json:"duration_ms"`
-	QueueState            string                  `json:"queue_state,omitempty"`
-	QueueLength           int                     `json:"queue_length,omitempty"`
-	HasBlockedSubmissions bool                    `json:"has_blocked_submissions,omitempty"`
-	HasRunningPublishes   bool                    `json:"has_running_publishes,omitempty"`
-	HasRunningSubmissions bool                    `json:"has_running_submissions,omitempty"`
-	HasQueuedWork         bool                    `json:"has_queued_work,omitempty"`
+	QueueSummary          queueSummary            `json:"queue_summary,omitempty"`
 	LastWorkerResult      string                  `json:"last_worker_result,omitempty"`
 	PublishFailureCause   string                  `json:"publish_failure_cause,omitempty"`
 	PublishFailureSummary string                  `json:"publish_failure_summary,omitempty"`
@@ -177,12 +167,12 @@ Flags:
 	}
 	printer.Line("Outcome: %s", result.Outcome)
 	printer.Line("Queue summary: state=%s length=%d blocked=%t running_publishes=%t running_submissions=%t queued_work=%t",
-		result.QueueState,
-		result.QueueLength,
-		result.HasBlockedSubmissions,
-		result.HasRunningPublishes,
-		result.HasRunningSubmissions,
-		result.HasQueuedWork,
+		result.QueueSummary.Headline,
+		result.QueueSummary.QueueLength,
+		result.QueueSummary.HasBlockedSubmissions,
+		result.QueueSummary.HasRunningPublishes,
+		result.QueueSummary.HasRunningSubmissions,
+		result.QueueSummary.HasQueuedWork,
 	)
 	if result.LastWorkerResult != "" {
 		printer.Line("Last worker result: %s", result.LastWorkerResult)
@@ -531,12 +521,7 @@ func populateIntegrationWaitQueueSummary(store state.Store, repoID int64, result
 	if err != nil {
 		return
 	}
-	result.QueueState = snapshot.Summary.Headline
-	result.QueueLength = snapshot.Summary.QueueLength
-	result.HasBlockedSubmissions = snapshot.Summary.HasBlockedSubmissions
-	result.HasRunningPublishes = snapshot.Summary.HasRunningPublishes
-	result.HasRunningSubmissions = snapshot.Summary.HasRunningSubmissions
-	result.HasQueuedWork = snapshot.Summary.HasQueuedWork
+	result.QueueSummary = snapshot.Summary
 }
 
 func populateSubmissionWaitQueueSummary(store state.Store, repoID int64, result *submissionWaitResult) {
@@ -547,10 +532,5 @@ func populateSubmissionWaitQueueSummary(store state.Store, repoID int64, result 
 	if err != nil {
 		return
 	}
-	result.QueueState = snapshot.Summary.Headline
-	result.QueueLength = snapshot.Summary.QueueLength
-	result.HasBlockedSubmissions = snapshot.Summary.HasBlockedSubmissions
-	result.HasRunningPublishes = snapshot.Summary.HasRunningPublishes
-	result.HasRunningSubmissions = snapshot.Summary.HasRunningSubmissions
-	result.HasQueuedWork = snapshot.Summary.HasQueuedWork
+	result.QueueSummary = snapshot.Summary
 }

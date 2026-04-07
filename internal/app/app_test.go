@@ -204,18 +204,12 @@ func TestStatusJSONContractContainsStableTopLevelFields(t *testing.T) {
 		"current_branch",
 		"current_worktree",
 		"execution_estimate",
-		"has_blocked_submissions",
-		"has_queued_work",
-		"has_running_publishes",
-		"has_running_submissions",
 		"protected_branch",
 		"protected_branch_sha",
 		"protected_upstream",
-		"queue_length",
 		"queue_summary",
 		"recent_events",
 		"repository_root",
-		"state",
 		"state_path",
 	}
 	gotKeys := sortedJSONKeys(payload)
@@ -246,14 +240,11 @@ func TestStatusJSONIncludesOperatorSummaryFields(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if status.State != "queued" {
+	if status.QueueSummary.Headline != "queued" {
 		t.Fatalf("expected queued state, got %+v", status)
 	}
-	if status.QueueLength != 1 {
+	if status.QueueSummary.QueueLength != 1 {
 		t.Fatalf("expected queue length 1, got %+v", status)
-	}
-	if status.HasQueuedWork != true || status.HasRunningPublishes || status.HasRunningSubmissions || status.HasBlockedSubmissions {
-		t.Fatalf("expected explicit queued-work booleans, got %+v", status)
 	}
 	if status.QueueSummary.Headline != "queued" || status.QueueSummary.QueueLength != 1 || !status.QueueSummary.HasQueuedWork {
 		t.Fatalf("expected queue_summary to mirror queued state, got %+v", status.QueueSummary)
@@ -411,7 +402,7 @@ func TestStatusPrefersPublishingHeadlineWhenBlockedSubmissionAlsoExists(t *testi
 	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if status.State != "publishing" {
+	if status.QueueSummary.Headline != "publishing" {
 		t.Fatalf("expected publishing headline, got %+v", status)
 	}
 	if len(status.Alerts) == 0 || !strings.Contains(status.Alerts[0], "Separate blocked submissions") {
@@ -510,7 +501,7 @@ func TestWaitBySubmissionIDReturnsIntegratedOutcome(t *testing.T) {
 	if result.PublishRequestID != 0 || result.PublishStatus != "" {
 		t.Fatalf("expected no publish correlation for integrated-only wait, got %+v", result)
 	}
-	if result.QueueState != "idle" || result.QueueLength != 0 || result.HasQueuedWork || result.HasRunningPublishes || result.HasRunningSubmissions || result.HasBlockedSubmissions {
+	if result.QueueSummary.Headline != "idle" || result.QueueSummary.QueueLength != 0 || result.QueueSummary.HasQueuedWork || result.QueueSummary.HasRunningPublishes || result.QueueSummary.HasRunningSubmissions || result.QueueSummary.HasBlockedSubmissions {
 		t.Fatalf("expected idle queue summary after integrated wait, got %+v", result)
 	}
 }
@@ -547,7 +538,7 @@ func TestWaitBySubmissionIDReturnsLandedOutcome(t *testing.T) {
 	if result.Outcome != waitOutcome("landed") || result.SubmissionStatus != "succeeded" || result.PublishStatus != "succeeded" || result.PublishRequestID == 0 {
 		t.Fatalf("expected landed wait outcome with publish correlation, got %+v", result)
 	}
-	if result.QueueState != "idle" || result.QueueLength != 0 || result.HasQueuedWork || result.HasRunningPublishes || result.HasRunningSubmissions || result.HasBlockedSubmissions {
+	if result.QueueSummary.Headline != "idle" || result.QueueSummary.QueueLength != 0 || result.QueueSummary.HasQueuedWork || result.QueueSummary.HasRunningPublishes || result.QueueSummary.HasRunningSubmissions || result.QueueSummary.HasBlockedSubmissions {
 		t.Fatalf("expected idle queue summary after landed wait, got %+v", result)
 	}
 }
@@ -595,7 +586,7 @@ func TestWaitBySubmissionIDReturnsFailedWhenCorrelatedPublishFails(t *testing.T)
 	if result.Outcome != waitOutcomeFailed || result.PublishStatus != "failed" || result.PublishRequestID == 0 {
 		t.Fatalf("expected failed landed wait with failed publish correlation, got %+v", result)
 	}
-	if result.QueueState == "" {
+	if result.QueueSummary.Headline == "" {
 		t.Fatalf("expected explicit queue state on failed wait, got %+v", result)
 	}
 }

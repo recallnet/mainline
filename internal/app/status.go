@@ -46,12 +46,6 @@ type statusResult struct {
 	CurrentBranchStatus       *git.BranchComparison      `json:"current_branch_status,omitempty"`
 	RebaseGuidance            *statusRebaseGuidance      `json:"rebase_guidance,omitempty"`
 	Alerts                    []string                   `json:"alerts,omitempty"`
-	State                     string                     `json:"state"`
-	QueueLength               int                        `json:"queue_length"`
-	HasBlockedSubmissions     bool                       `json:"has_blocked_submissions"`
-	HasRunningPublishes       bool                       `json:"has_running_publishes"`
-	HasRunningSubmissions     bool                       `json:"has_running_submissions"`
-	HasQueuedWork             bool                       `json:"has_queued_work"`
 	QueueSummary              queueSummary               `json:"queue_summary"`
 	ProtectedBranch           string                     `json:"protected_branch"`
 	ProtectedBranchSHA        string                     `json:"protected_branch_sha"`
@@ -320,12 +314,6 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 			result.RebaseGuidance = buildStatusRebaseGuidance(cfg, comparison, protectedStatus, layout.WorktreeRoot, currentBranch)
 		}
 	}
-	result.State = queue.Summary.Headline
-	result.QueueLength = queue.Summary.QueueLength
-	result.HasBlockedSubmissions = queue.Summary.HasBlockedSubmissions
-	result.HasRunningPublishes = queue.Summary.HasRunningPublishes
-	result.HasRunningSubmissions = queue.Summary.HasRunningSubmissions
-	result.HasQueuedWork = queue.Summary.HasQueuedWork
 	result.QueueSummary = queue.Summary
 	result.Alerts = buildStatusAlerts(result.Counts)
 	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
@@ -364,13 +352,13 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 	printer.Line("Repository root: %s", result.RepositoryRoot)
 	printer.Line("Current worktree: %s", result.CurrentWorktree)
 	printer.Line("Current branch: %s", result.CurrentBranch)
-	printer.Line("State: %s", result.State)
-	printer.Line("Queue length: %d", result.QueueLength)
+	printer.Line("State: %s", result.QueueSummary.Headline)
+	printer.Line("Queue length: %d", result.QueueSummary.QueueLength)
 	printer.Line("Queue summary: blocked=%t running_publishes=%t running_submissions=%t queued_work=%t",
-		result.HasBlockedSubmissions,
-		result.HasRunningPublishes,
-		result.HasRunningSubmissions,
-		result.HasQueuedWork,
+		result.QueueSummary.HasBlockedSubmissions,
+		result.QueueSummary.HasRunningPublishes,
+		result.QueueSummary.HasRunningSubmissions,
+		result.QueueSummary.HasQueuedWork,
 	)
 	printer.Line("Protected branch: %s", result.ProtectedBranch)
 	printer.Line("Publish execution: configured_hook_policy=%s effective_hook_policy=%s hooks_bypassed_for_push=%t prepare=%t validate=%t",
