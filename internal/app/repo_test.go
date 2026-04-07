@@ -810,6 +810,76 @@ func TestDoctorFixSupersedesObsoleteBlockedSubmission(t *testing.T) {
 	}
 }
 
+func TestDoctorJSONListsConcreteUnfinishedQueueItems(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+
+	submission, err := store.CreateIntegrationSubmission(context.Background(), state.IntegrationSubmission{
+		RepoID:         repoRecord.ID,
+		BranchName:     "feature/ghost-item-fix",
+		SourceRef:      "feature/ghost-item-fix",
+		RefKind:        domain.RefKindBranch,
+		SourceWorktree: filepath.Join(t.TempDir(), "feature-ghost-item-fix"),
+		SourceSHA:      "abc1234",
+		RequestedBy:    "tester",
+		Priority:       submissionPriorityNormal,
+		Status:         domain.SubmissionStatusQueued,
+	})
+	if err != nil {
+		t.Fatalf("CreateIntegrationSubmission: %v", err)
+	}
+	submission, err = store.UpdateIntegrationSubmissionStatus(context.Background(), submission.ID, domain.SubmissionStatusBlocked, "waiting on queue")
+	if err != nil {
+		t.Fatalf("UpdateIntegrationSubmissionStatus: %v", err)
+	}
+
+	publish, err := store.CreatePublishRequest(context.Background(), state.PublishRequest{
+		RepoID:    repoRecord.ID,
+		TargetSHA: "deadbeef",
+		Status:    domain.PublishStatusQueued,
+	})
+	if err != nil {
+		t.Fatalf("CreatePublishRequest: %v", err)
+	}
+	if _, err := store.UpdatePublishRequestStatus(context.Background(), publish.ID, domain.PublishStatusRunning, sql.NullInt64{}); err != nil {
+		t.Fatalf("UpdatePublishRequestStatus: %v", err)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	var result doctorResult
+	if err := json.Unmarshal(doctorOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal doctor result: %v", err)
+	}
+
+	want := []string{
+		fmt.Sprintf("publish:%d:deadbeef:running", publish.ID),
+		fmt.Sprintf("submission:%d:feature/ghost-item-fix:blocked", submission.ID),
+	}
+	if strings.Join(result.UnfinishedQueueItems, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("unexpected unfinished queue items:\nwant: %v\ngot:  %v", want, result.UnfinishedQueueItems)
+	}
+	for _, item := range result.UnfinishedQueueItems {
+		if strings.TrimSpace(item) == "" {
+			t.Fatalf("unexpected blank unfinished queue item in %+v", result.UnfinishedQueueItems)
+		}
+	}
+}
+
 func TestStatusJSONWorksWhenCanonicalRootIsDirty(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

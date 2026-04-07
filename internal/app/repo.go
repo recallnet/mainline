@@ -831,11 +831,11 @@ Flags:
 		if record, _, err := ensureRepositoryRecord(ctx, store, repoRoot, cfg); err == nil {
 			repoRecord = record
 			hasRepoRecord = true
-			count, err := store.CountUnfinishedItems(ctx, record.ID)
+			items, err := store.ListUnfinishedItems(ctx, record.ID)
 			if err != nil {
 				return err
 			}
-			report.UnfinishedQueueItems = make([]string, count)
+			report.UnfinishedQueueItems = items
 		}
 	}
 
@@ -858,11 +858,11 @@ Flags:
 		result.HealthReport = report
 		result.RootCheckout = rootInfo
 		if store.Exists() && hasRepoRecord {
-			count, err := store.CountUnfinishedItems(ctx, repoRecord.ID)
+			items, err := store.ListUnfinishedItems(ctx, repoRecord.ID)
 			if err != nil {
 				return err
 			}
-			result.UnfinishedQueueItems = make([]string, count)
+			result.UnfinishedQueueItems = items
 		}
 	}
 	result.QueueBlocked = !result.ProtectedBranchClean || result.MainWorktreeDetached || (result.MainWorktreeBranch != "" && result.MainWorktreeBranch != result.ProtectedBranch)

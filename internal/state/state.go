@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/pressly/goose/v3"
@@ -557,6 +558,42 @@ func (s Store) CountUnfinishedItems(ctx context.Context, repoID int64) (int, err
 	}
 
 	return int(submissionCount + publishCount), nil
+}
+
+// ListUnfinishedItems returns stable labels for unfinished submissions and publish requests.
+func (s Store) ListUnfinishedItems(ctx context.Context, repoID int64) ([]string, error) {
+	items := make([]string, 0, 8)
+	submissionStatuses := []domain.SubmissionStatus{
+		domain.SubmissionStatusQueued,
+		domain.SubmissionStatusRunning,
+		domain.SubmissionStatusBlocked,
+	}
+	for _, status := range submissionStatuses {
+		submissions, err := s.ListIntegrationSubmissionsByStatus(ctx, repoID, status)
+		if err != nil {
+			return nil, err
+		}
+		for _, submission := range submissions {
+			items = append(items, fmt.Sprintf("submission:%d:%s:%s", submission.ID, submission.BranchName, submission.Status))
+		}
+	}
+
+	publishStatuses := []domain.PublishStatus{
+		domain.PublishStatusQueued,
+		domain.PublishStatusRunning,
+	}
+	for _, status := range publishStatuses {
+		requests, err := s.ListPublishRequestsByStatus(ctx, repoID, status)
+		if err != nil {
+			return nil, err
+		}
+		for _, request := range requests {
+			items = append(items, fmt.Sprintf("publish:%d:%s:%s", request.ID, request.TargetSHA, request.Status))
+		}
+	}
+
+	slices.Sort(items)
+	return items, nil
 }
 
 // CountQueuedIntegrationSubmissions returns the number of queued submissions for a repo.

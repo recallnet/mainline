@@ -5,11 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/recallnet/mainline/internal/domain"
 )
 
 func TestStorePersistsAcrossRestarts(t *testing.T) {
@@ -65,6 +68,75 @@ func TestStorePersistsAcrossRestarts(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("expected 1 unfinished item, got %d", count)
+	}
+}
+
+func TestListUnfinishedItemsReturnsStableLabels(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitDir := filepath.Join(repoRoot, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	store := NewStore(DefaultPath(gitDir))
+	ctx := context.Background()
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("EnsureSchema: %v", err)
+	}
+
+	repo, err := store.UpsertRepository(ctx, RepositoryRecord{
+		CanonicalPath:   repoRoot,
+		ProtectedBranch: "main",
+		RemoteName:      "origin",
+		MainWorktree:    repoRoot,
+		PolicyVersion:   "v1",
+	})
+	if err != nil {
+		t.Fatalf("UpsertRepository: %v", err)
+	}
+
+	submission, err := store.CreateIntegrationSubmission(ctx, IntegrationSubmission{
+		RepoID:         repo.ID,
+		BranchName:     "feature/test",
+		SourceRef:      "feature/test",
+		RefKind:        domain.RefKindBranch,
+		SourceWorktree: repoRoot,
+		SourceSHA:      "abc123",
+		RequestedBy:    "tester",
+		Priority:       "normal",
+		Status:         domain.SubmissionStatusQueued,
+	})
+	if err != nil {
+		t.Fatalf("CreateIntegrationSubmission: %v", err)
+	}
+	submission, err = store.UpdateIntegrationSubmissionStatus(ctx, submission.ID, domain.SubmissionStatusBlocked, "waiting on review")
+	if err != nil {
+		t.Fatalf("UpdateIntegrationSubmissionStatus: %v", err)
+	}
+
+	publish, err := store.CreatePublishRequest(ctx, PublishRequest{
+		RepoID:    repo.ID,
+		TargetSHA: "deadbeef",
+		Status:    domain.PublishStatusQueued,
+	})
+	if err != nil {
+		t.Fatalf("CreatePublishRequest: %v", err)
+	}
+	if _, err := store.UpdatePublishRequestStatus(ctx, publish.ID, domain.PublishStatusRunning, sql.NullInt64{}); err != nil {
+		t.Fatalf("UpdatePublishRequestStatus: %v", err)
+	}
+
+	items, err := store.ListUnfinishedItems(ctx, repo.ID)
+	if err != nil {
+		t.Fatalf("ListUnfinishedItems: %v", err)
+	}
+
+	want := []string{
+		fmt.Sprintf("publish:%d:deadbeef:running", publish.ID),
+		fmt.Sprintf("submission:%d:feature/test:blocked", submission.ID),
+	}
+	if strings.Join(items, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("unexpected unfinished items:\nwant: %v\ngot:  %v", want, items)
 	}
 }
 
