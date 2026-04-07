@@ -69,14 +69,3 @@ func summarizeQueue(counts queueCounts) queueSummary {
 	}
 	return summary
 }
-
-func buildQueueAlerts(counts queueCounts) []string {
-	var alerts []string
-	if counts.RunningPublishes > 0 && counts.BlockSubmissions > 0 {
-		alerts = append(alerts, "A publish is actively running. Separate blocked submissions still need attention, but they are not stopping the current publish.")
-	}
-	if counts.RunningSubmissions > 0 && counts.BlockSubmissions > 0 {
-		alerts = append(alerts, "An integration is actively running. Separate blocked submissions still need attention.")
-	}
-	return alerts
-}

@@ -293,7 +293,7 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 		}
 	}
 	result.QueueSummary = queue.Summary
-	result.Alerts = buildQueueAlerts(result.Counts)
+	result.Alerts = buildStatusAlerts(result.Counts)
 	lockManager := state.NewLockManager(layout.RepositoryRoot, layout.GitDir)
 	if metadata, ok := readActiveLease(lockManager, state.IntegrationLock); ok {
 		result.IntegrationWorker = &metadata
@@ -614,6 +614,17 @@ func activePublishes(requests []state.PublishRequest) []statusPublish {
 		}
 	}
 	return active
+}
+
+func buildStatusAlerts(counts queueCounts) []string {
+	var alerts []string
+	if counts.RunningPublishes > 0 && counts.BlockSubmissions > 0 {
+		alerts = append(alerts, "A publish is actively running. Separate blocked submissions still need attention, but they are not stopping the current publish.")
+	}
+	if counts.RunningSubmissions > 0 && counts.BlockSubmissions > 0 {
+		alerts = append(alerts, "An integration is actively running. Separate blocked submissions still need attention.")
+	}
+	return alerts
 }
 
 func buildBlockedSubmissionActions(submission statusSubmission) []statusNextAction {
