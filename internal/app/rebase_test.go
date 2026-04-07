@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/recallnet/mainline/internal/git"
@@ -45,7 +46,7 @@ func TestRebaseBranchOntoLocalProtectedMain(t *testing.T) {
 	}
 }
 
-func TestRebaseSubmissionAbortsInProgressOperationAndReportsConflict(t *testing.T) {
+func TestRebaseSubmissionPreservesInProgressConflictResolution(t *testing.T) {
 	repoRoot, _ := createTestRepo(t)
 	initRepoForWorker(t, repoRoot)
 
@@ -77,25 +78,44 @@ func TestRebaseSubmissionAbortsInProgressOperationAndReportsConflict(t *testing.
 	}
 	blockedID := submissions[1].ID
 
+	var result rebaseResult
+	readmePath := filepath.Join(featureTwo, "README.md")
+	resolvedContents := "# manual resolution\n"
+	if err := os.WriteFile(readmePath, []byte(resolvedContents), 0o644); err != nil {
+		t.Fatalf("WriteFile(README.md): %v", err)
+	}
+	runTestCommand(t, featureTwo, "git", "add", "README.md")
+
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	err = runRebase([]string{"--repo", repoRoot, "--submission", formatInt64(blockedID), "--json"}, newStepPrinter(&stdout), &stderr)
 	if err == nil {
-		t.Fatalf("expected conflicted rebase to fail")
+		t.Fatalf("expected rerun during in-progress rebase to fail")
 	}
 	if CLIExitCode(err) != 1 {
 		t.Fatalf("expected exit code 1, got %v", err)
 	}
 
-	var result rebaseResult
+	result = rebaseResult{}
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if result.SubmissionID != blockedID || result.Status != "conflict" || len(result.ConflictFiles) == 0 || result.ConflictFiles[0] != "README.md" {
-		t.Fatalf("expected conflict result for blocked submission, got %+v", result)
+	if result.SubmissionID != blockedID || result.Status != "failed" {
+		t.Fatalf("expected failed result for blocked submission rerun, got %+v", result)
 	}
-	if result.AbortedOperation != "rebase" {
-		t.Fatalf("expected in-progress rebase to be aborted before rerun, got %+v", result)
+	if !strings.Contains(result.Error, "already has rebase in progress") {
+		t.Fatalf("expected in-progress rebase error, got %+v", result)
+	}
+	if result.AbortedOperation != "" {
+		t.Fatalf("expected rerun not to abort the in-progress rebase, got %+v", result)
+	}
+
+	contents, err := os.ReadFile(readmePath)
+	if err != nil {
+		t.Fatalf("ReadFile(README.md): %v", err)
+	}
+	if string(contents) != resolvedContents {
+		t.Fatalf("expected manual resolution to be preserved, got %q", string(contents))
 	}
 }
 

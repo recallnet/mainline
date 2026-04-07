@@ -260,6 +260,9 @@ local protected branch or a submission is blocked on rebase conflict. It finds
 the right source worktree, syncs protected `main` first when needed, and rebases
 onto local protected `main` instead of asking operators to guess whether they
 should use `main` or `origin/main`.
+If a previous `mq rebase` already left a Git rebase in progress, resolve or
+abort that worktree state first; `mq rebase` does not discard an in-progress
+manual resolution and restart it.
 
 `mq retry --all-safe` is intentionally conservative: it only retries blocked
 submissions whose last blocked reason is currently considered safe to retry

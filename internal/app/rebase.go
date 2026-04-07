@@ -133,6 +133,18 @@ func performRebase(repoPath string, submissionID int64, branch string, worktreeO
 		Status:          "pending",
 	}
 
+	sourceEngine := git.NewEngine(sourceWorktree)
+	if op, opErr := sourceEngine.InProgressOperation(sourceWorktree); opErr != nil {
+		result.Status = "failed"
+		result.Error = opErr.Error()
+		return result, opErr
+	} else if op != "" {
+		err := fmt.Errorf("source worktree %s already has %s in progress; continue or abort it before rerunning mq rebase", sourceWorktree, op)
+		result.Status = "failed"
+		result.Error = err.Error()
+		return result, exitWithCode(1, err)
+	}
+
 	protectedEngine := git.NewEngine(cfg.Repo.MainWorktree)
 	syncResult, err := syncProtectedBranch(protectedEngine, cfg)
 	if err != nil {
@@ -148,18 +160,6 @@ func performRebase(repoPath string, submissionID int64, branch string, worktreeO
 		result.ProtectedSHA = protectedSHA
 	}
 
-	sourceEngine := git.NewEngine(sourceWorktree)
-	if op, opErr := sourceEngine.InProgressOperation(sourceWorktree); opErr == nil && op != "" {
-		abortedOperation, abortErr := sourceEngine.AbortInProgressOperation(sourceWorktree)
-		if abortErr != nil {
-			result.Status = "failed"
-			result.Error = abortErr.Error()
-			return result, abortErr
-		}
-		if abortedOperation != "" {
-			result.AbortedOperation = op
-		}
-	}
 	currentBranch, err := sourceEngine.CurrentBranch()
 	if err != nil {
 		result.Status = "failed"

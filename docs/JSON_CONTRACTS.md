@@ -434,6 +434,8 @@ Returns one JSON object with:
 Use `mq rebase` as the canonical machine-visible repair path for branches that
 are behind local protected `main` or blocked submissions that need a repo-aware
 rebase before retry.
+When `status` is `failed`, `error` may report that the source worktree already
+has a Git operation in progress.
 
 ## `mainlined --json`
 

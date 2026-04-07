@@ -117,6 +117,10 @@ mq rebase --repo /path/to/topic-worktree --submission 23 --json
 mq retry --repo /path/to/topic-worktree --submission 23 --json
 ```
 
+If `mq rebase` stops on conflicts, finish that in-progress Git rebase in the
+source worktree before rerunning `mq rebase`; reruns do not abort and restart
+an in-progress resolution.
+
 For branch-oriented repair without a submission id:
 
 ```bash
