@@ -26,22 +26,25 @@ const (
 )
 
 type integrationWaitResult struct {
-	SubmissionID     int64                   `json:"submission_id"`
-	Branch           string                  `json:"branch"`
-	SourceRef        string                  `json:"source_ref,omitempty"`
-	RefKind          domain.RefKind          `json:"ref_kind,omitempty"`
-	SourceWorktree   string                  `json:"source_worktree"`
-	SourceSHA        string                  `json:"source_sha"`
-	RepositoryRoot   string                  `json:"repository_root"`
-	ProtectedBranch  string                  `json:"protected_branch"`
-	SubmissionStatus domain.SubmissionStatus `json:"submission_status"`
-	PublishRequestID int64                   `json:"publish_request_id,omitempty"`
-	PublishStatus    domain.PublishStatus    `json:"publish_status,omitempty"`
-	Outcome          waitOutcome             `json:"outcome"`
-	DurationMS       int64                   `json:"duration_ms"`
-	QueueSummary     queueSummary            `json:"queue_summary,omitempty"`
-	LastWorkerResult string                  `json:"last_worker_result,omitempty"`
-	Error            string                  `json:"error,omitempty"`
+	SubmissionID              int64                      `json:"submission_id"`
+	Branch                    string                     `json:"branch"`
+	SourceRef                 string                     `json:"source_ref,omitempty"`
+	RefKind                   domain.RefKind             `json:"ref_kind,omitempty"`
+	SourceWorktree            string                     `json:"source_worktree"`
+	SourceSHA                 string                     `json:"source_sha"`
+	RepositoryRoot            string                     `json:"repository_root"`
+	ProtectedBranch           string                     `json:"protected_branch"`
+	SubmissionStatus          domain.SubmissionStatus    `json:"submission_status"`
+	PublishRequestID          int64                      `json:"publish_request_id,omitempty"`
+	PublishStatus             domain.PublishStatus       `json:"publish_status,omitempty"`
+	Outcome                   waitOutcome                `json:"outcome"`
+	DurationMS                int64                      `json:"duration_ms"`
+	QueueSummary              queueSummary               `json:"queue_summary,omitempty"`
+	ActivePublishes           []statusPublish            `json:"active_publishes,omitempty"`
+	PublishWorker             *state.LeaseMetadata       `json:"publish_worker,omitempty"`
+	ProtectedWorktreeActivity *protectedWorktreeActivity `json:"protected_worktree_activity,omitempty"`
+	LastWorkerResult          string                     `json:"last_worker_result,omitempty"`
+	Error                     string                     `json:"error,omitempty"`
 }
 
 type waitTarget string
@@ -52,28 +55,31 @@ const (
 )
 
 type submissionWaitResult struct {
-	SubmissionID          int64                   `json:"submission_id"`
-	Branch                string                  `json:"branch"`
-	SourceRef             string                  `json:"source_ref,omitempty"`
-	RefKind               domain.RefKind          `json:"ref_kind,omitempty"`
-	SourceWorktree        string                  `json:"source_worktree"`
-	SourceSHA             string                  `json:"source_sha"`
-	RepositoryRoot        string                  `json:"repository_root"`
-	ProtectedBranch       string                  `json:"protected_branch"`
-	ProtectedSHA          string                  `json:"protected_sha,omitempty"`
-	SubmissionStatus      domain.SubmissionStatus `json:"submission_status"`
-	PublishRequestID      int64                   `json:"publish_request_id,omitempty"`
-	PublishStatus         domain.PublishStatus    `json:"publish_status,omitempty"`
-	Outcome               waitOutcome             `json:"outcome"`
-	DurationMS            int64                   `json:"duration_ms"`
-	QueueSummary          queueSummary            `json:"queue_summary,omitempty"`
-	LastWorkerResult      string                  `json:"last_worker_result,omitempty"`
-	PublishFailureCause   string                  `json:"publish_failure_cause,omitempty"`
-	PublishFailureSummary string                  `json:"publish_failure_summary,omitempty"`
-	PublishFailureError   string                  `json:"publish_failure_error,omitempty"`
-	RetryHint             string                  `json:"retry_hint,omitempty"`
-	ResubmitRequired      bool                    `json:"resubmit_required,omitempty"`
-	Error                 string                  `json:"error,omitempty"`
+	SubmissionID              int64                      `json:"submission_id"`
+	Branch                    string                     `json:"branch"`
+	SourceRef                 string                     `json:"source_ref,omitempty"`
+	RefKind                   domain.RefKind             `json:"ref_kind,omitempty"`
+	SourceWorktree            string                     `json:"source_worktree"`
+	SourceSHA                 string                     `json:"source_sha"`
+	RepositoryRoot            string                     `json:"repository_root"`
+	ProtectedBranch           string                     `json:"protected_branch"`
+	ProtectedSHA              string                     `json:"protected_sha,omitempty"`
+	SubmissionStatus          domain.SubmissionStatus    `json:"submission_status"`
+	PublishRequestID          int64                      `json:"publish_request_id,omitempty"`
+	PublishStatus             domain.PublishStatus       `json:"publish_status,omitempty"`
+	Outcome                   waitOutcome                `json:"outcome"`
+	DurationMS                int64                      `json:"duration_ms"`
+	QueueSummary              queueSummary               `json:"queue_summary,omitempty"`
+	ActivePublishes           []statusPublish            `json:"active_publishes,omitempty"`
+	PublishWorker             *state.LeaseMetadata       `json:"publish_worker,omitempty"`
+	ProtectedWorktreeActivity *protectedWorktreeActivity `json:"protected_worktree_activity,omitempty"`
+	LastWorkerResult          string                     `json:"last_worker_result,omitempty"`
+	PublishFailureCause       string                     `json:"publish_failure_cause,omitempty"`
+	PublishFailureSummary     string                     `json:"publish_failure_summary,omitempty"`
+	PublishFailureError       string                     `json:"publish_failure_error,omitempty"`
+	RetryHint                 string                     `json:"retry_hint,omitempty"`
+	ResubmitRequired          bool                       `json:"resubmit_required,omitempty"`
+	Error                     string                     `json:"error,omitempty"`
 }
 
 func runWait(args []string, stdout *stepPrinter, stderr io.Writer) error {
@@ -175,6 +181,13 @@ Flags:
 		result.QueueSummary.HasRunningSubmissions,
 		result.QueueSummary.HasQueuedWork,
 	)
+	printer.Line("Active publishes: %d", len(result.ActivePublishes))
+	if result.PublishWorker != nil {
+		printer.Line("Publish worker: %s (%s)", result.PublishWorker.Owner, result.PublishWorker.Stage)
+	}
+	if result.ProtectedWorktreeActivity != nil {
+		printer.Line("Protected worktree activity: %s", result.ProtectedWorktreeActivity.Summary)
+	}
 	if result.LastWorkerResult != "" {
 		printer.Line("Last worker result: %s", result.LastWorkerResult)
 	}
@@ -523,6 +536,9 @@ func populateIntegrationWaitQueueSummary(ctx context.Context, store state.Store,
 		return
 	}
 	result.QueueSummary = snapshot.QueueSummary
+	result.ActivePublishes = snapshot.ActivePublishes
+	result.PublishWorker = snapshot.PublishWorker
+	result.ProtectedWorktreeActivity = snapshot.ProtectedWorktreeActivity
 }
 
 func populateSubmissionWaitQueueSummary(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File, result *submissionWaitResult) {
@@ -534,4 +550,7 @@ func populateSubmissionWaitQueueSummary(ctx context.Context, store state.Store, 
 		return
 	}
 	result.QueueSummary = snapshot.QueueSummary
+	result.ActivePublishes = snapshot.ActivePublishes
+	result.PublishWorker = snapshot.PublishWorker
+	result.ProtectedWorktreeActivity = snapshot.ProtectedWorktreeActivity
 }

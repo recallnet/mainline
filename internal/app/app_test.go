@@ -742,6 +742,25 @@ func TestWaitAndStatusClassifyFailedPublishWithDirtyProtectedRoot(t *testing.T) 
 	if len(submissions) != 1 || len(requests) != 1 {
 		t.Fatalf("expected one submission and one publish request, got %+v %+v", submissions, requests)
 	}
+	lockDir := filepath.Join(layout.GitDir, "mainline", "locks")
+	if err := os.MkdirAll(lockDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(lockDir): %v", err)
+	}
+	payload, err := json.Marshal(state.LeaseMetadata{
+		Domain:    state.PublishLock,
+		RepoRoot:  layout.RepositoryRoot,
+		Owner:     "publish-worker",
+		Stage:     publishStagePush,
+		RequestID: requests[0].ID,
+		PID:       5150,
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(lockDir, state.PublishLock+".lock.json"), payload, 0o644); err != nil {
+		t.Fatalf("WriteFile(lock): %v", err)
+	}
 	if _, err := store.UpdatePublishRequestStatus(context.Background(), requests[0].ID, domain.PublishStatusFailed, sql.NullInt64{}); err != nil {
 		t.Fatalf("UpdatePublishRequestStatus: %v", err)
 	}
@@ -780,6 +799,12 @@ func TestWaitAndStatusClassifyFailedPublishWithDirtyProtectedRoot(t *testing.T) 
 	}
 	if !strings.Contains(waitResult.Error, "protected root checkout is dirty") {
 		t.Fatalf("expected dirty-root error, got %+v", waitResult)
+	}
+	if waitResult.PublishWorker == nil || waitResult.PublishWorker.RequestID != requests[0].ID || waitResult.PublishWorker.Stage != publishStagePush {
+		t.Fatalf("expected wait publish worker, got %+v", waitResult.PublishWorker)
+	}
+	if waitResult.ProtectedWorktreeActivity == nil || waitResult.ProtectedWorktreeActivity.Stage != publishStagePush {
+		t.Fatalf("expected wait protected worktree activity, got %+v", waitResult.ProtectedWorktreeActivity)
 	}
 
 	var statusOut bytes.Buffer
