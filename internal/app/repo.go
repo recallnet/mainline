@@ -843,6 +843,11 @@ Flags:
 		}
 		result.UnfinishedQueueItems = snapshot.UnfinishedQueueItems
 		result.QueueSummary = snapshot.QueueSummary
+		result.ActiveSubmissions = snapshot.ActiveSubmissions
+		result.ActivePublishes = snapshot.ActivePublishes
+		result.IntegrationWorker = snapshot.IntegrationWorker
+		result.PublishWorker = snapshot.PublishWorker
+		result.ProtectedWorktreeActivity = snapshot.ProtectedWorktreeActivity
 	}
 	if fix {
 		applied, skipped, err := runDoctorFix(ctx, engine, cfg, lockManager, store, repoRecord, hasRepoRecord)
@@ -867,6 +872,11 @@ Flags:
 			}
 			result.UnfinishedQueueItems = snapshot.UnfinishedQueueItems
 			result.QueueSummary = snapshot.QueueSummary
+			result.ActiveSubmissions = snapshot.ActiveSubmissions
+			result.ActivePublishes = snapshot.ActivePublishes
+			result.IntegrationWorker = snapshot.IntegrationWorker
+			result.PublishWorker = snapshot.PublishWorker
+			result.ProtectedWorktreeActivity = snapshot.ProtectedWorktreeActivity
 		}
 	}
 	result.QueueBlocked = !result.ProtectedBranchClean || result.MainWorktreeDetached || (result.MainWorktreeBranch != "" && result.MainWorktreeBranch != result.ProtectedBranch)
@@ -925,6 +935,17 @@ Flags:
 		printer.Line("Stale lock: %s", stale)
 	}
 	printer.Line("Unfinished queue items: %d", len(result.UnfinishedQueueItems))
+	printer.Line("Active submissions: %d", len(result.ActiveSubmissions))
+	printer.Line("Active publishes: %d", len(result.ActivePublishes))
+	if result.IntegrationWorker != nil {
+		printer.Line("Integration worker: %s (%s)", result.IntegrationWorker.Owner, result.IntegrationWorker.Stage)
+	}
+	if result.PublishWorker != nil {
+		printer.Line("Publish worker: %s (%s)", result.PublishWorker.Owner, result.PublishWorker.Stage)
+	}
+	if result.ProtectedWorktreeActivity != nil {
+		printer.Line("Protected worktree activity: %s", result.ProtectedWorktreeActivity.Summary)
+	}
 	printer.Line("Warnings: %d", len(result.Warnings))
 	for _, warning := range result.Warnings {
 		printer.Warning("%s", warning)
@@ -944,12 +965,17 @@ Flags:
 
 type doctorResult struct {
 	git.HealthReport
-	RootCheckout rootCheckoutInfo `json:"root_checkout,omitempty"`
-	QueueSummary queueSummary     `json:"queue_summary,omitempty"`
-	QueueBlocked bool             `json:"queue_blocked,omitempty"`
-	NextActions  []string         `json:"next_actions,omitempty"`
-	FixesApplied []string         `json:"fixes_applied,omitempty"`
-	FixesSkipped []string         `json:"fixes_skipped,omitempty"`
+	RootCheckout              rootCheckoutInfo           `json:"root_checkout,omitempty"`
+	QueueSummary              queueSummary               `json:"queue_summary,omitempty"`
+	ActiveSubmissions         []statusSubmission         `json:"active_submissions,omitempty"`
+	ActivePublishes           []statusPublish            `json:"active_publishes,omitempty"`
+	IntegrationWorker         *state.LeaseMetadata       `json:"integration_worker,omitempty"`
+	PublishWorker             *state.LeaseMetadata       `json:"publish_worker,omitempty"`
+	ProtectedWorktreeActivity *protectedWorktreeActivity `json:"protected_worktree_activity,omitempty"`
+	QueueBlocked              bool                       `json:"queue_blocked,omitempty"`
+	NextActions               []string                   `json:"next_actions,omitempty"`
+	FixesApplied              []string                   `json:"fixes_applied,omitempty"`
+	FixesSkipped              []string                   `json:"fixes_skipped,omitempty"`
 }
 
 func doctorNextActions(result doctorResult) []string {

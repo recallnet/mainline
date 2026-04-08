@@ -854,6 +854,25 @@ func TestDoctorJSONListsConcreteUnfinishedQueueItems(t *testing.T) {
 	if _, err := store.UpdatePublishRequestStatus(context.Background(), publish.ID, domain.PublishStatusRunning, sql.NullInt64{}); err != nil {
 		t.Fatalf("UpdatePublishRequestStatus: %v", err)
 	}
+	lockDir := filepath.Join(layout.GitDir, "mainline", "locks")
+	if err := os.MkdirAll(lockDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(lockDir): %v", err)
+	}
+	payload, err := json.Marshal(state.LeaseMetadata{
+		Domain:    state.PublishLock,
+		RepoRoot:  layout.RepositoryRoot,
+		Owner:     "publish-worker",
+		Stage:     publishStagePush,
+		RequestID: publish.ID,
+		PID:       5150,
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(lockDir, state.PublishLock+".lock.json"), payload, 0o644); err != nil {
+		t.Fatalf("WriteFile(lock): %v", err)
+	}
 
 	var doctorOut bytes.Buffer
 	var doctorErr bytes.Buffer
@@ -878,6 +897,21 @@ func TestDoctorJSONListsConcreteUnfinishedQueueItems(t *testing.T) {
 	}
 	if !result.QueueSummary.HasBlockedSubmissions || !result.QueueSummary.HasRunningPublishes || result.QueueSummary.HasRunningSubmissions || !result.QueueSummary.HasQueuedWork {
 		t.Fatalf("unexpected doctor queue summary flags: %+v", result.QueueSummary)
+	}
+	if len(result.ActiveSubmissions) != 1 || result.ActiveSubmissions[0].ID != submission.ID {
+		t.Fatalf("expected doctor active submission context, got %+v", result.ActiveSubmissions)
+	}
+	if len(result.ActivePublishes) != 1 || result.ActivePublishes[0].ID != publish.ID || result.ActivePublishes[0].ActiveStage != publishStagePush {
+		t.Fatalf("expected doctor active publish context, got %+v", result.ActivePublishes)
+	}
+	if result.PublishWorker == nil || result.PublishWorker.RequestID != publish.ID || result.PublishWorker.Stage != publishStagePush {
+		t.Fatalf("expected doctor publish worker, got %+v", result.PublishWorker)
+	}
+	if result.IntegrationWorker != nil {
+		t.Fatalf("expected no integration worker, got %+v", result.IntegrationWorker)
+	}
+	if result.ProtectedWorktreeActivity == nil || result.ProtectedWorktreeActivity.Stage != publishStagePush {
+		t.Fatalf("expected doctor protected worktree activity, got %+v", result.ProtectedWorktreeActivity)
 	}
 	for _, item := range result.UnfinishedQueueItems {
 		if strings.TrimSpace(item) == "" {
