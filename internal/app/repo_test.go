@@ -1517,8 +1517,8 @@ func TestDoctorFixAbortsProtectedMergeState(t *testing.T) {
 	}
 }
 
-func TestDoctorFixQueuesPublishForProtectedTipAheadOfUpstream(t *testing.T) {
-	repoRoot, _ := createTestRepoWithRemote(t)
+func TestDoctorFixPublishesProtectedTipAheadOfUpstream(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
 
 	writeFileAndCommit(t, repoRoot, "ahead.txt", "ahead\n", "main ahead")
@@ -1543,8 +1543,12 @@ func TestDoctorFixQueuesPublishForProtectedTipAheadOfUpstream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPublishRequests: %v", err)
 	}
-	if len(requests) != 1 || requests[0].Status != "queued" || requests[0].TargetSHA != head {
-		t.Fatalf("expected queued publish for protected tip %q, got %+v", head, requests)
+	if len(requests) != 1 || requests[0].Status != "succeeded" || requests[0].TargetSHA != head {
+		t.Fatalf("expected succeeded publish for protected tip %q, got %+v", head, requests)
+	}
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != head {
+		t.Fatalf("expected remote head %q, got %q", head, remoteHead)
 	}
 }
 

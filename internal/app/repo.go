@@ -1106,6 +1106,7 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 	var applied []string
 	var skipped []string
 	protectedWorktreeCleanForPublish := false
+	queuedProtectedTipPublish := false
 
 	staleLocks, err := lockManager.InspectStale(time.Hour)
 	if err != nil {
@@ -1271,9 +1272,29 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 					}
 					if created {
 						applied = append(applied, fmt.Sprintf("queued publish request %d for protected tip %s", request.ID, protectedSHA))
+						queuedProtectedTipPublish = true
 					}
 				}
 			}
+		}
+	}
+
+	if queuedProtectedTipPublish {
+		publishLease, err := lockManager.Acquire(state.PublishLock, "doctor-fix")
+		if err == nil {
+			result, processErr := processPublishRequest(ctx, store, repoRecord, cfg, publishLease)
+			releaseErr := publishLease.Release()
+			if processErr != nil {
+				return nil, nil, processErr
+			}
+			if releaseErr != nil {
+				return nil, nil, releaseErr
+			}
+			applied = append(applied, result)
+		} else if errors.Is(err, state.ErrLockHeld) {
+			skipped = append(skipped, "left queued publish in place because the publish worker is already active")
+		} else {
+			return nil, nil, err
 		}
 	}
 	return applied, skipped, nil
