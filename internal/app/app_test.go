@@ -266,6 +266,64 @@ func TestNextPushReportsNextPublishedProtectedAdvance(t *testing.T) {
 	}
 }
 
+func TestRunOnceHealsStaleProtectedWorktreeIndexLockDuringIntegration(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-stale-lock")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/stale-lock", featurePath)
+	writeFileAndCommit(t, featurePath, "stale-lock.txt", "stale lock\n", "stale lock feature")
+	featureHead := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+	submitBranch(t, featurePath)
+
+	lockPath := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "--path-format=absolute", "--git-path", "index.lock"))
+	if err := os.WriteFile(lockPath, []byte("stale"), 0o644); err != nil {
+		t.Fatalf("WriteFile(index.lock): %v", err)
+	}
+	staleTime := time.Now().Add(-2 * staleProtectedIndexLockAfter)
+	if err := os.Chtimes(lockPath, staleTime, staleTime); err != nil {
+		t.Fatalf("Chtimes(index.lock): %v", err)
+	}
+
+	runOnce(t, repoRoot)
+
+	if _, err := os.Stat(lockPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected stale index.lock removed, stat err=%v", err)
+	}
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	if localHead != featureHead {
+		t.Fatalf("expected protected head %q, got %q", featureHead, localHead)
+	}
+}
+
+func TestRunOnceRetriesTransientProtectedWorktreeIndexLockDuringIntegration(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-transient-lock")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/transient-lock", featurePath)
+	writeFileAndCommit(t, featurePath, "transient-lock.txt", "transient lock\n", "transient lock feature")
+	featureHead := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+	submitBranch(t, featurePath)
+
+	lockPath := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "--path-format=absolute", "--git-path", "index.lock"))
+	if err := os.WriteFile(lockPath, []byte("transient"), 0o644); err != nil {
+		t.Fatalf("WriteFile(index.lock): %v", err)
+	}
+
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		_ = os.Remove(lockPath)
+	}()
+
+	runOnce(t, repoRoot)
+
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	if localHead != featureHead {
+		t.Fatalf("expected protected head %q, got %q", featureHead, localHead)
+	}
+}
+
 func TestGlobalJSONForwardsToRunOnceAndPublish(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

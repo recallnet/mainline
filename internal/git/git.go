@@ -25,6 +25,7 @@ var ErrRebaseEmpty = errors.New("git rebase stopped on an empty commit")
 var ErrFastForwardRejected = errors.New("fast-forward update was rejected")
 var ErrPushRejected = errors.New("git push was rejected")
 var ErrPushInterrupted = errors.New("git push was interrupted")
+var ErrIndexLockHeld = errors.New("git index.lock is held")
 
 // Engine holds repository-local Git execution context.
 type Engine struct {
@@ -84,6 +85,14 @@ type CommitInfo struct {
 	SHA         string    `json:"sha"`
 	Subject     string    `json:"subject"`
 	CommittedAt time.Time `json:"committed_at"`
+}
+
+type IndexLockState struct {
+	Path      string        `json:"path"`
+	Exists    bool          `json:"exists"`
+	Age       time.Duration `json:"age,omitempty"`
+	IsStale   bool          `json:"is_stale,omitempty"`
+	UpdatedAt time.Time     `json:"updated_at,omitempty"`
 }
 
 // HealthReport captures repository health relevant to Milestone 1.
@@ -530,10 +539,54 @@ func (e Engine) FastForwardCurrentBranch(worktreePath string, targetRef string) 
 	if err == nil {
 		return nil
 	}
+	if isIndexLockContentionOutput(output) {
+		return fmt.Errorf("%w: %s", ErrIndexLockHeld, strings.TrimSpace(output))
+	}
 	if strings.Contains(output, "Not possible to fast-forward") || strings.Contains(output, "fatal: Not possible to fast-forward") {
 		return fmt.Errorf("%w: %s", ErrFastForwardRejected, strings.TrimSpace(output))
 	}
 	return err
+}
+
+func IsIndexLockHeldError(err error) bool {
+	return errors.Is(err, ErrIndexLockHeld)
+}
+
+func (e Engine) InspectIndexLock(worktreePath string, staleAfter time.Duration) (IndexLockState, error) {
+	lockPath, err := e.gitPath(worktreePath, "index.lock")
+	if err != nil {
+		return IndexLockState{}, err
+	}
+	info, err := os.Stat(lockPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return IndexLockState{Path: lockPath}, nil
+		}
+		return IndexLockState{}, err
+	}
+	updatedAt := info.ModTime().UTC()
+	age := time.Since(updatedAt)
+	state := IndexLockState{
+		Path:      lockPath,
+		Exists:    true,
+		Age:       age,
+		UpdatedAt: updatedAt,
+	}
+	if staleAfter > 0 && age >= staleAfter {
+		state.IsStale = true
+	}
+	return state, nil
+}
+
+func (e Engine) RemoveIndexLock(worktreePath string) error {
+	lockPath, err := e.gitPath(worktreePath, "index.lock")
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(lockPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // PushBranch pushes a local branch ref to the configured remote branch.
@@ -834,6 +887,11 @@ func (e Engine) runGit(worktreePath string, args ...string) (string, error) {
 		return string(output), fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
 	}
 	return string(output), nil
+}
+
+func isIndexLockContentionOutput(output string) bool {
+	text := strings.TrimSpace(output)
+	return strings.Contains(text, "index.lock") && strings.Contains(text, "File exists")
 }
 
 func (e Engine) gitPath(worktreePath string, pathspec string) (string, error) {

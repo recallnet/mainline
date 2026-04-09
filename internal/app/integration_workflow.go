@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
@@ -175,7 +176,7 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 	if err := applyAppTestFault("integration.fast_forward"); err != nil {
 		return failIntegrationSubmission(ctx, store, repoRecord.ID, submission, err)
 	}
-	if err := mainEngine.FastForwardCurrentBranch(cfg.Repo.MainWorktree, targetRef); err != nil {
+	if err := fastForwardProtectedBranchWithIndexLockRecovery(mainEngine, cfg.Repo.MainWorktree, targetRef); err != nil {
 		return failIntegrationSubmissionWithSync(ctx, store, repoRecord.ID, submission, syncResult, err)
 	}
 
@@ -232,6 +233,44 @@ func processIntegrationSubmission(ctx context.Context, store state.Store, repoRe
 	}
 
 	return fmt.Sprintf("Integrated submission %d from %s onto %s", submission.ID, submissionDisplayRef(submission), cfg.Repo.ProtectedBranch), nil
+}
+
+var integrationIndexLockRetryBackoffs = []time.Duration{
+	250 * time.Millisecond,
+	time.Second,
+	2 * time.Second,
+}
+
+const staleProtectedIndexLockAfter = 10 * time.Second
+
+func fastForwardProtectedBranchWithIndexLockRecovery(mainEngine git.Engine, worktreePath string, targetRef string) error {
+	var lastErr error
+	for attempt := 0; attempt <= len(integrationIndexLockRetryBackoffs); attempt++ {
+		err := mainEngine.FastForwardCurrentBranch(worktreePath, targetRef)
+		if err == nil {
+			return nil
+		}
+		if !git.IsIndexLockHeldError(err) {
+			return err
+		}
+		lastErr = err
+
+		lockState, inspectErr := mainEngine.InspectIndexLock(worktreePath, staleProtectedIndexLockAfter)
+		if inspectErr != nil {
+			return fmt.Errorf("protected worktree index lock contention: %w", inspectErr)
+		}
+		if lockState.Exists && lockState.IsStale {
+			if removeErr := mainEngine.RemoveIndexLock(worktreePath); removeErr != nil {
+				return fmt.Errorf("protected worktree stale index lock recovery failed: %w", removeErr)
+			}
+			continue
+		}
+		if attempt == len(integrationIndexLockRetryBackoffs) {
+			break
+		}
+		time.Sleep(integrationIndexLockRetryBackoffs[attempt])
+	}
+	return fmt.Errorf("protected worktree index lock contention exceeded retry budget: %w", lastErr)
 }
 
 type protectedSyncResult struct {
