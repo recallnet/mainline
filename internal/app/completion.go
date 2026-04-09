@@ -94,7 +94,7 @@ _mainline_completions()
       COMPREPLY=( $(compgen -W "--repo --branch --sha --worktree --requested-by --priority --allow-newer-head --json --check --check-only --queue-only --wait --for --timeout --poll-interval" -- "$cur") )
       ;;
     status)
-      COMPREPLY=( $(compgen -W "--repo --json --events" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--repo --json --table --events" -- "$cur") )
       ;;
     next)
       COMPREPLY=( $(compgen -W "commit push --repo --json --timeout --poll-interval" -- "$cur") )
@@ -233,7 +233,7 @@ _mainline() {
       return
       ;;
     status)
-      _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--events[number of recent events]:count:'
+      _arguments '--repo[repository path]:path:_files -/' '--json[json output]' '--table[compact human-readable table output]' '--events[number of recent events]:count:'
       return
       ;;
     confidence)
@@ -365,6 +365,8 @@ complete -c mainline -n "__fish_seen_subcommand_from watch" -l max-cycles
 complete -c mq -n "__fish_seen_subcommand_from watch" -l max-cycles
 complete -c mainline -n "__fish_seen_subcommand_from status" -l events
 complete -c mq -n "__fish_seen_subcommand_from status" -l events
+complete -c mainline -n "__fish_seen_subcommand_from status" -l table
+complete -c mq -n "__fish_seen_subcommand_from status" -l table
 complete -c mainline -n "__fish_seen_subcommand_from confidence" -l json
 complete -c mq -n "__fish_seen_subcommand_from confidence" -l json
 complete -c mainline -n "__fish_seen_subcommand_from confidence" -l events

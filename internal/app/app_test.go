@@ -1760,6 +1760,37 @@ func TestStatusJSONReportsQueuedWork(t *testing.T) {
 	}
 }
 
+func TestStatusTableReportsHumanQueueSummary(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-status-table")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/status-table", featurePath)
+	writeFileAndCommit(t, featurePath, "status-table.txt", "status table\n", "feature status table")
+	submitBranch(t, featurePath)
+	queuePublish(t, repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--table", "--events", "2"}, newStepPrinter(&stdout), &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "TYPE") || !strings.Contains(output, "STATUS") || !strings.Contains(output, "BRANCH") {
+		t.Fatalf("expected table headers, got %q", output)
+	}
+	if !strings.Contains(output, "publish") || !strings.Contains(output, "submit") {
+		t.Fatalf("expected publish and submit rows, got %q", output)
+	}
+	if !strings.Contains(output, "feature/status-table") {
+		t.Fatalf("expected feature branch in table, got %q", output)
+	}
+	if !strings.Contains(output, "Counts: queued_submissions=") {
+		t.Fatalf("expected compact counts summary, got %q", output)
+	}
+}
+
 func TestStatusUsesDurableRepoRecordWhenConfigDrifts(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

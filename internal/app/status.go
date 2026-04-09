@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/recallnet/mainline/internal/domain"
@@ -187,10 +188,12 @@ Flags:
 
 	var repoPath string
 	var asJSON bool
+	var asTable bool
 	var limit int
 
 	fs.StringVar(&repoPath, "repo", ".", "repository path")
 	fs.BoolVar(&asJSON, "json", false, "output json")
+	fs.BoolVar(&asTable, "table", false, "render a compact human-readable table")
 	fs.IntVar(&limit, "events", 5, "number of recent events to show")
 
 	if err := fs.Parse(args); err != nil {
@@ -206,6 +209,9 @@ Flags:
 		encoder := json.NewEncoder(stdout.Raw())
 		encoder.SetIndent("", "  ")
 		return encoder.Encode(result)
+	}
+	if asTable {
+		return renderStatusTable(stdout, result)
 	}
 
 	return renderStatus(stdout, result)
@@ -448,6 +454,150 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 	}
 
 	return nil
+}
+
+func renderStatusTable(stdout *stepPrinter, result statusResult) error {
+	stdout.Section("Queue")
+	stdout.Line("Repo: %s", result.RepositoryRoot)
+	stdout.Line("State: %s", result.QueueSummary.Headline)
+	if result.ProtectedBranchSHA != "" {
+		stdout.Line("Protected: %s @ %s", result.ProtectedBranch, shortenSHA(result.ProtectedBranchSHA))
+	} else {
+		stdout.Line("Protected: %s", result.ProtectedBranch)
+	}
+	if result.ProtectedUpstream.HasUpstream {
+		stdout.Line("Upstream: %s (ahead %d, behind %d)", result.ProtectedUpstream.Upstream, result.ProtectedUpstream.AheadCount, result.ProtectedUpstream.BehindCount)
+	}
+	if result.ProtectedWorktreeActivity != nil {
+		stdout.Line("Activity: %s", result.ProtectedWorktreeActivity.Summary)
+	}
+
+	tw := tabwriter.NewWriter(stdout.Raw(), 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "")
+	_, _ = fmt.Fprintln(tw, "TYPE\tID\tSTATUS\tSTAGE\tBRANCH\tTARGET")
+
+	rows := statusTableRows(result)
+	if len(rows) == 0 {
+		_, _ = fmt.Fprintln(tw, "-\t-\tidle\t-\t-\t-")
+	} else {
+		for _, row := range rows {
+			_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", row[0], row[1], row[2], row[3], row[4], row[5])
+		}
+	}
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+
+	stdout.Line("")
+	stdout.Line("Counts: queued_submissions=%d running_submissions=%d blocked_submissions=%d queued_publishes=%d running_publishes=%d",
+		result.Counts.QueuedSubmissions,
+		result.Counts.RunningSubmissions,
+		result.Counts.BlockSubmissions,
+		result.Counts.QueuedPublishes,
+		result.Counts.RunningPublishes,
+	)
+	if len(result.Alerts) > 0 {
+		for _, alert := range result.Alerts {
+			stdout.Line("Alert: %s", alert)
+		}
+	}
+	return nil
+}
+
+func statusTableRows(result statusResult) [][]string {
+	rows := make([][]string, 0, len(result.ActivePublishes)+len(result.ActiveSubmissions)+2)
+	for _, request := range result.ActivePublishes {
+		rows = append(rows, []string{
+			"publish",
+			fmt.Sprintf("%d", request.ID),
+			string(request.Status),
+			emptyDash(request.ActiveStage),
+			"-",
+			shortenSHA(request.TargetSHA),
+		})
+	}
+	for _, submission := range result.ActiveSubmissions {
+		rows = append(rows, []string{
+			"submit",
+			fmt.Sprintf("%d", submission.ID),
+			string(submission.Status),
+			submissionStage(submission),
+			submissionDisplayRef(submission.integrationSubmission()),
+			shortenSHA(nonEmpty(submission.ProtectedTipSHA, submission.SourceSHA)),
+		})
+	}
+	if result.LatestSubmission != nil && !containsStatusRow(rows, "submit", result.LatestSubmission.ID) {
+		rows = append(rows, []string{
+			"submit",
+			fmt.Sprintf("%d", result.LatestSubmission.ID),
+			string(result.LatestSubmission.Status),
+			submissionStage(*result.LatestSubmission),
+			submissionDisplayRef(result.LatestSubmission.integrationSubmission()),
+			shortenSHA(nonEmpty(result.LatestSubmission.ProtectedTipSHA, result.LatestSubmission.SourceSHA)),
+		})
+	}
+	if result.LatestPublish != nil && !containsStatusRow(rows, "publish", result.LatestPublish.ID) {
+		rows = append(rows, []string{
+			"publish",
+			fmt.Sprintf("%d", result.LatestPublish.ID),
+			string(result.LatestPublish.Status),
+			emptyDash(result.LatestPublish.ActiveStage),
+			"-",
+			shortenSHA(result.LatestPublish.TargetSHA),
+		})
+	}
+	return rows
+}
+
+func containsStatusRow(rows [][]string, rowType string, id int64) bool {
+	needle := fmt.Sprintf("%d", id)
+	for _, row := range rows {
+		if len(row) >= 2 && row[0] == rowType && row[1] == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func submissionStage(submission statusSubmission) string {
+	switch submission.Status {
+	case domain.SubmissionStatusQueued:
+		return "queued"
+	case domain.SubmissionStatusRunning:
+		return "integrating"
+	case domain.SubmissionStatusBlocked:
+		return "blocked"
+	case domain.SubmissionStatusSucceeded:
+		if submission.Outcome != "" {
+			return string(submission.Outcome)
+		}
+		return "integrated"
+	default:
+		if submission.Outcome != "" {
+			return string(submission.Outcome)
+		}
+		return "-"
+	}
+}
+
+func shortenSHA(sha string) string {
+	trimmed := strings.TrimSpace(sha)
+	if len(trimmed) > 8 {
+		return trimmed[:8]
+	}
+	if trimmed == "" {
+		return "-"
+	}
+	return trimmed
+}
+
+func nonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func buildStatusRebaseGuidance(cfg policy.File, comparison git.BranchComparison, protectedStatus git.BranchStatus, repoPath string, branch string) *statusRebaseGuidance {
