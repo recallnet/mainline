@@ -24,8 +24,12 @@ do
 done
 
 test -f "${output_dir}/SHA256SUMS"
-tar -tzf "${output_dir}/mainline_v0.0.0-test_linux_amd64.tar.gz" | grep -q 'mainline_v0.0.0-test_linux_amd64/mainline$'
-unzip -Z1 "${output_dir}/mainline_v0.0.0-test_windows_amd64.zip" | grep -q '^mainline_v0.0.0-test_windows_amd64/mainline.exe$'
+linux_archive_listing="${output_dir}/mainline_v0.0.0-test_linux_amd64.list"
+windows_archive_listing="${output_dir}/mainline_v0.0.0-test_windows_amd64.list"
+tar -tzf "${output_dir}/mainline_v0.0.0-test_linux_amd64.tar.gz" > "${linux_archive_listing}"
+unzip -Z1 "${output_dir}/mainline_v0.0.0-test_windows_amd64.zip" > "${windows_archive_listing}"
+grep -q 'mainline_v0.0.0-test_linux_amd64/mainline$' "${linux_archive_listing}"
+grep -q '^mainline_v0.0.0-test_windows_amd64/mainline.exe$' "${windows_archive_listing}"
 
 bare_checksums="${output_dir}/SHA256SUMS.bare"
 sed 's# \./# #g' "${output_dir}/SHA256SUMS" > "${bare_checksums}"

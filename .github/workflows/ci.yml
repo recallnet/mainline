@@ -68,7 +68,8 @@ jobs:
           test -f dist/mainline_v0.0.0-ci.rb
           test -f dist/release-manifest_v0.0.0-ci.json
           test -f dist/mainline_packages_v0.0.0-ci.tar.gz
-          tar -tzf dist/mainline_packages_v0.0.0-ci.tar.gz | grep -q 'mainline_packages_v0.0.0-ci/mainline_v0.0.0-ci.rb$'
+          tar -tzf dist/mainline_packages_v0.0.0-ci.tar.gz > dist/mainline_packages_v0.0.0-ci.list
+          grep -q 'mainline_packages_v0.0.0-ci/mainline_v0.0.0-ci.rb$' dist/mainline_packages_v0.0.0-ci.list
 
       - name: Release build
         run: make release-snapshot VERSION=ci
