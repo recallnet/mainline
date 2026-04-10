@@ -211,6 +211,16 @@ mq submit --allow-newer-head --wait --timeout 10m --json
 That only permits forward movement. If the queued branch rewinds or moves to a
 non-descendant tip, `mq` still fails the submission and asks for a resubmit.
 
+If a publish request fails because remote `main` advanced first, prefer:
+
+```bash
+mq retry --repo /path/to/protected-worktree --publish 4
+```
+
+That lets `mq` fetch upstream, replay unpublished protected-branch commits onto
+the updated remote tip when the rebase is clean, and retry the push without
+manual protected-worktree repair.
+
 Exit codes:
 
 - `0`: integrated

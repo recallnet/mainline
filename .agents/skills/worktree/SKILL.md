@@ -177,6 +177,17 @@ id instead of polling by branch name. Follow the submission, not the logs.
 Do not use sleeps, branch-name polling, `mq logs`, `mq events`, or `mq watch` as the
 primary way to decide whether a queued change finished.
 
+If a publish request fails because remote `main` moved first, prefer retrying
+the publish request from the protected worktree:
+
+```bash
+mq retry --repo ~/Projects/recallnet/mainline --publish <id>
+```
+
+`mq` now attempts the safe case automatically by fetching upstream, rebasing the
+unpublished protected-branch commits onto the updated remote tip when that
+replay is clean, and retrying the push.
+
 If the branch is behind local protected `main` or a submission blocks on a
 rebase conflict, use `mq rebase` as the default repair path:
 

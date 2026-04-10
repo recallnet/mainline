@@ -361,7 +361,7 @@ Flags:
 			if loadErr == nil {
 				result.SubmissionStatus = submission.Status
 				if submission.Status == domain.SubmissionStatusSucceeded {
-					info, infoErr := resolveSubmissionPublishInfo(context.Background(), queued.Store, queued.RepoRecord.ID, submission, git.NewEngine(queued.Config.Repo.MainWorktree))
+					info, infoErr := resolveSubmissionPublishInfo(context.Background(), queued.Store, queued.RepoRecord.ID, submission, git.NewEngine(queued.Config.Repo.MainWorktree), queued.Config.Repo.ProtectedBranch)
 					if infoErr == nil {
 						result.PublishRequestID = info.PublishRequestID
 						result.PublishStatus = domain.PublishStatus(info.PublishStatus)

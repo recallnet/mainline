@@ -29,10 +29,11 @@ type publishFailureInfo struct {
 	Summary          string
 	Error            string
 	RetryHint        string
+	RetryCommand     string
 	ResubmitRequired bool
 }
 
-func resolveSubmissionPublishInfo(ctx context.Context, store state.Store, repoID int64, submission state.IntegrationSubmission, mainEngine git.Engine) (submissionPublishInfo, error) {
+func resolveSubmissionPublishInfo(ctx context.Context, store state.Store, repoID int64, submission state.IntegrationSubmission, mainEngine git.Engine, protectedBranch string) (submissionPublishInfo, error) {
 	info := submissionPublishInfo{}
 	if submission.Status != domain.SubmissionStatusSucceeded {
 		return info, nil
@@ -81,7 +82,7 @@ func resolveSubmissionPublishInfo(ctx context.Context, store state.Store, repoID
 		info.Outcome = submissionOutcomeIntegrated
 	}
 	if info.PublishRequestID != 0 && info.PublishStatus == string(domain.PublishStatusFailed) {
-		failure, err := resolvePublishFailureInfo(ctx, store, repoID, info.PublishRequestID, mainEngine)
+		failure, err := resolvePublishFailureInfo(ctx, store, repoID, info.PublishRequestID, mainEngine, protectedBranch)
 		if err != nil {
 			return info, err
 		}
@@ -90,13 +91,14 @@ func resolveSubmissionPublishInfo(ctx context.Context, store state.Store, repoID
 	return info, nil
 }
 
-func resolvePublishFailureInfo(ctx context.Context, store state.Store, repoID int64, publishRequestID int64, mainEngine git.Engine) (publishFailureInfo, error) {
+func resolvePublishFailureInfo(ctx context.Context, store state.Store, repoID int64, publishRequestID int64, mainEngine git.Engine, protectedBranch string) (publishFailureInfo, error) {
 	events, err := store.ListEventsForItem(ctx, repoID, string(domain.ItemTypePublishRequest), publishRequestID, 10)
 	if err != nil {
 		return publishFailureInfo{}, err
 	}
 
 	var info publishFailureInfo
+	info.RetryCommand = fmt.Sprintf("mq retry --repo %s --publish %d", mainEngine.RepositoryRoot, publishRequestID)
 	for i := len(events) - 1; i >= 0; i-- {
 		if events[i].EventType != domain.EventTypePublishFailed {
 			continue
@@ -128,7 +130,7 @@ func resolvePublishFailureInfo(ctx context.Context, store state.Store, repoID in
 		case publishFailureKindGitPushFailed:
 			info.Cause = publishFailureKindGitPushFailed
 			info.Summary = "git push failed during publish"
-			info.RetryHint = "inspect-push-failure-and-retry"
+			info.RetryHint = "retry-publish-after-protected-reconcile"
 		}
 		break
 	}
@@ -142,12 +144,22 @@ func resolvePublishFailureInfo(ctx context.Context, store state.Store, repoID in
 	}
 
 	if info.Error != "" {
+		if info.Cause == publishFailureKindGitPushFailed && strings.Contains(strings.ToLower(info.Error), "failed to push some refs") {
+			status, statusErr := mainEngine.BranchStatus(protectedBranch, protectedBranch)
+			if statusErr == nil && status.HasUpstream && status.AheadCount > 0 && status.BehindCount > 0 {
+				info.Summary = fmt.Sprintf("publish failed because remote %s moved first and local protected %s now diverges; rerun `%s` to let mainline rebase the protected branch and retry publish", status.Upstream, protectedBranch, info.RetryCommand)
+			} else {
+				info.Summary = fmt.Sprintf("publish failed because git push was rejected; rerun `%s` after inspecting the protected branch state", info.RetryCommand)
+			}
+		}
 		if info.Cause == "" {
 			info.Cause = "publish_rejected"
 			info.Summary = summarizePublishFailure(info.Error)
 			info.RetryHint = "inspect-publish-failure-and-retry"
 		} else if info.Summary != "" {
-			info.Summary = fmt.Sprintf("%s: %s", info.Summary, summarizePublishFailure(info.Error))
+			if !strings.Contains(info.Summary, info.RetryCommand) {
+				info.Summary = fmt.Sprintf("%s: %s", info.Summary, summarizePublishFailure(info.Error))
+			}
 		}
 		info.ResubmitRequired = false
 	}

@@ -38,7 +38,7 @@ func ensureProtectedRootHealthy(ctx context.Context, engine git.Engine, lockMana
 		return report, nil
 	}
 
-	repaired, _, repairErr := tryRepairCanonicalProtectedRootWithMode(ctx, engine, cfg, store, repoRecord, mode)
+	repaired, repairNote, repairErr := tryRepairCanonicalProtectedRootWithMode(ctx, engine, cfg, store, repoRecord, mode)
 	if repairErr != nil {
 		return git.HealthReport{}, repairErr
 	}
@@ -60,6 +60,9 @@ func ensureProtectedRootHealthy(ctx context.Context, engine git.Engine, lockMana
 		return git.HealthReport{}, protectedWorktreeDirtyError(cfg.Repo.MainWorktree, report.ProtectedDirtyPaths, activity)
 	}
 	if report.HasDivergedUpstream {
+		if repairNote != "" {
+			return git.HealthReport{}, fmt.Errorf("%s", repairNote)
+		}
 		return git.HealthReport{}, fmt.Errorf("protected branch %q has diverged from upstream %s", cfg.Repo.ProtectedBranch, report.UpstreamRef)
 	}
 	return report, nil

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -908,6 +909,104 @@ func TestStatusJSONCorrelatesSubmissionToPublish(t *testing.T) {
 	}
 	if result.LatestSubmission.PublishRequestID == 0 || result.LatestSubmission.PublishStatus != "succeeded" || result.LatestSubmission.Outcome != submissionOutcomeLanded {
 		t.Fatalf("expected landed submission correlation, got %+v", result.LatestSubmission)
+	}
+}
+
+func TestStatusAndWaitSurfaceRetryCommandForRejectedPublishAfterRemoteAdvance(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+	updatePublishMode(t, repoRoot, "auto")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-status-publish-reject")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/status-publish-reject", featurePath)
+	writeFileAndCommit(t, featurePath, "status.txt", "status\n", "status feature")
+	submitBranch(t, featurePath)
+	runOnce(t, repoRoot)
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submissions, err := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(submissions) != 1 || len(requests) != 1 {
+		t.Fatalf("expected 1 submission and 1 publish request, got %+v %+v", submissions, requests)
+	}
+	if _, err := store.UpdatePublishRequestStatus(context.Background(), requests[0].ID, domain.PublishStatusFailed, sql.NullInt64{}); err != nil {
+		t.Fatalf("UpdatePublishRequestStatus: %v", err)
+	}
+	if err := appendStateEvent(context.Background(), store, state.EventRecord{
+		RepoID:    repoRecord.ID,
+		ItemType:  domain.ItemTypePublishRequest,
+		ItemID:    state.NullInt64(requests[0].ID),
+		EventType: domain.EventTypePublishFailed,
+		Payload: mustJSON(map[string]string{
+			"target_sha": requests[0].TargetSHA,
+			"error":      "git push was rejected: To github.com:recallnet/tradecore.git\n ! [rejected]            main -> main (fetch first)\nerror: failed to push some refs to 'github.com:recallnet/tradecore.git'",
+			"kind":       publishFailureKindGitPushFailed,
+			"stage":      publishStagePush,
+		}),
+	}); err != nil {
+		t.Fatalf("appendStateEvent: %v", err)
+	}
+
+	upstreamClone := filepath.Join(t.TempDir(), "upstream-clone")
+	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
+	runTestCommand(t, upstreamClone, "git", "config", "user.name", "Test User")
+	runTestCommand(t, upstreamClone, "git", "config", "user.email", "test@example.com")
+	runTestCommand(t, upstreamClone, "git", "config", "core.hooksPath", ".git/hooks")
+	writeFileAndCommit(t, upstreamClone, "upstream.txt", "upstream\n", "upstream advance")
+	runTestCommand(t, upstreamClone, "git", "push", "origin", "main")
+	runTestCommand(t, repoRoot, "git", "fetch", "origin", "main")
+
+	var waitOut bytes.Buffer
+	var waitErr bytes.Buffer
+	err = runCLI([]string{"wait", "--repo", repoRoot, "--submission", strconv.FormatInt(submissions[0].ID, 10), "--for", "landed", "--json", "--timeout", "1s"}, newStepPrinter(&waitOut), &waitErr)
+	if err == nil {
+		t.Fatalf("expected landed wait to fail")
+	}
+
+	var waitResult submissionWaitResult
+	if err := json.Unmarshal(waitOut.Bytes(), &waitResult); err != nil {
+		t.Fatalf("Unmarshal wait: %v", err)
+	}
+	if waitResult.RetryHint != "retry-publish-after-protected-reconcile" {
+		t.Fatalf("expected protected reconcile retry hint, got %+v", waitResult)
+	}
+	if !strings.Contains(waitResult.PublishFailureSummary, "mq retry --repo") || !strings.Contains(waitResult.PublishFailureSummary, fmt.Sprintf("--publish %d", requests[0].ID)) {
+		t.Fatalf("expected retry command in wait summary, got %+v", waitResult)
+	}
+
+	var statusOut bytes.Buffer
+	var statusErr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, newStepPrinter(&statusOut), &statusErr); err != nil {
+		t.Fatalf("runCLI status returned error: %v", err)
+	}
+
+	var statusResult statusResult
+	if err := json.Unmarshal(statusOut.Bytes(), &statusResult); err != nil {
+		t.Fatalf("Unmarshal status: %v", err)
+	}
+	if statusResult.LatestSubmission == nil {
+		t.Fatalf("expected latest submission, got %+v", statusResult)
+	}
+	if !strings.Contains(statusResult.LatestSubmission.PublishFailureSummary, "mq retry --repo") || !strings.Contains(statusResult.LatestSubmission.PublishFailureSummary, fmt.Sprintf("--publish %d", requests[0].ID)) {
+		t.Fatalf("expected retry command in status summary, got %+v", statusResult.LatestSubmission)
+	}
+	if len(statusResult.LatestSubmission.NextActions) == 0 || !strings.Contains(statusResult.LatestSubmission.NextActions[0].Command, "mq retry --repo") || !strings.Contains(statusResult.LatestSubmission.NextActions[0].Command, fmt.Sprintf("--publish %d", requests[0].ID)) {
+		t.Fatalf("expected retry next action, got %+v", statusResult.LatestSubmission.NextActions)
 	}
 }
 

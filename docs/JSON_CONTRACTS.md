@@ -156,6 +156,9 @@ submission record with optional blocked-state diagnostics:
 - `publish_request_id`
 - `publish_status`
 - `outcome`
+- `publish_failure_cause`
+- `publish_failure_summary`
+- `publish_failure_error`
 - `queue_position`
 - `estimated_completion_ms`
 - `estimate_basis`
@@ -321,6 +324,10 @@ Optional fields:
 - `protected_sha`
 - `publish_request_id`
 - `publish_status`
+- `publish_failure_cause`
+- `publish_failure_summary`
+- `publish_failure_error`
+- `retry_hint`
 - `last_worker_result`
 - `error`
 

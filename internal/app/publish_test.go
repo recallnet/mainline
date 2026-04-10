@@ -740,6 +740,69 @@ func TestDrainRepoUntilSettledSleepsThroughDelayedPublishRetry(t *testing.T) {
 	}
 }
 
+func TestRetryPublishAutoRebasesProtectedBranchAfterRemoteAdvance(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "1")
+
+	writeFileAndCommit(t, repoRoot, "local.txt", "local\n", "main change local")
+	queuePublish(t, repoRoot)
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "")
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 publish request, got %d", len(requests))
+	}
+	if _, err := store.UpdatePublishRequestStatus(context.Background(), requests[0].ID, domain.PublishStatusFailed, requests[0].SupersededBy); err != nil {
+		t.Fatalf("UpdatePublishRequestStatus: %v", err)
+	}
+
+	upstreamClone := filepath.Join(t.TempDir(), "upstream-clone")
+	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
+	runTestCommand(t, upstreamClone, "git", "config", "user.name", "Test User")
+	runTestCommand(t, upstreamClone, "git", "config", "user.email", "test@example.com")
+	runTestCommand(t, upstreamClone, "git", "config", "core.hooksPath", ".git/hooks")
+	writeFileAndCommit(t, upstreamClone, "upstream.txt", "upstream\n", "upstream advance")
+	upstreamHead := trimNewline(runTestCommand(t, upstreamClone, "git", "rev-parse", "HEAD"))
+	runTestCommand(t, upstreamClone, "git", "push", "origin", "main")
+
+	var retryOut bytes.Buffer
+	var retryErr bytes.Buffer
+	if err := runRetry([]string{"--repo", repoRoot, "--publish", strconv.FormatInt(requests[0].ID, 10)}, newStepPrinter(&retryOut), &retryErr); err != nil {
+		t.Fatalf("runRetry returned error: %v", err)
+	}
+
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q", localHead, remoteHead)
+	}
+	parent := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD^"))
+	if parent != upstreamHead {
+		t.Fatalf("expected rebased protected branch to sit on upstream head %q, got %q", upstreamHead, parent)
+	}
+	refreshed, err := store.GetPublishRequest(context.Background(), requests[0].ID)
+	if err != nil {
+		t.Fatalf("GetPublishRequest: %v", err)
+	}
+	if refreshed.Status != domain.PublishStatusSucceeded {
+		t.Fatalf("expected publish request succeeded after retry, got %+v", refreshed)
+	}
+}
+
 func TestIsTransientPublishErrorRecognizesGitHTTPStatusShape(t *testing.T) {
 	err := errors.New("fatal: unable to access 'https://github.com/acme/repo.git/': The requested URL returned error: 503")
 	if !isTransientPublishError(err) {

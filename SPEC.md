@@ -116,6 +116,17 @@ mq wait --submission <id> --for landed --json --timeout 30m
 mq land --json --timeout 30m
 ```
 
+If a publish request fails because remote `main` advanced first, the supported
+operator recovery path is:
+
+```bash
+mq retry --repo /path/to/protected-worktree --publish <id>
+```
+
+Before retrying the push, `mq` may fetch upstream and rebase the protected
+branch onto the updated upstream tip when unpublished local commits replay
+cleanly.
+
 ### Machine-Wide Daemon Flow
 
 ```bash

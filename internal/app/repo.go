@@ -1304,21 +1304,13 @@ func tryRepairCanonicalProtectedRoot(ctx context.Context, engine git.Engine, cfg
 	if cfg.Repo.MainWorktree == "" {
 		return false, "", nil
 	}
-	layout, err := git.DiscoverRepositoryLayout(cfg.Repo.MainWorktree)
-	if err != nil {
-		return false, fmt.Sprintf("left protected root dirty because main worktree %s could not be inspected", cfg.Repo.MainWorktree), nil
-	}
-	rootPath := canonicalRegistryPath(layout.RepositoryRoot)
 	mainPath := canonicalRegistryPath(cfg.Repo.MainWorktree)
-	if rootPath != mainPath {
-		return false, "left protected worktree dirty because doctor only auto-repairs the canonical repository root checkout", nil
-	}
-	branch, err := git.NewEngine(rootPath).CurrentBranch()
+	branch, err := git.NewEngine(mainPath).CurrentBranch()
 	if err != nil {
-		return false, fmt.Sprintf("left protected root dirty because repository root is not on a local branch: %v", err), nil
+		return false, fmt.Sprintf("left protected worktree dirty because main worktree %s is not on a local branch: %v", cfg.Repo.MainWorktree, err), nil
 	}
 	if branch != cfg.Repo.ProtectedBranch {
-		return false, fmt.Sprintf("left protected root dirty because repository root is on %s, expected %s", branch, cfg.Repo.ProtectedBranch), nil
+		return false, fmt.Sprintf("left protected worktree dirty because main worktree %s is on %s, expected %s", cfg.Repo.MainWorktree, branch, cfg.Repo.ProtectedBranch), nil
 	}
 	if requireIdle {
 		count, err := store.CountUnfinishedItems(ctx, repoRecord.ID)
@@ -1343,7 +1335,14 @@ func tryRepairCanonicalProtectedRoot(ctx context.Context, engine git.Engine, cfg
 		return false, "left protected root dirty because the protected branch has no upstream to restore from", nil
 	}
 	if branchStatus.HasUpstream && branchStatus.AheadCount > 0 && branchStatus.BehindCount > 0 {
-		return false, fmt.Sprintf("left protected root dirty because %s has diverged from %s", cfg.Repo.ProtectedBranch, branchStatus.Upstream), nil
+		rebased, note, err := rebaseProtectedBranchOntoUpstream(ctx, engine, cfg, store, repoRecord, branchStatus.Upstream)
+		if err != nil {
+			return false, "", err
+		}
+		if rebased {
+			return true, note, nil
+		}
+		return false, note, nil
 	}
 	if branchStatus.AheadCount > 0 {
 		return false, fmt.Sprintf("left protected root dirty because %s is ahead of %s; publish or reconcile it first", cfg.Repo.ProtectedBranch, branchStatus.Upstream), nil
@@ -1352,6 +1351,48 @@ func tryRepairCanonicalProtectedRoot(ctx context.Context, engine git.Engine, cfg
 		return false, "", err
 	}
 	return true, fmt.Sprintf("restored canonical protected root checkout %s to %s", cfg.Repo.MainWorktree, branchStatus.Upstream), nil
+}
+
+func rebaseProtectedBranchOntoUpstream(ctx context.Context, engine git.Engine, cfg policy.File, store state.Store, repoRecord state.RepositoryRecord, upstreamRef string) (bool, string, error) {
+	beforeSHA, err := engine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+	if err != nil {
+		return false, "", err
+	}
+	if err := engine.RebaseCurrentBranch(cfg.Repo.MainWorktree, upstreamRef); err != nil {
+		switch {
+		case errors.Is(err, git.ErrRebaseConflict), errors.Is(err, git.ErrRebaseEmpty):
+			aborted, abortErr := engine.AbortInProgressOperation(cfg.Repo.MainWorktree)
+			if abortErr != nil {
+				return false, "", abortErr
+			}
+			abortNote := ""
+			if aborted != "" {
+				abortNote = fmt.Sprintf("; aborted %s in %s", aborted, cfg.Repo.MainWorktree)
+			}
+			return false, fmt.Sprintf("protected branch %q diverged from upstream %s and mainline could not replay unpublished local commits cleanly%s; inspect %s, then rerun `mq retry --repo %s --publish <id>` or `mq publish --repo %s`", cfg.Repo.ProtectedBranch, upstreamRef, abortNote, cfg.Repo.MainWorktree, cfg.Repo.MainWorktree, cfg.Repo.MainWorktree), nil
+		default:
+			return false, "", err
+		}
+	}
+	afterSHA, err := engine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+	if err != nil {
+		return false, "", err
+	}
+	if err := appendStateEvent(ctx, store, state.EventRecord{
+		RepoID:    repoRecord.ID,
+		ItemType:  "repository",
+		EventType: "protected.rebased_onto_upstream",
+		Payload: mustJSON(map[string]string{
+			"protected_branch": cfg.Repo.ProtectedBranch,
+			"main_worktree":    cfg.Repo.MainWorktree,
+			"upstream":         upstreamRef,
+			"before_sha":       beforeSHA,
+			"after_sha":        afterSHA,
+		}),
+	}); err != nil {
+		return false, "", err
+	}
+	return true, fmt.Sprintf("rebased protected branch %s in %s onto %s", cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree, upstreamRef), nil
 }
 
 func yesNo(v bool) string {

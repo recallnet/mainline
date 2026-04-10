@@ -251,7 +251,7 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 				return result, exitWithCode(1, err)
 			}
 			_ = protectedSHA
-			info, err := resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine)
+			info, err := resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine, queued.Config.Repo.ProtectedBranch)
 			if err != nil {
 				result.Outcome = waitOutcomeFailed
 				result.DurationMS = time.Since(start).Milliseconds()
@@ -270,7 +270,7 @@ func waitForIntegratedSubmission(queued queuedSubmission, timeout time.Duration,
 					result.Error = cycleErr.Error()
 					return result, cycleErr
 				}
-				info, err = resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine)
+				info, err = resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine, queued.Config.Repo.ProtectedBranch)
 				if err != nil {
 					result.Outcome = waitOutcomeFailed
 					result.DurationMS = time.Since(start).Milliseconds()
@@ -414,7 +414,7 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 			}
 			result.ProtectedSHA = protectedSHA
 
-			info, err := resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine)
+			info, err := resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine, queued.Config.Repo.ProtectedBranch)
 			if err != nil {
 				result.DurationMS = time.Since(start).Milliseconds()
 				result.Error = err.Error()
@@ -441,7 +441,7 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 					result.Error = cycleErr.Error()
 					return result, cycleErr
 				}
-				info, err = resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine)
+				info, err = resolveSubmissionPublishInfo(ctx, queued.Store, queued.RepoRecord.ID, submission, mainEngine, queued.Config.Repo.ProtectedBranch)
 				if err != nil {
 					result.DurationMS = time.Since(start).Milliseconds()
 					result.Error = err.Error()

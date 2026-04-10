@@ -317,6 +317,15 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 			}
 			return fmt.Sprintf("Preempted publish request %d for newer target %s", request.ID, replacement.TargetSHA), nil
 		}
+		if errors.Is(err, git.ErrPushRejected) {
+			recovered, retryResult, retryErr := retryRejectedPublishOnce(ctx, store, repoRecord, cfg, request, publishLease)
+			if retryErr != nil {
+				return "", retryErr
+			}
+			if recovered {
+				return retryResult, nil
+			}
+		}
 		return handlePublishFailure(ctx, store, repoRecord.ID, request, cfg, publishStagePush, err)
 	}
 
@@ -351,6 +360,75 @@ func processPublishRequest(ctx context.Context, store state.Store, repoRecord st
 	}
 
 	return fmt.Sprintf("Published request %d for %s", request.ID, latestProtectedSHA), nil
+}
+
+func retryRejectedPublishOnce(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File, request state.PublishRequest, publishLease *state.Lease) (bool, string, error) {
+	mainEngine := git.NewEngine(cfg.Repo.MainWorktree)
+	if err := mainEngine.FetchRemote(cfg.Repo.MainWorktree, cfg.Repo.RemoteName); err != nil {
+		return false, "", nil
+	}
+	status, err := mainEngine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
+	if err != nil {
+		return false, "", err
+	}
+	if !status.HasUpstream || !(status.AheadCount > 0 && status.BehindCount > 0) {
+		return false, "", nil
+	}
+	rebased, _, err := rebaseProtectedBranchOntoUpstream(ctx, mainEngine, cfg, store, repoRecord, status.Upstream)
+	if err != nil {
+		return false, "", err
+	}
+	if !rebased {
+		return false, "", nil
+	}
+	handle, err := mainEngine.StartPushBranch(cfg.Repo.MainWorktree, cfg.Repo.RemoteName, cfg.Repo.ProtectedBranch, shouldBypassGitHooks(cfg))
+	if err != nil {
+		return false, "", err
+	}
+	if publishLease != nil {
+		_ = publishLease.UpdateMetadata(state.LeaseMetadata{
+			Domain:    state.PublishLock,
+			RepoRoot:  repoRecord.CanonicalPath,
+			Owner:     "publish-worker",
+			Stage:     publishStagePush,
+			RequestID: request.ID,
+			PID:       handle.PID(),
+			CreatedAt: time.Now().UTC(),
+		})
+	}
+	if _, err := handle.Wait(); err != nil {
+		return false, "", nil
+	}
+
+	latestProtectedSHA, err := mainEngine.BranchHeadSHA(cfg.Repo.ProtectedBranch)
+	if err != nil {
+		return false, "", err
+	}
+	if _, err := store.UpdatePublishRequestStatus(ctx, request.ID, "succeeded", sql.NullInt64{}); err != nil {
+		return false, "", err
+	}
+	if err := appendStateEvent(ctx, store, state.EventRecord{
+		RepoID:    repoRecord.ID,
+		ItemType:  "publish_request",
+		ItemID:    state.NullInt64(request.ID),
+		EventType: "publish.completed",
+		Payload: mustJSON(map[string]string{
+			"target_sha": latestProtectedSHA,
+		}),
+	}); err != nil {
+		return false, "", err
+	}
+	if latestProtectedSHA != request.TargetSHA {
+		replacement, created, err := ensureLatestPublishRequestRecord(ctx, store, repoRecord.ID, latestProtectedSHA, request.Priority)
+		if err != nil {
+			return false, "", err
+		}
+		if created {
+			return true, fmt.Sprintf("Rebased protected %s onto %s after push rejection, published request %d, and queued follow-up publish request %d for %s", cfg.Repo.ProtectedBranch, status.Upstream, request.ID, replacement.ID, latestProtectedSHA), nil
+		}
+		return true, fmt.Sprintf("Rebased protected %s onto %s after push rejection and published request %d for %s", cfg.Repo.ProtectedBranch, status.Upstream, request.ID, latestProtectedSHA), nil
+	}
+	return true, fmt.Sprintf("Rebased protected %s onto %s after push rejection and published request %d for %s", cfg.Repo.ProtectedBranch, status.Upstream, request.ID, latestProtectedSHA), nil
 }
 
 func handlePublishFailure(ctx context.Context, store state.Store, repoID int64, request state.PublishRequest, cfg policy.File, stage string, cause error) (string, error) {

@@ -671,7 +671,7 @@ func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int6
 			item.NextActions = buildBlockedSubmissionActions(item)
 		}
 		if submission.Status == domain.SubmissionStatusSucceeded {
-			info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission, mainEngine)
+			info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission, mainEngine, protectedBranch)
 			if err != nil {
 				return nil, err
 			}
@@ -685,6 +685,7 @@ func enrichStatusSubmissions(ctx context.Context, store state.Store, repoID int6
 			if item.RetryHint == "" {
 				item.RetryHint = info.Failure.RetryHint
 			}
+			item.NextActions = buildPublishFailureActions(item, mainWorktree, info.Failure.RetryCommand)
 		}
 		enriched = append(enriched, item)
 	}
@@ -761,5 +762,21 @@ func buildBlockedSubmissionActions(submission statusSubmission) []statusNextActi
 			{Label: "Retry this blocked submission when ready", Command: retryCommand},
 			{Label: "Cancel this blocked submission if it is obsolete", Command: cancelCommand},
 		}
+	}
+}
+
+func buildPublishFailureActions(submission statusSubmission, mainWorktree string, retryCommand string) []statusNextAction {
+	if submission.PublishStatus != domain.PublishStatusFailed {
+		return nil
+	}
+	if retryCommand == "" && submission.PublishRequestID != 0 && mainWorktree != "" {
+		retryCommand = fmt.Sprintf("mq retry --repo %s --publish %d", mainWorktree, submission.PublishRequestID)
+	}
+	if retryCommand == "" {
+		return nil
+	}
+	return []statusNextAction{
+		{Label: "Retry the failed publish from the protected worktree", Command: retryCommand},
+		{Label: "Inspect protected branch state if publish cannot be replayed automatically", Command: fmt.Sprintf("mq status --repo %s --json", mainWorktree)},
 	}
 }

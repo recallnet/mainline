@@ -108,6 +108,17 @@ If the wrapper expects remote landing as part of the same job, prefer:
 mq land --json --timeout 30m
 ```
 
+If publish loses a race because remote `main` moved first, rerun the failed
+publish request instead of hand-repairing protected `main`:
+
+```bash
+mq retry --repo /path/to/protected-worktree --publish 4
+```
+
+When the unpublished protected-branch commits can be replayed cleanly, `mq`
+fetches upstream, rebases the protected branch onto the updated remote tip, and
+retries the push automatically.
+
 If a submission blocks because its topic branch is behind local protected
 `main`, use `mq rebase` instead of hand-rolling the Git repair:
 
@@ -383,6 +394,7 @@ mq watch --repo /path/to/repo-root
 mq events --repo /path/to/repo-root --follow --json --lifecycle
 mq registry prune --json
 mq retry --repo /path/to/repo-root --submission 17
+mq retry --repo /path/to/protected-worktree --publish 4
 mq cancel --repo /path/to/repo-root --publish 4
 ```
 

@@ -44,7 +44,7 @@ func collectExecutionEstimate(ctx context.Context, store state.Store, repoID int
 			integrationDurations = append(integrationDurations, succeededAt.Sub(startedAt).Milliseconds())
 		}
 
-		info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission, mainEngine)
+		info, err := resolveSubmissionPublishInfo(ctx, store, repoID, submission, mainEngine, cfg.Repo.ProtectedBranch)
 		if err != nil {
 			return executionEstimate{}, err
 		}

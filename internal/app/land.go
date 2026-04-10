@@ -255,6 +255,13 @@ func waitForLandedPublish(queued queuedSubmission, timeout time.Duration, pollIn
 					result.Published = true
 					return result, nil
 				} else if result.PublishStatus == "failed" || result.PublishStatus == "cancelled" || result.PublishStatus == "superseded" {
+					if result.PublishStatus == "failed" {
+						info, infoErr := resolvePublishFailureInfo(ctx, queued.Store, queued.RepoRecord.ID, result.PublishRequestID, mainEngine, queued.Config.Repo.ProtectedBranch)
+						if infoErr == nil && info.Summary != "" {
+							result.Error = fmt.Sprintf("publish request %d failed: %s", result.PublishRequestID, info.Summary)
+							return result, fmt.Errorf("publish request %d failed: %s", result.PublishRequestID, info.Summary)
+						}
+					}
 					result.Error = fmt.Sprintf("publish request %d %s", result.PublishRequestID, result.PublishStatus)
 					return result, fmt.Errorf("publish request %d %s", result.PublishRequestID, result.PublishStatus)
 				}
