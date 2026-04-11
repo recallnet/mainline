@@ -110,6 +110,11 @@ func runOneCycle(repoPath string) (string, error) {
 		lease.Release()
 		return "", err
 	}
+	recoveredObsolete, err := supersedeProtectedReachableSubmissions(ctx, store, repoRecord.ID, git.NewEngine(mainLayout.WorktreeRoot), cfg.Repo.ProtectedBranch)
+	if err != nil {
+		lease.Release()
+		return "", err
+	}
 
 	submission, err := store.NextQueuedIntegrationSubmission(ctx, repoRecord.ID)
 	if err != nil {
@@ -158,6 +163,9 @@ func runOneCycle(repoPath string) (string, error) {
 	result, err := processPublishRequest(ctx, store, repoRecord, cfg, publishLease)
 	if err != nil {
 		return "", err
+	}
+	if result == "No queued publish requests." && recoveredObsolete > 0 {
+		return fmt.Sprintf("Superseded %d obsolete submission(s) already reachable from %s", recoveredObsolete, cfg.Repo.ProtectedBranch), nil
 	}
 	return result, nil
 }
@@ -789,6 +797,46 @@ func supersedeObsoleteSubmissions(ctx context.Context, store state.Store, repoID
 		}
 	}
 	return nil
+}
+
+func supersedeProtectedReachableSubmissions(ctx context.Context, store state.Store, repoID int64, engine git.Engine, protectedBranch string) (int, error) {
+	protectedSHA, err := engine.BranchHeadSHA(protectedBranch)
+	if err != nil {
+		return 0, err
+	}
+	submissions, err := store.ListIntegrationSubmissions(ctx, repoID)
+	if err != nil {
+		return 0, err
+	}
+	superseded := 0
+	for _, submission := range submissions {
+		if submission.Status != domain.SubmissionStatusQueued && submission.Status != domain.SubmissionStatusBlocked {
+			continue
+		}
+		if submission.SourceSHA == "" {
+			continue
+		}
+		reachable, err := engine.IsAncestor(submission.SourceSHA, protectedBranch)
+		if err != nil || !reachable {
+			continue
+		}
+		reason := fmt.Sprintf("superseded because source sha %s is already reachable from protected branch %q at %s", submission.SourceSHA, protectedBranch, protectedSHA)
+		if _, err := store.UpdateIntegrationSubmissionStatus(ctx, submission.ID, domain.SubmissionStatusSuperseded, reason); err != nil {
+			return superseded, err
+		}
+		if err := appendSubmissionEvent(ctx, store, repoID, submission.ID, domain.EventType("submission.superseded"), map[string]string{
+			"branch":               submissionDisplayRef(submission),
+			"source_ref":           submission.SourceRef,
+			"ref_kind":             string(submission.RefKind),
+			"source_sha":           submission.SourceSHA,
+			"superseded_protected": protectedSHA,
+			"reason":               reason,
+		}); err != nil {
+			return superseded, err
+		}
+		superseded++
+	}
+	return superseded, nil
 }
 
 func recoverInterruptedPublishRequests(ctx context.Context, store state.Store, repoID int64) (int, error) {

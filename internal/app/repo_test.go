@@ -920,6 +920,61 @@ func TestDoctorJSONListsConcreteUnfinishedQueueItems(t *testing.T) {
 	}
 }
 
+func TestDoctorFixSupersedesBlockedSubmissionAlreadyReachableFromProtectedBranch(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-doctor-reachable")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/doctor-reachable", featurePath)
+	writeFileAndCommit(t, featurePath, "doctor.txt", "doctor\n", "doctor reachable feature")
+	sourceSHA := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+	runTestCommand(t, repoRoot, "git", "merge", "--ff-only", "feature/doctor-reachable")
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submission, err := store.CreateIntegrationSubmission(context.Background(), state.IntegrationSubmission{
+		RepoID:         repoRecord.ID,
+		BranchName:     "feature/doctor-reachable",
+		SourceRef:      "feature/doctor-reachable",
+		RefKind:        submissionRefKindBranch,
+		SourceWorktree: featurePath,
+		SourceSHA:      sourceSHA,
+		Status:         domain.SubmissionStatusBlocked,
+		LastError:      "waiting on dropped worktree",
+	})
+	if err != nil {
+		t.Fatalf("CreateIntegrationSubmission: %v", err)
+	}
+
+	if err := os.RemoveAll(featurePath); err != nil {
+		t.Fatalf("RemoveAll(featurePath): %v", err)
+	}
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--fix", "--json"}, newStepPrinter(&out), &errOut); err != nil {
+		t.Fatalf("runDoctor --fix returned error: %v", err)
+	}
+
+	updated, err := store.GetIntegrationSubmission(context.Background(), submission.ID)
+	if err != nil {
+		t.Fatalf("GetIntegrationSubmission: %v", err)
+	}
+	if updated.Status != domain.SubmissionStatusSuperseded {
+		t.Fatalf("expected superseded blocked submission, got %+v", updated)
+	}
+	if !strings.Contains(updated.LastError, "already reachable from protected branch") {
+		t.Fatalf("expected reachability supersede reason, got %+v", updated)
+	}
+}
+
 func TestStatusJSONWorksWhenCanonicalRootIsDirty(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

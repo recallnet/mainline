@@ -168,6 +168,9 @@ These are current design constraints, not hidden bugs:
   rebase and push
 - factories should currently integrate through the CLI/daemon contract, not by
   importing `internal/`
+- queued or blocked submissions whose `source_sha` is already reachable from
+  protected `main` are obsolete and may be auto-superseded even if their
+  original source worktree has been deleted
 
 ## Forward Product Direction
 

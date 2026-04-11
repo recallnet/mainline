@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/recallnet/mainline/internal/domain"
 	"github.com/recallnet/mainline/internal/git"
 	"github.com/recallnet/mainline/internal/policy"
 	"github.com/recallnet/mainline/internal/state"
@@ -747,6 +748,64 @@ func TestRunOnceFailsWhenSubmittedSourceWorktreeTurnsDirtyAfterSubmit(t *testing
 	status := readStatusJSON(t, repoRoot)
 	if status.LatestSubmission == nil || status.LatestSubmission.Status != "failed" {
 		t.Fatalf("expected failed latest submission, got %+v", status.LatestSubmission)
+	}
+}
+
+func TestRunOnceSupersedesBlockedSubmissionAlreadyReachableAfterWorktreeDrop(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-reachable-dropped")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/reachable-dropped", featurePath)
+	writeFileAndCommit(t, featurePath, "reachable.txt", "reachable\n", "reachable feature")
+	sourceSHA := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+	runTestCommand(t, repoRoot, "git", "merge", "--ff-only", "feature/reachable-dropped")
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	submission, err := store.CreateIntegrationSubmission(context.Background(), state.IntegrationSubmission{
+		RepoID:         repoRecord.ID,
+		BranchName:     "feature/reachable-dropped",
+		SourceRef:      "feature/reachable-dropped",
+		RefKind:        submissionRefKindBranch,
+		SourceWorktree: featurePath,
+		SourceSHA:      sourceSHA,
+		Status:         domain.SubmissionStatusBlocked,
+		LastError:      "rebase conflict",
+	})
+	if err != nil {
+		t.Fatalf("CreateIntegrationSubmission: %v", err)
+	}
+
+	if err := os.RemoveAll(featurePath); err != nil {
+		t.Fatalf("RemoveAll(featurePath): %v", err)
+	}
+
+	var runOut bytes.Buffer
+	var runErr bytes.Buffer
+	if err := runRunOnce([]string{"--repo", repoRoot}, newStepPrinter(&runOut), &runErr); err != nil {
+		t.Fatalf("runRunOnce returned error: %v", err)
+	}
+	if !strings.Contains(runOut.String(), "Superseded 1 obsolete submission") {
+		t.Fatalf("expected supersede summary, got %q", runOut.String())
+	}
+
+	updated, err := store.GetIntegrationSubmission(context.Background(), submission.ID)
+	if err != nil {
+		t.Fatalf("GetIntegrationSubmission: %v", err)
+	}
+	if updated.Status != domain.SubmissionStatusSuperseded {
+		t.Fatalf("expected superseded blocked submission, got %+v", updated)
+	}
+	if !strings.Contains(updated.LastError, "already reachable from protected branch") {
+		t.Fatalf("expected reachability supersede reason, got %+v", updated)
 	}
 }
 

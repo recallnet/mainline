@@ -281,6 +281,11 @@ without human branch surgery.
 `mq cancel --blocked` bulk-cancels blocked submissions when they are obsolete
 and you want to clear them out of the active queue surface.
 
+`mq run-once` and `mq doctor --fix` also auto-supersede queued or blocked
+submissions whose `source_sha` is already reachable from protected `main`, even
+if the original source worktree was deleted after that commit effectively
+landed.
+
 `mq status --json` now projects publish correlation back onto succeeded
 submissions through `publish_request_id`, `publish_status`, and `outcome`, so a
 factory can answer “did this submission fully land?” from one status surface.

@@ -1205,6 +1205,11 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 			return nil, nil, err
 		}
 	}
+	if superseded, err := supersedeProtectedReachableSubmissions(ctx, store, repoRecord.ID, engine, cfg.Repo.ProtectedBranch); err != nil {
+		return nil, nil, err
+	} else if superseded > 0 {
+		applied = append(applied, fmt.Sprintf("superseded %d obsolete submission(s) already reachable from %s", superseded, cfg.Repo.ProtectedBranch))
+	}
 
 	if cfg.Repo.MainWorktree != "" && engine.BranchExists(cfg.Repo.ProtectedBranch) {
 		if _, err := os.Stat(cfg.Repo.MainWorktree); err == nil {

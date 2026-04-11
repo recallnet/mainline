@@ -244,6 +244,8 @@ Recent hardening coverage now explicitly exercises the adoption-critical paths:
 
 - concurrent multi-worktree submit, integrate, and publish flows
 - deleted, moved, and dirtied source worktrees after submit
+- stale queued or blocked submissions whose source SHA is already reachable from
+  protected `main`, including after the original worktree was dropped
 - queued branch head drift after submit
 - external protected-branch advancement while queued work waits
 - inherited `pre-push` hook success and failure-plus-retry publish paths
