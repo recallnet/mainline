@@ -163,6 +163,52 @@ func TestLandDirtyMainlineConfigGuidesBootstrapCommit(t *testing.T) {
 	}
 }
 
+func TestLandFailsFastWhenConfiguredRemoteIsMissing(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+
+	featurePath := filepath.Join(t.TempDir(), "feature-missing-remote")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/missing-remote", featurePath)
+	writeFileAndCommit(t, featurePath, "missing-remote.txt", "missing remote\n", "feature missing remote")
+
+	protectedBefore := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := runCLI([]string{"land", "--repo", featurePath, "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&stdout), &stderr)
+	if err == nil {
+		t.Fatalf("expected land to fail fast when configured remote is missing")
+	}
+	if !strings.Contains(err.Error(), "configured remote origin does not exist") {
+		t.Fatalf("expected missing remote error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "publish cannot run") {
+		t.Fatalf("expected publish-specific guidance, got %v", err)
+	}
+
+	protectedAfter := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	if protectedAfter != protectedBefore {
+		t.Fatalf("expected land preflight not to integrate before failing, got %s then %s", protectedBefore, protectedAfter)
+	}
+
+	layout, discoverErr := git.DiscoverRepositoryLayout(repoRoot)
+	if discoverErr != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", discoverErr)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, getErr := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if getErr != nil {
+		t.Fatalf("GetRepositoryByPath: %v", getErr)
+	}
+	submissions, listErr := store.ListIntegrationSubmissions(context.Background(), repoRecord.ID)
+	if listErr != nil {
+		t.Fatalf("ListIntegrationSubmissions: %v", listErr)
+	}
+	if len(submissions) != 0 {
+		t.Fatalf("expected no queued submissions after missing remote preflight failure, got %+v", submissions)
+	}
+}
+
 func TestLandFailsIfSucceededSubmissionIsNotReachableFromProtectedBranch(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

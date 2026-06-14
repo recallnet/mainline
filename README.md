@@ -394,6 +394,9 @@ mq land --json --timeout 30m
 Use `mq submit --wait` when the caller only needs an integration result.
 Use `mq submit --wait --for landed` or `mq land` when the job is not done until
 remote `main` has moved.
+`mq land` requires the configured `[repo].RemoteName` to exist in the protected
+worktree. In local-only repos without a remote, use `mq submit --wait` for the
+local integration result instead of waiting for `landed`.
 
 Operate and observe:
 

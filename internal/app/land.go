@@ -153,6 +153,16 @@ func validateLandPreflight(repoPath string) error {
 	if mainLayout.GitDir != layout.GitDir {
 		return fmt.Errorf("main worktree %s does not belong to repository %s", cfg.Repo.MainWorktree, repoRoot)
 	}
+	if cfg.Repo.RemoteName == "" {
+		return fmt.Errorf("publish cannot run because no remote is configured; `mq land` waits for publish, so use `mq submit --wait` for local integration only or configure [repo].RemoteName")
+	}
+	remoteExists, err := git.NewEngine(mainLayout.WorktreeRoot).RemoteExists(cfg.Repo.MainWorktree, cfg.Repo.RemoteName)
+	if err != nil {
+		return fmt.Errorf("publish cannot inspect configured remote %s in %s: %w", cfg.Repo.RemoteName, cfg.Repo.MainWorktree, err)
+	}
+	if !remoteExists {
+		return fmt.Errorf("publish cannot run because configured remote %s does not exist in %s; `mq land` waits for publish, so use `mq submit --wait` for local integration only or add the remote before retrying", cfg.Repo.RemoteName, cfg.Repo.MainWorktree)
+	}
 
 	if _, err := ensureProtectedRootHealthy(
 		context.Background(),

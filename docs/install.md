@@ -207,6 +207,9 @@ Mode = 'auto'
 
 With `Mode = 'manual'`, `mq submit --wait` only proves `integrated`. Remote
 publish still requires `mq publish`, `mq land`, or `mq wait --for landed`.
+`mq land` requires the configured remote to exist. For local-only repos without
+an upstream remote, use `mq submit --wait` and treat `integrated` as the terminal
+local result.
 
 With `Mode = 'auto'`, you can also wait through publish directly from submit:
 

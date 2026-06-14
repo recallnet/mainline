@@ -196,6 +196,10 @@ cd /path/to/topic-worktree
 mq land --json --timeout 30m
 ```
 
+`mq land` waits for remote publish and fails before queueing if the configured
+remote is missing. For local-only repos, use `mq submit --wait` when the desired
+result is local protected-branch integration.
+
 Or, if it wants an explicit submission-id flow:
 
 ```bash
