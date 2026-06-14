@@ -27,6 +27,9 @@ committed policy file already exists, init preserves it and creates the durable
 state/registry entries without dirtying protected `main`.
 
 If protected `main` is dirty, start with `mq doctor --repo .`: it reports that the queue is blocked and tells you to take ownership of cleaning or resolving the protected root checkout before retrying.
+If `mq repo init` just wrote `mainline.toml`, commit or revert that policy file
+before running `mq land`; `mq doctor --fix` is not the bootstrap policy commit
+path.
 
 `mainline.toml` is the runtime config authority for the repo. The SQLite state
 store keeps queue identity, events, and publish/integration history.

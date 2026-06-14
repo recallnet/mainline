@@ -151,6 +151,9 @@ func protectedWorktreeDirtyError(mainWorktree string, dirtyPaths []string, activ
 	if activity != nil {
 		queueBlockedGuidance = fmt.Sprintf("; mq is currently active in the protected root checkout (%s). Wait and retry. Do NOT `git stash`, `git checkout`, or `mq doctor --fix` while this critical section is active", activity.Summary)
 	} else {
+		if len(dirtyPaths) == 1 && dirtyPaths[0] == policy.FileName {
+			return fmt.Errorf("protected branch worktree %s is dirty (%s); commit or revert %s before landing. If `mq repo init` just wrote the policy file, run `git -C %s add %s` and `git -C %s commit -m \"Initialize mainline repo policy\"`, then retry", mainWorktree, policy.FileName, policy.FileName, mainWorktree, policy.FileName, mainWorktree)
+		}
 		queueBlockedGuidance += ". If the queue is idle and no mq worker owns protected main, `mq doctor --repo " + mainWorktree + " --fix` can restore shipped main. Otherwise wait and retry before touching files"
 	}
 	if len(dirtyPaths) == 0 {

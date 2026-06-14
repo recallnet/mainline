@@ -374,6 +374,9 @@ mq doctor --repo /path/to/repo-root --fix --json
 ```
 
 If protected `main` is dirty, `mq doctor` is the takeover command: it tells you the queue is blocked, shows the dirty paths, and tells you to save, clean, or resolve the protected root checkout before retrying.
+If the only dirty path is `mainline.toml` immediately after `mq repo init`,
+commit or revert that policy file before running `mq land`; do not use
+`mq doctor --fix` as a substitute for the required policy commit.
 
 Submit and land:
 

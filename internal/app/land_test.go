@@ -124,6 +124,45 @@ func TestLandFailsPreflightBeforeQueueingWhenProtectedWorktreeIsDirty(t *testing
 	}
 }
 
+func TestLandDirtyMainlineConfigGuidesBootstrapCommit(t *testing.T) {
+	bareDir, mainWorktree := createBareCloneWorktree(t)
+	featurePath := filepath.Join(t.TempDir(), "feature-policy-dirty")
+	runTestCommand(t, t.TempDir(), "git", "--git-dir", bareDir, "worktree", "add", "-b", "feature/policy-dirty", featurePath, "main")
+	configureTestGitRepo(t, featurePath)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", featurePath, "--protected-branch", "main", "--main-worktree", mainWorktree}, newStepPrinter(&initOut), &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	writeFileAndCommit(t, featurePath, "policy-dirty.txt", "policy dirty\n", "feature policy dirty")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := runCLI([]string{"land", "--repo", featurePath, "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&stdout), &stderr)
+	if err == nil {
+		t.Fatalf("expected dirty protected branch preflight failure")
+	}
+	message := err.Error()
+	if !strings.Contains(message, "(mainline.toml)") {
+		t.Fatalf("expected full mainline.toml dirty path, got %v", err)
+	}
+	if strings.Contains(message, "(ainline.toml)") {
+		t.Fatalf("expected dirty path not to be truncated, got %v", err)
+	}
+	canonicalMainWorktree := canonicalRegistryPath(mainWorktree)
+	if !strings.Contains(message, "git -C "+canonicalMainWorktree+" add mainline.toml") {
+		t.Fatalf("expected bootstrap add guidance, got %v", err)
+	}
+	if !strings.Contains(message, "Initialize mainline repo policy") {
+		t.Fatalf("expected bootstrap commit guidance, got %v", err)
+	}
+	if !strings.Contains(message, "commit or revert mainline.toml") {
+		t.Fatalf("expected direct policy-file guidance, got %v", err)
+	}
+}
+
 func TestLandFailsIfSucceededSubmissionIsNotReachableFromProtectedBranch(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

@@ -68,6 +68,9 @@ Only make the `mainline.toml` commit when `mq repo init` actually writes the
 policy file. If a committed `mainline.toml` already exists, init preserves it
 and initializes only durable queue state and registry metadata, leaving the
 protected checkout clean.
+If you try to land before making that first policy commit, `mq land` will stop
+on the dirty protected checkout and tell you to commit or revert
+`mainline.toml` before retrying.
 
 `mq repo init` expects the protected worktree to be on a branch, not detached
 HEAD. For ordinary repos, run it from local branch `main`. If you really intend
