@@ -1070,6 +1070,56 @@ func TestRepoInitFromBareCloneWorktreeUsesSharedStorage(t *testing.T) {
 	}
 }
 
+func TestRepoInitPreservesCommittedConfigInBareCloneWorktree(t *testing.T) {
+	_, worktreePath := createBareCloneWorktree(t)
+	configPath := filepath.Join(worktreePath, "mainline.toml")
+	committedConfig := `[repo]
+ProtectedBranch = 'main'
+MainWorktree = '` + canonicalRegistryPath(worktreePath) + `'
+
+[publish]
+Mode = 'manual'
+`
+	if err := os.WriteFile(configPath, []byte(committedConfig), 0o644); err != nil {
+		t.Fatalf("WriteFile(mainline.toml): %v", err)
+	}
+	runTestCommand(t, worktreePath, "git", "add", "mainline.toml")
+	runTestCommand(t, worktreePath, "git", "commit", "-m", "Initialize mainline policy")
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", worktreePath, "--protected-branch", "main", "--main-worktree", worktreePath, "--json"}, newStepPrinter(&initOut), &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(mainline.toml): %v", err)
+	}
+	if string(data) != committedConfig {
+		t.Fatalf("expected repo init to preserve committed config, got %q", string(data))
+	}
+	var result map[string]any
+	if err := json.Unmarshal(initOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result["config_written"] != false {
+		t.Fatalf("expected config_written=false, got %#v", result["config_written"])
+	}
+	nextSteps, ok := result["next_steps"].([]any)
+	if !ok {
+		t.Fatalf("expected next steps array, got %#v", result["next_steps"])
+	}
+	for _, step := range nextSteps {
+		if strings.Contains(fmt.Sprint(step), "git commit") {
+			t.Fatalf("expected next steps to omit policy commit when config is preserved, got %#v", nextSteps)
+		}
+	}
+	if status := runTestCommand(t, worktreePath, "git", "status", "--short"); status != "" {
+		t.Fatalf("expected clean protected worktree after repo init, got %q", status)
+	}
+}
+
 func TestDoctorSucceedsFromBareCloneWorktree(t *testing.T) {
 	bareDir, worktreePath := createBareCloneWorktree(t)
 

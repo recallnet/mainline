@@ -22,6 +22,10 @@ mq config edit --repo .
 mq doctor --repo .
 ```
 
+The policy commit is required only when init writes `mainline.toml`. If a
+committed policy file already exists, init preserves it and creates the durable
+state/registry entries without dirtying protected `main`.
+
 If protected `main` is dirty, start with `mq doctor --repo .`: it reports that the queue is blocked and tells you to take ownership of cleaning or resolving the protected root checkout before retrying.
 
 `mainline.toml` is the runtime config authority for the repo. The SQLite state

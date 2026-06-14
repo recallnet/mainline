@@ -136,6 +136,29 @@ queue shape from `state` alone.
 Repo policy and protected-worktree configuration come from `mainline.toml`.
 The SQLite store is the durable queue/event state and repo identity layer.
 
+## `mq repo init --json`
+
+`mq repo init --json` returns:
+
+- `ok`
+- `config_path`
+- `config_present`
+- `config_written`
+- `protected_branch`
+- `main_worktree`
+- `state_path`
+- `repository_root`
+- `global_registry_path`
+- `recommended_commit_message`
+- `next_steps`
+
+`config_present` reports whether `mainline.toml` existed before init.
+`config_written` reports whether init wrote the policy file during this run.
+When `config_written` is `false`, `next_steps` omits the `git add` and
+`git commit` policy-file steps, and `recommended_commit_message` is empty.
+When a committed `mainline.toml` already exists, init preserves it byte-for-byte
+and initializes durable queue state and registry metadata only.
+
 `protected_upstream` is a `git.BranchStatus` object with:
 
 - `name`

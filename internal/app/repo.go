@@ -110,12 +110,24 @@ Flags:
 	repoRoot := layout.RepositoryRoot
 	cfg := policy.DefaultFile()
 	defaultProtectedWorktree := defaultMainWorktree(layout)
+	mainWorktreeExplicit := mainWorktree != ""
 	if mainWorktree == "" {
 		mainWorktree = defaultProtectedWorktree
 	} else if !filepath.IsAbs(mainWorktree) {
 		mainWorktree = filepath.Join(repoRoot, mainWorktree)
 	}
 	mainWorktree = canonicalRegistryPath(mainWorktree)
+	configRoot := resolveConfigAuthorityRoot(context.Background(), layout, state.NewStore(state.DefaultPath(layout.GitDir)), mainWorktree)
+	loadedCfg, configPresent, err := policy.LoadOrDefault(configRoot)
+	if err != nil {
+		return err
+	}
+	if configPresent {
+		cfg = repoInitEffectiveConfig(cfg, loadedCfg)
+	}
+	if !mainWorktreeExplicit && cfg.Repo.MainWorktree != "" {
+		mainWorktree = canonicalRegistryPath(cfg.Repo.MainWorktree)
+	}
 
 	engine := git.NewEngine(layout.WorktreeRoot)
 	currentBranch, err := engine.CurrentBranch()
@@ -140,9 +152,17 @@ Flags:
 	cfg.Repo.RemoteName = remote
 	cfg.Repo.MainWorktree = mainWorktree
 
-	configRoot := resolveConfigAuthorityRoot(context.Background(), layout, state.NewStore(state.DefaultPath(layout.GitDir)), mainWorktree)
-	if err := saveConfigAuthority(configRoot, cfg); err != nil {
-		return err
+	configWritten := !configPresent
+	if configWritten {
+		if err := saveConfigAuthority(configRoot, cfg); err != nil {
+			return err
+		}
+	}
+
+	nextSteps := repoInitNextSteps(configWritten)
+	recommendedCommitMessage := ""
+	if configWritten {
+		recommendedCommitMessage = "Initialize mainline repo policy"
 	}
 
 	store := state.NewStore(state.DefaultPath(layout.GitDir))
@@ -187,22 +207,15 @@ Flags:
 		return encoder.Encode(map[string]any{
 			"ok":                         true,
 			"config_path":                policy.ConfigPath(configRoot),
+			"config_present":             configPresent,
+			"config_written":             configWritten,
 			"protected_branch":           cfg.Repo.ProtectedBranch,
 			"main_worktree":              cfg.Repo.MainWorktree,
 			"state_path":                 state.DefaultPath(layout.GitDir),
 			"repository_root":            repoRoot,
 			"global_registry_path":       mustGlobalRegistryPath(),
-			"recommended_commit_message": "Initialize mainline repo policy",
-			"next_steps": []string{
-				"git add mainline.toml",
-				"git commit -m \"Initialize mainline repo policy\"",
-				"./scripts/install-hooks.sh",
-				"# for agent/factory repos, set [publish].Mode = 'auto' before relying on submit --wait",
-				"mq submit --queue-only --json",
-				"mq submit --check-only --json",
-				"mq submit --wait --timeout 15m --json",
-				"mq land --json --timeout 30m",
-			},
+			"recommended_commit_message": recommendedCommitMessage,
+			"next_steps":                 nextSteps,
 		})
 	}
 
@@ -213,17 +226,58 @@ Flags:
 	printer.Line("State path: %s", state.DefaultPath(layout.GitDir))
 	printer.Line("Global registry: %s", mustGlobalRegistryPath())
 	printer.Section("Next")
-	printer.Bullet(
-		"git add mainline.toml",
-		"git commit -m \"Initialize mainline repo policy\"",
+	printer.Bullet(nextSteps...)
+	return nil
+}
+
+func repoInitEffectiveConfig(defaults policy.File, loaded policy.File) policy.File {
+	cfg := loaded
+	if cfg.Repo.ProtectedBranch == "" {
+		cfg.Repo.ProtectedBranch = defaults.Repo.ProtectedBranch
+	}
+	if cfg.Repo.RemoteName == "" {
+		cfg.Repo.RemoteName = defaults.Repo.RemoteName
+	}
+	if cfg.Repo.WorktreeLayoutPolicy == "" {
+		cfg.Repo.WorktreeLayoutPolicy = defaults.Repo.WorktreeLayoutPolicy
+	}
+	if cfg.Repo.HookPolicy == "" {
+		cfg.Repo.HookPolicy = defaults.Repo.HookPolicy
+	}
+	if cfg.Integration.Strategy == "" {
+		cfg.Integration.Strategy = defaults.Integration.Strategy
+	}
+	if cfg.Integration.SyncPolicy == "" {
+		cfg.Integration.SyncPolicy = defaults.Integration.SyncPolicy
+	}
+	if cfg.Integration.DirtyWorktreePolicy == "" {
+		cfg.Integration.DirtyWorktreePolicy = defaults.Integration.DirtyWorktreePolicy
+	}
+	if cfg.Publish.Mode == "" {
+		cfg.Publish.Mode = defaults.Publish.Mode
+	}
+	if cfg.Checks.CommandTimeout == "" {
+		cfg.Checks.CommandTimeout = defaults.Checks.CommandTimeout
+	}
+	return cfg
+}
+
+func repoInitNextSteps(configWritten bool) []string {
+	steps := []string{
 		"./scripts/install-hooks.sh",
 		"# for agent/factory repos, set [publish].Mode = 'auto' before relying on submit --wait",
 		"mq submit --queue-only --json",
 		"mq submit --check-only --json",
 		"mq submit --wait --timeout 15m --json",
 		"mq land --json --timeout 30m",
-	)
-	return nil
+	}
+	if !configWritten {
+		return steps
+	}
+	return append([]string{
+		"git add mainline.toml",
+		"git commit -m \"Initialize mainline repo policy\"",
+	}, steps...)
 }
 
 type registryPruneResult struct {

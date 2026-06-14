@@ -64,6 +64,11 @@ git commit -m "Initialize mainline repo policy"
 mq repo root --repo . --json
 ```
 
+Only make the `mainline.toml` commit when `mq repo init` actually writes the
+policy file. If a committed `mainline.toml` already exists, init preserves it
+and initializes only durable queue state and registry metadata, leaving the
+protected checkout clean.
+
 `mq repo init` expects the protected worktree to be on a branch, not detached
 HEAD. For ordinary repos, run it from local branch `main`. If you really intend
 to protect a different branch, pass `--protected-branch` explicitly.

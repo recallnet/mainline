@@ -341,8 +341,12 @@ git commit -m "Initialize mainline repo policy"
 ./scripts/install-hooks.sh
 ```
 
-That init commit matters. It turns the repo’s queue policy into versioned,
-reviewable state instead of one more local convention that agents have to infer.
+That init commit matters when `mq repo init` creates `mainline.toml`. It turns
+the repo’s queue policy into versioned, reviewable state instead of one more
+local convention that agents have to infer. If a committed `mainline.toml`
+already exists, `mq repo init` preserves it and only initializes durable queue
+state and registry metadata; in that case there is no policy-file commit to
+make.
 For normal repos, the root checkout should be the canonical protected `main`.
 Keep it clean and boring. Humans inspect that path, and the machine wrapper
 builds `mq` from it. If it is dirty, the wrapper should refuse
