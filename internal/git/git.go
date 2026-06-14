@@ -490,6 +490,21 @@ func (e Engine) FetchRemote(worktreePath string, remote string) error {
 	return err
 }
 
+// RemoteExists reports whether a remote is configured in the given worktree.
+func (e Engine) RemoteExists(worktreePath string, remote string) (bool, error) {
+	if remote == "" {
+		return false, nil
+	}
+	_, err := e.runGit(worktreePath, "remote", "get-url", remote)
+	if err == nil {
+		return true, nil
+	}
+	if strings.Contains(err.Error(), "No such remote") || strings.Contains(err.Error(), "No such remote:") {
+		return false, nil
+	}
+	return false, err
+}
+
 // ResetHardClean resets the current branch in a worktree to targetRef and removes
 // untracked files. Intended for explicit repair flows on protected worktrees.
 func (e Engine) ResetHardClean(worktreePath string, targetRef string) error {
@@ -710,6 +725,57 @@ func (e Engine) BranchStatus(branch string, protectedBranch string) (BranchStatu
 		return status, nil
 	}
 
+	return e.branchStatusAgainstReference(repo, branchRef, status, upstreamRefName, upstreamLabel)
+}
+
+// BranchStatusAgainstRef reports branch status relative to an explicit ref.
+func (e Engine) BranchStatusAgainstRef(branch string, protectedBranch string, upstreamRef string, upstreamLabel string) (BranchStatus, error) {
+	repo, err := e.open()
+	if err != nil {
+		return BranchStatus{}, err
+	}
+
+	branchRef, err := repo.Reference(plumbing.NewBranchReferenceName(branch), true)
+	if err != nil {
+		return BranchStatus{}, err
+	}
+
+	status := BranchStatus{
+		Name:              branch,
+		HeadSHA:           branchRef.Hash().String(),
+		Upstream:          noUpstream,
+		IsProtectedBranch: branch == protectedBranch,
+	}
+	if upstreamRef == "" {
+		return status, nil
+	}
+	if upstreamLabel == "" {
+		upstreamLabel = upstreamRef
+	}
+	upstreamSHA, ok, err := e.revParse(upstreamRef)
+	if err != nil {
+		return BranchStatus{}, err
+	}
+	if !ok {
+		return status, nil
+	}
+
+	status.Upstream = upstreamLabel
+	status.HasUpstream = true
+	if branchRef.Hash().String() == upstreamSHA {
+		return status, nil
+	}
+
+	behind, ahead, err := e.symmetricDifferenceCounts(upstreamRef, branchRef.Name().String())
+	if err != nil {
+		return BranchStatus{}, err
+	}
+	status.AheadCount = ahead
+	status.BehindCount = behind
+	return status, nil
+}
+
+func (e Engine) branchStatusAgainstReference(repo *gogit.Repository, branchRef *plumbing.Reference, status BranchStatus, upstreamRefName plumbing.ReferenceName, upstreamLabel string) (BranchStatus, error) {
 	upstreamRef, err := repo.Reference(upstreamRefName, true)
 	if err != nil {
 		return status, nil
@@ -762,6 +828,25 @@ func (e Engine) symmetricDifferenceCounts(leftRef string, rightRef string) (behi
 		return behind, ahead, nil
 	}
 	return 0, 0, fmt.Errorf("parse symmetric difference counts from %q", text)
+}
+
+func (e Engine) revParse(ref string) (string, bool, error) {
+	layout, err := DiscoverRepositoryLayout(e.RepositoryRoot)
+	if err != nil {
+		return "", false, err
+	}
+
+	cmd := exec.Command("git", "rev-parse", "--verify", ref+"^{commit}")
+	cmd.Dir = layout.WorktreeRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(output))
+		if strings.Contains(text, "Needed a single revision") || strings.Contains(text, "unknown revision") || strings.Contains(text, "not a valid object name") {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("resolve ref %s: %w: %s", ref, err, text)
+	}
+	return strings.TrimSpace(string(output)), true, nil
 }
 
 // CompareBranches reports ahead/behind counts for branch relative to baseBranch.

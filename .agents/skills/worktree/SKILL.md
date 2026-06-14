@@ -186,7 +186,8 @@ mq retry --repo ~/Projects/recallnet/mainline --publish <id>
 
 `mq` now attempts the safe case automatically by fetching upstream, rebasing the
 unpublished protected-branch commits onto the updated remote tip when that
-replay is clean, and retrying the push.
+replay is clean, and retrying the push. If local Git branch tracking is absent,
+`mq` uses the protected remote branch configured in `mainline.toml`.
 
 If the branch is behind local protected `main` or a submission blocks on a
 rebase conflict, use `mq rebase` as the default repair path:

@@ -798,8 +798,68 @@ func TestRetryPublishAutoRebasesProtectedBranchAfterRemoteAdvance(t *testing.T) 
 	if err != nil {
 		t.Fatalf("GetPublishRequest: %v", err)
 	}
-	if refreshed.Status != domain.PublishStatusSucceeded {
-		t.Fatalf("expected publish request succeeded after retry, got %+v", refreshed)
+	if refreshed.Status != domain.PublishStatusSuperseded || !refreshed.SupersededBy.Valid {
+		t.Fatalf("expected original publish request superseded after retry, got %+v", refreshed)
+	}
+	replacement, err := store.GetPublishRequest(context.Background(), refreshed.SupersededBy.Int64)
+	if err != nil {
+		t.Fatalf("GetPublishRequest replacement: %v", err)
+	}
+	if replacement.Status != domain.PublishStatusSucceeded {
+		t.Fatalf("expected replacement publish request succeeded after retry, got %+v", replacement)
+	}
+}
+
+func TestRunOnceAutoRebasesRejectedPublishWithoutProtectedUpstream(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "push", "origin", "main")
+	runTestCommand(t, repoRoot, "git", "config", "--unset", "branch.main.remote")
+	runTestCommand(t, repoRoot, "git", "config", "--unset", "branch.main.merge")
+
+	writeFileAndCommit(t, repoRoot, "local.txt", "local\n", "main change local")
+	queuePublish(t, repoRoot)
+	t.Setenv("MAINLINE_DISABLE_MUTATION_DRAIN", "")
+
+	upstreamClone := filepath.Join(t.TempDir(), "upstream-clone")
+	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
+	runTestCommand(t, upstreamClone, "git", "config", "user.name", "Test User")
+	runTestCommand(t, upstreamClone, "git", "config", "user.email", "test@example.com")
+	runTestCommand(t, upstreamClone, "git", "config", "core.hooksPath", ".git/hooks")
+	writeFileAndCommit(t, upstreamClone, "upstream.txt", "upstream\n", "upstream advance")
+	upstreamHead := trimNewline(runTestCommand(t, upstreamClone, "git", "rev-parse", "HEAD"))
+	runTestCommand(t, upstreamClone, "git", "push", "origin", "main")
+
+	result, err := drainRepoUntilSettled(repoRoot)
+	if err != nil {
+		t.Fatalf("drainRepoUntilSettled returned error: %v", err)
+	}
+
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	remoteHead := trimNewline(runTestCommand(t, remoteDir, "git", "rev-parse", "refs/heads/main"))
+	if remoteHead != localHead {
+		t.Fatalf("expected remote head %q, got %q; output=%q", localHead, remoteHead, result)
+	}
+	parent := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD^"))
+	if parent != upstreamHead {
+		t.Fatalf("expected rebased protected branch to sit on upstream head %q, got %q", upstreamHead, parent)
+	}
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	requests, err := store.ListPublishRequests(context.Background(), repoRecord.ID)
+	if err != nil {
+		t.Fatalf("ListPublishRequests: %v", err)
+	}
+	if len(requests) == 0 || requests[len(requests)-1].Status != domain.PublishStatusSucceeded {
+		t.Fatalf("expected latest publish request succeeded, got %+v", requests)
 	}
 }
 

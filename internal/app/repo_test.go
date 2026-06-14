@@ -1657,6 +1657,40 @@ func TestDoctorFixPublishesProtectedTipAheadOfUpstream(t *testing.T) {
 	}
 }
 
+func TestDoctorDetectsProtectedDivergenceWithoutBranchUpstream(t *testing.T) {
+	repoRoot, remoteDir := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	runTestCommand(t, repoRoot, "git", "config", "--unset", "branch.main.remote")
+	runTestCommand(t, repoRoot, "git", "config", "--unset", "branch.main.merge")
+
+	upstreamClone := filepath.Join(t.TempDir(), "upstream-clone")
+	runTestCommand(t, t.TempDir(), "git", "clone", remoteDir, upstreamClone)
+	runTestCommand(t, upstreamClone, "git", "config", "user.name", "Test User")
+	runTestCommand(t, upstreamClone, "git", "config", "user.email", "test@example.com")
+	runTestCommand(t, upstreamClone, "git", "config", "core.hooksPath", ".git/hooks")
+	writeFileAndCommit(t, upstreamClone, "upstream.txt", "upstream\n", "upstream advance")
+	runTestCommand(t, upstreamClone, "git", "push", "origin", "main")
+
+	writeFileAndCommit(t, repoRoot, "local.txt", "local\n", "local protected advance")
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	var result doctorResult
+	if err := json.Unmarshal(doctorOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.HasUpstream || result.UpstreamRef != "origin/main" {
+		t.Fatalf("expected doctor to use configured remote upstream, got %+v", result.HealthReport)
+	}
+	if !result.HasDivergedUpstream || !result.IsAheadOfUpstream || !result.IsBehindUpstream {
+		t.Fatalf("expected protected divergence against configured remote, got %+v", result.HealthReport)
+	}
+}
+
 func TestDoctorFixDoesNotQueuePublishWhenProtectedWorktreeIsDirty(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

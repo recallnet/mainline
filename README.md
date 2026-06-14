@@ -117,7 +117,8 @@ mq retry --repo /path/to/protected-worktree --publish 4
 
 When the unpublished protected-branch commits can be replayed cleanly, `mq`
 fetches upstream, rebases the protected branch onto the updated remote tip, and
-retries the push automatically.
+retries the push automatically. If local Git branch tracking is absent, `mq`
+uses the protected branch and remote configured in `mainline.toml`.
 
 If a submission blocks because its topic branch is behind local protected
 `main`, use `mq rebase` instead of hand-rolling the Git repair:

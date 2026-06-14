@@ -223,7 +223,8 @@ mq retry --repo /path/to/protected-worktree --publish 4
 
 That lets `mq` fetch upstream, replay unpublished protected-branch commits onto
 the updated remote tip when the rebase is clean, and retry the push without
-manual protected-worktree repair.
+manual protected-worktree repair. If the protected branch has no local Git
+upstream configured, `mq` uses the protected remote branch from `mainline.toml`.
 
 Exit codes:
 

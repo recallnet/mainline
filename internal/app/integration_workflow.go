@@ -285,7 +285,7 @@ func syncProtectedBranch(engine git.Engine, cfg policy.File) (protectedSyncResul
 		return protectedSyncResult{}, nil
 	}
 
-	status, err := engine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
+	status, err := protectedBranchStatus(engine, cfg)
 	if err != nil {
 		return protectedSyncResult{}, err
 	}
@@ -307,7 +307,7 @@ func syncProtectedBranch(engine git.Engine, cfg policy.File) (protectedSyncResul
 		return protectedSyncResult{}, err
 	}
 
-	status, err = engine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
+	status, err = protectedBranchStatus(engine, cfg)
 	if err != nil {
 		return protectedSyncResult{}, err
 	}

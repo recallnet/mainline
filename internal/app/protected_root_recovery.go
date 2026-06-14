@@ -18,7 +18,7 @@ const (
 )
 
 func ensureProtectedRootHealthy(ctx context.Context, engine git.Engine, lockManager state.LockManager, cfg policy.File, store state.Store, repoRecord state.RepositoryRecord, mode protectedRootRecoveryMode) (git.HealthReport, error) {
-	report, err := engine.InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
+	report, err := inspectConfiguredHealth(engine, cfg)
 	if err != nil {
 		return git.HealthReport{}, err
 	}
@@ -43,7 +43,7 @@ func ensureProtectedRootHealthy(ctx context.Context, engine git.Engine, lockMana
 		return git.HealthReport{}, repairErr
 	}
 	if repaired {
-		report, err = engine.InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
+		report, err = inspectConfiguredHealth(engine, cfg)
 		if err != nil {
 			return git.HealthReport{}, err
 		}

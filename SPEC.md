@@ -125,7 +125,9 @@ mq retry --repo /path/to/protected-worktree --publish <id>
 
 Before retrying the push, `mq` may fetch upstream and rebase the protected
 branch onto the updated upstream tip when unpublished local commits replay
-cleanly.
+cleanly. When local branch tracking is not configured, `mq` compares the
+protected branch against the protected remote branch configured in
+`mainline.toml`.
 
 ### Machine-Wide Daemon Flow
 

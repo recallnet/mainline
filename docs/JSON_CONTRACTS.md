@@ -172,6 +172,11 @@ and initializes durable queue state and registry metadata only.
 `ahead_count` and `behind_count` are exact commit counts relative to the
 upstream ref, not boolean-like drift flags.
 
+When local Git branch tracking is absent for the protected branch, `mq` may
+populate this object from the protected remote branch configured in
+`mainline.toml`; in that case `upstream` is the configured remote label, such as
+`origin/main`.
+
 `latest_submission` and entries in `active_submissions` extend the durable
 submission record with optional blocked-state diagnostics:
 

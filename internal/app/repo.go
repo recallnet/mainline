@@ -280,6 +280,54 @@ func repoInitNextSteps(configWritten bool) []string {
 	}, steps...)
 }
 
+func protectedBranchStatus(engine git.Engine, cfg policy.File) (git.BranchStatus, error) {
+	status, err := engine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
+	if err != nil {
+		return git.BranchStatus{}, err
+	}
+	if status.HasUpstream || cfg.Repo.RemoteName == "" {
+		return status, nil
+	}
+	remoteRef := fmt.Sprintf("refs/remotes/%s/%s", cfg.Repo.RemoteName, cfg.Repo.ProtectedBranch)
+	remoteLabel := fmt.Sprintf("%s/%s", cfg.Repo.RemoteName, cfg.Repo.ProtectedBranch)
+	return engine.BranchStatusAgainstRef(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch, remoteRef, remoteLabel)
+}
+
+func inspectConfiguredHealth(engine git.Engine, cfg policy.File) (git.HealthReport, error) {
+	report, err := engine.InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
+	if err != nil {
+		return git.HealthReport{}, err
+	}
+	if cfg.Repo.RemoteName == "" || cfg.Repo.MainWorktree == "" || !report.MainWorktreeExists || !report.ProtectedBranchExists {
+		return report, nil
+	}
+	remoteExists, err := engine.RemoteExists(cfg.Repo.MainWorktree, cfg.Repo.RemoteName)
+	if err != nil {
+		report.Warnings = append(report.Warnings, fmt.Sprintf("could not inspect configured remote %s: %v", cfg.Repo.RemoteName, err))
+		return report, nil
+	}
+	if !remoteExists {
+		return report, nil
+	}
+	if err := engine.FetchRemote(cfg.Repo.MainWorktree, cfg.Repo.RemoteName); err != nil {
+		report.Warnings = append(report.Warnings, fmt.Sprintf("could not refresh configured remote %s: %v", cfg.Repo.RemoteName, err))
+		return report, nil
+	}
+	status, err := protectedBranchStatus(engine, cfg)
+	if err != nil {
+		return git.HealthReport{}, err
+	}
+	if !status.HasUpstream {
+		return report, nil
+	}
+	report.HasUpstream = true
+	report.UpstreamRef = status.Upstream
+	report.IsBehindUpstream = status.BehindCount > 0
+	report.IsAheadOfUpstream = status.AheadCount > 0
+	report.HasDivergedUpstream = report.IsAheadOfUpstream && report.IsBehindUpstream
+	return report, nil
+}
+
 type registryPruneResult struct {
 	RegistryPath   string   `json:"registry_path"`
 	PrunedCount    int      `json:"pruned_count"`
@@ -844,7 +892,7 @@ Flags:
 	cfg := cfgAuthority.File
 
 	engine := git.NewEngine(layout.WorktreeRoot)
-	report, err := engine.InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
+	report, err := inspectConfiguredHealth(engine, cfg)
 	if err != nil {
 		return err
 	}
@@ -910,7 +958,7 @@ Flags:
 		}
 		result.FixesApplied = applied
 		result.FixesSkipped = skipped
-		report, err = engine.InspectHealth(cfg.Repo.ProtectedBranch, cfg.Repo.MainWorktree)
+		report, err = inspectConfiguredHealth(engine, cfg)
 		if err != nil {
 			return err
 		}
@@ -1316,7 +1364,7 @@ func runDoctorFix(ctx context.Context, engine git.Engine, cfg policy.File, lockM
 			if err := engine.FetchRemote(cfg.Repo.MainWorktree, cfg.Repo.RemoteName); err != nil {
 				skipped = append(skipped, fmt.Sprintf("could not refresh upstream state: %v", err))
 			} else {
-				branchStatus, err := engine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
+				branchStatus, err := protectedBranchStatus(engine, cfg)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -1386,7 +1434,7 @@ func tryRepairCanonicalProtectedRoot(ctx context.Context, engine git.Engine, cfg
 	if err := engine.FetchRemote(cfg.Repo.MainWorktree, cfg.Repo.RemoteName); err != nil {
 		return false, fmt.Sprintf("left protected root dirty because upstream fetch failed: %v", err), nil
 	}
-	branchStatus, err := engine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
+	branchStatus, err := protectedBranchStatus(engine, cfg)
 	if err != nil {
 		return false, "", err
 	}

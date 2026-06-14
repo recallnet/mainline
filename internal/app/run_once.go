@@ -375,7 +375,7 @@ func retryRejectedPublishOnce(ctx context.Context, store state.Store, repoRecord
 	if err := mainEngine.FetchRemote(cfg.Repo.MainWorktree, cfg.Repo.RemoteName); err != nil {
 		return false, "", nil
 	}
-	status, err := mainEngine.BranchStatus(cfg.Repo.ProtectedBranch, cfg.Repo.ProtectedBranch)
+	status, err := protectedBranchStatus(mainEngine, cfg)
 	if err != nil {
 		return false, "", err
 	}
