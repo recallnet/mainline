@@ -159,6 +159,13 @@ When `config_written` is `false`, `next_steps` omits the `git add` and
 When a committed `mainline.toml` already exists, init preserves it byte-for-byte
 and initializes durable queue state and registry metadata only.
 
+## `mq repo root --json`
+
+`root_checkout.exists = false` is expected for bare-storage repositories because
+the bare path is not a human-facing checkout. In that topology, `trustworthy`
+reports whether the configured `main_worktree` is clean, belongs to the same
+shared Git storage, and is on the protected branch.
+
 `protected_upstream` is a `git.BranchStatus` object with:
 
 - `name`

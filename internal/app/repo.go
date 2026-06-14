@@ -648,7 +648,8 @@ func adoptRepositoryRoot(repoRoot string, layout git.RepositoryLayout, configRoo
 func buildRepoRootResult(repoRoot string, configPath string, cfg policy.File, layout git.RepositoryLayout) repoRootResult {
 	rootInfo, warnings := inspectCanonicalRootCheckout(cfg, layout)
 	warnings = appendMainWorktreeWarnings(git.NewEngine(layout.WorktreeRoot), cfg, warnings)
-	recommended := recommendedRootActions(repoRoot, cfg, rootInfo)
+	trustworthy := rootCheckoutTrustworthy(layout, cfg, rootInfo)
+	recommended := recommendedRootActions(repoRoot, cfg, rootInfo, trustworthy)
 	canAdopt := canAdoptRootCheckout(cfg, rootInfo)
 	return repoRootResult{
 		RepositoryRoot:     repoRoot,
@@ -656,23 +657,59 @@ func buildRepoRootResult(repoRoot string, configPath string, cfg policy.File, la
 		ProtectedBranch:    cfg.Repo.ProtectedBranch,
 		MainWorktree:       cfg.Repo.MainWorktree,
 		RootCheckout:       rootInfo,
-		Trustworthy:        rootInfo.Exists && rootInfo.IsCanonical && rootInfo.Clean && rootInfo.Branch == cfg.Repo.ProtectedBranch,
+		Trustworthy:        trustworthy,
 		CanAdoptRoot:       canAdopt,
 		RecommendedActions: recommended,
 		Warnings:           warnings,
 	}
 }
 
+func rootCheckoutTrustworthy(layout git.RepositoryLayout, cfg policy.File, rootInfo rootCheckoutInfo) bool {
+	if rootInfo.Topology == "bare-repository-storage" {
+		return configuredMainWorktreeTrustworthy(layout, cfg)
+	}
+	return rootInfo.Exists && rootInfo.IsCanonical && rootInfo.Clean && rootInfo.Branch == cfg.Repo.ProtectedBranch
+}
+
+func configuredMainWorktreeTrustworthy(layout git.RepositoryLayout, cfg policy.File) bool {
+	mainWorktreePath := canonicalRegistryPath(cfg.Repo.MainWorktree)
+	if mainWorktreePath == "" {
+		return false
+	}
+	mainLayout, err := git.DiscoverRepositoryLayout(mainWorktreePath)
+	if err != nil {
+		return false
+	}
+	if filepath.Clean(mainLayout.GitDir) != filepath.Clean(layout.GitDir) {
+		return false
+	}
+	engine := git.NewEngine(layout.WorktreeRoot)
+	branch, err := engine.CurrentBranchAtPath(mainWorktreePath)
+	if err != nil || branch != cfg.Repo.ProtectedBranch {
+		return false
+	}
+	clean, err := engine.WorktreeIsClean(mainWorktreePath)
+	return err == nil && clean
+}
+
 func canAdoptRootCheckout(cfg policy.File, rootInfo rootCheckoutInfo) bool {
 	return rootInfo.Exists && !rootInfo.IsCanonical && rootInfo.Clean && rootInfo.Branch == cfg.Repo.ProtectedBranch
 }
 
-func recommendedRootActions(repoRoot string, cfg policy.File, rootInfo rootCheckoutInfo) []string {
+func recommendedRootActions(repoRoot string, cfg policy.File, rootInfo rootCheckoutInfo, trustworthy bool) []string {
 	var actions []string
 	if rootInfo.Path == "" {
 		return actions
 	}
 	if !rootInfo.Exists {
+		if rootInfo.Topology == "bare-repository-storage" {
+			if trustworthy {
+				actions = append(actions, "no action needed; the configured protected worktree is trustworthy")
+			} else {
+				actions = append(actions, fmt.Sprintf("repair the configured protected worktree %s before trusting local docs or wrappers", cfg.Repo.MainWorktree))
+			}
+			return actions
+		}
 		actions = append(actions, fmt.Sprintf("restore the repository root checkout at %s before trusting local docs or wrappers", rootInfo.Path))
 		return actions
 	}
@@ -685,7 +722,7 @@ func recommendedRootActions(repoRoot string, cfg policy.File, rootInfo rootCheck
 	if canAdoptRootCheckout(cfg, rootInfo) {
 		actions = append(actions, fmt.Sprintf("run `mq repo root --repo %s --adopt-root` to make the repository root the canonical protected main", repoRoot))
 	}
-	if rootInfo.IsCanonical && rootInfo.Clean && rootInfo.Branch == cfg.Repo.ProtectedBranch {
+	if trustworthy {
 		actions = append(actions, "no action needed; the repository root checkout is trustworthy")
 	}
 	return actions

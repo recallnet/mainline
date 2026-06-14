@@ -1158,6 +1158,60 @@ func TestDoctorSucceedsFromBareCloneWorktree(t *testing.T) {
 	}
 }
 
+func TestRepoRootAndDoctorSucceedFromBareCloneTopicWorktree(t *testing.T) {
+	bareDir, mainWorktree := createBareCloneWorktree(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", mainWorktree, "--protected-branch", "main", "--main-worktree", mainWorktree}, newStepPrinter(&initOut), &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+	runTestCommand(t, mainWorktree, "git", "add", "mainline.toml")
+	runTestCommand(t, mainWorktree, "git", "commit", "-m", "init mainline")
+
+	featurePath := filepath.Join(t.TempDir(), "bare-topic")
+	runTestCommand(t, t.TempDir(), "git", "--git-dir", bareDir, "worktree", "add", "-b", "feature/bare-root", featurePath, "main")
+	configureTestGitRepo(t, featurePath)
+
+	var rootOut bytes.Buffer
+	var rootErr bytes.Buffer
+	if err := runRepoRoot([]string{"--repo", featurePath, "--json"}, newStepPrinter(&rootOut), &rootErr); err != nil {
+		t.Fatalf("runRepoRoot returned error: %v", err)
+	}
+	var rootResult repoRootResult
+	if err := json.Unmarshal(rootOut.Bytes(), &rootResult); err != nil {
+		t.Fatalf("Unmarshal repo root result: %v", err)
+	}
+	if rootResult.RepositoryRoot != canonicalRegistryPath(bareDir) {
+		t.Fatalf("expected bare repository root %q, got %+v", canonicalRegistryPath(bareDir), rootResult)
+	}
+	if rootResult.MainWorktree != canonicalRegistryPath(mainWorktree) {
+		t.Fatalf("expected main worktree %q, got %+v", canonicalRegistryPath(mainWorktree), rootResult)
+	}
+	if !rootResult.Trustworthy {
+		t.Fatalf("expected trusted configured main worktree, got %+v", rootResult)
+	}
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", featurePath, "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+	var doctorResult doctorResult
+	if err := json.Unmarshal(doctorOut.Bytes(), &doctorResult); err != nil {
+		t.Fatalf("Unmarshal doctor result: %v", err)
+	}
+	if doctorResult.RepositoryRoot != canonicalRegistryPath(bareDir) {
+		t.Fatalf("expected bare repository root %q, got %+v", canonicalRegistryPath(bareDir), doctorResult)
+	}
+	if doctorResult.MainWorktreePath != canonicalRegistryPath(mainWorktree) {
+		t.Fatalf("expected main worktree %q, got %+v", canonicalRegistryPath(mainWorktree), doctorResult)
+	}
+	if !doctorResult.IsGitRepository || !doctorResult.ProtectedBranchExists || !doctorResult.MainWorktreeExists {
+		t.Fatalf("expected healthy bare-clone doctor result, got %+v", doctorResult.HealthReport)
+	}
+}
+
 func TestRepoShowReportsBareStorageTopologyForRootCheckout(t *testing.T) {
 	bareDir, worktreePath := createBareCloneWorktree(t)
 

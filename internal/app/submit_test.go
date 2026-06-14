@@ -123,6 +123,48 @@ func TestSubmitAutoDetectsRepoFromCurrentWorktree(t *testing.T) {
 	}
 }
 
+func TestSubmitCheckOnlyFromBareCloneTopicWorktree(t *testing.T) {
+	t.Setenv("MAINLINE_DISABLE_SUBMIT_DRAIN", "1")
+
+	bareDir, mainWorktree := createBareCloneWorktree(t)
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", mainWorktree, "--protected-branch", "main", "--main-worktree", mainWorktree}, newStepPrinter(&initOut), &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+	runTestCommand(t, mainWorktree, "git", "add", "mainline.toml")
+	runTestCommand(t, mainWorktree, "git", "commit", "-m", "init mainline")
+
+	featurePath := filepath.Join(t.TempDir(), "bare-topic")
+	runTestCommand(t, t.TempDir(), "git", "--git-dir", bareDir, "worktree", "add", "-b", "feature/bare-check", featurePath, "main")
+	configureTestGitRepo(t, featurePath)
+	writeFileAndCommit(t, featurePath, "bare-check.txt", "bare check\n", "feature bare check")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--check-only", "--json"}, newStepPrinter(&submitOut), &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal submit result: %v", err)
+	}
+	if !result.OK || !result.Checked || result.Queued {
+		t.Fatalf("expected successful check-only result, got %+v", result)
+	}
+	if result.RepositoryRoot != canonicalRegistryPath(bareDir) {
+		t.Fatalf("expected bare repository root %q, got %+v", canonicalRegistryPath(bareDir), result)
+	}
+	if result.SourceWorktree != canonicalRegistryPath(featurePath) {
+		t.Fatalf("expected feature source worktree %q, got %+v", canonicalRegistryPath(featurePath), result)
+	}
+	if result.Branch != "feature/bare-check" {
+		t.Fatalf("expected feature/bare-check, got %+v", result)
+	}
+}
+
 func TestSubmitOpportunisticallyDrainsQueuedWork(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

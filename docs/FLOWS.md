@@ -83,6 +83,8 @@ mq status --repo /path/to/main
 For ordinary repos, `/path/to/main` should be the repo root checkout that
 humans inspect and local wrappers build from. Keep that checkout clean and on
 the protected branch. Topic worktrees are where feature edits belong.
+For bare-storage repos, the bare repo path is not a checkout; `mq repo root`
+uses the configured protected worktree as the trust anchor.
 If config drift ever points the canonical main worktree somewhere else, prefer
 `mq repo root --repo /path/to/main --adopt-root` once `/path/to/main` is clean
 and back on the protected branch. The goal is that humans do not need to know
