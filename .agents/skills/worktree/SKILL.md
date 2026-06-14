@@ -153,9 +153,10 @@ mq submit --wait --for landed --timeout 30m --json
 Treat plain `mq submit --wait` as an integration answer, not a remote-publish answer.
 If the repo keeps `[publish].Mode = 'manual'`, use `mq land` or
 `mq wait --for landed` when the job is not done until remote `main` moves.
-`mq land` requires the configured remote to exist; in local-only repos, use
-`mq submit --wait` when local protected-branch integration is the terminal
-result.
+`mq land` requires the configured remote to exist. In local-only repos with
+`[repo].RemoteName = ""`, use `mq submit --wait --for landed` or
+`mq wait --for landed` when verified local protected-branch integration is the
+terminal result.
 If the repo uses `[publish].Mode = 'auto'` and the wrapper wants one blocking
 submit call through publish, use `mq submit --wait --for landed --timeout 30m --json`.
 Use `mq submit --queue-only --json` only when the point is to prove some other

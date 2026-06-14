@@ -469,6 +469,11 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 				result.DurationMS = time.Since(start).Milliseconds()
 				return result, nil
 			}
+			if localOnlyLandedWaitTerminal(queued.Config, info.PublishRequestID) {
+				result.Outcome = waitOutcome("landed")
+				result.DurationMS = time.Since(start).Milliseconds()
+				return result, nil
+			}
 			if queued.Config.Publish.Mode != "auto" && info.PublishRequestID == 0 {
 				result.Outcome = waitOutcome("integrated")
 				result.DurationMS = time.Since(start).Milliseconds()
@@ -525,6 +530,10 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 		case <-ticker.C:
 		}
 	}
+}
+
+func localOnlyLandedWaitTerminal(cfg policy.File, publishRequestID int64) bool {
+	return cfg.Publish.Mode != "auto" && cfg.Repo.RemoteName == "" && publishRequestID == 0
 }
 
 func populateIntegrationWaitQueueSummary(ctx context.Context, store state.Store, repoRecord state.RepositoryRecord, cfg policy.File, result *integrationWaitResult) {

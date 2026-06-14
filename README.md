@@ -84,6 +84,9 @@ mq submit --wait --for landed --timeout 30m --json
 Important: plain `mq submit --wait` stops at `integrated`. In a repo with
 `[publish].Mode = 'manual'`, that means the commit is on local protected
 `main` but not yet pushed to remote.
+In a local-only repo with `[repo].RemoteName = ""`, `--for landed` treats a
+verified protected-branch integration as the terminal landed result because no
+remote publish target exists.
 
 If the wrapper wants one blocking submit call that waits through auto-publish:
 
@@ -395,8 +398,9 @@ Use `mq submit --wait` when the caller only needs an integration result.
 Use `mq submit --wait --for landed` or `mq land` when the job is not done until
 remote `main` has moved.
 `mq land` requires the configured `[repo].RemoteName` to exist in the protected
-worktree. In local-only repos without a remote, use `mq submit --wait` for the
-local integration result instead of waiting for `landed`.
+worktree. In local-only repos with `[repo].RemoteName = ""`,
+`mq submit --wait --for landed` and `mq wait --for landed` return `landed` once
+the submission is verified on local protected `main`.
 
 Operate and observe:
 

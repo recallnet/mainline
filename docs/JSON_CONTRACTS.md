@@ -64,6 +64,9 @@ For `mq submit --wait`:
 
 - default behavior waits for `integrated`
 - `mq submit --wait --for landed` waits for integrate plus correlated publish
+- in local-only repos with `[repo].RemoteName = ""`,
+  `mq submit --wait --for landed` returns `outcome = "landed"` after verified
+  protected-branch integration and omits `publish_request_id`
 - in repos with `[publish].Mode = 'auto'`, `publish_request_id` and
   `publish_status` may already be populated even when the final `outcome` is
   still `integrated`
@@ -375,6 +378,8 @@ Optional fields:
 
 - `outcome = "landed"` when the submission succeeded and the correlated publish
   request also succeeded
+- `outcome = "landed"` with no `publish_request_id` when `[repo].RemoteName =
+  ""` and the submission is verified on local protected `main`
 
 Failure outcomes are:
 

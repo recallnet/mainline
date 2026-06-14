@@ -1374,6 +1374,37 @@ func updatePublishMode(t *testing.T, repoRoot string, mode string) {
 	runTestCommand(t, repoRoot, "git", "commit", "-m", "update publish mode")
 }
 
+func updatePublishModeAndRemote(t *testing.T, repoRoot string, mode string, remoteName string) {
+	t.Helper()
+
+	layout, err := git.DiscoverRepositoryLayout(repoRoot)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	cfg, _, err := policy.LoadOrDefault(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadOrDefault: %v", err)
+	}
+	cfg.Publish.Mode = mode
+	cfg.Repo.RemoteName = remoteName
+	if err := policy.SaveFile(repoRoot, cfg); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	runTestCommand(t, repoRoot, "git", "add", "mainline.toml")
+	runTestCommand(t, repoRoot, "git", "commit", "-m", "update publish mode and remote")
+
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	if _, err := store.UpsertRepository(context.Background(), state.RepositoryRecord{
+		CanonicalPath:   layout.RepositoryRoot,
+		ProtectedBranch: cfg.Repo.ProtectedBranch,
+		RemoteName:      cfg.Repo.RemoteName,
+		MainWorktree:    cfg.Repo.MainWorktree,
+		PolicyVersion:   "v1",
+	}); err != nil {
+		t.Fatalf("UpsertRepository: %v", err)
+	}
+}
+
 func setPublishRetryBackoffsForTest(backoffs []time.Duration) func() {
 	previous := publishRetryBackoffs
 	publishRetryBackoffs = append([]time.Duration(nil), backoffs...)

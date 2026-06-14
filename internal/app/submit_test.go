@@ -1339,6 +1339,42 @@ func TestSubmitWaitForLandedFailsFastOnManualPublishRepo(t *testing.T) {
 	}
 }
 
+func TestSubmitWaitForLandedTreatsLocalOnlyManualIntegrationAsLanded(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishModeAndRemote(t, repoRoot, "manual", "")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-wait-landed-local-only")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/wait-landed-local-only", featurePath)
+	writeFileAndCommit(t, featurePath, "local-only-landed.txt", "local only landed\n", "feature local only landed")
+	featureSHA := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--for", "landed", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&submitOut), &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v: %s", err, submitOut.String())
+	}
+
+	var result submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !result.OK || !result.Waited || result.SubmissionStatus != "succeeded" || result.Outcome != submissionOutcomeLanded {
+		t.Fatalf("expected local-only landed result, got %+v", result)
+	}
+	if result.PublishRequestID != 0 || result.PublishStatus != "" {
+		t.Fatalf("expected no publish request for local-only landed result, got %+v", result)
+	}
+	if result.Error != "" {
+		t.Fatalf("expected no wait error, got %+v", result)
+	}
+
+	localHead := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+	if localHead != featureSHA {
+		t.Fatalf("expected local protected head %q, got %q", featureSHA, localHead)
+	}
+}
+
 func TestWaitForLandedFailsFastOnManualPublishRepoWithoutPublishRequest(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)
@@ -1380,6 +1416,50 @@ func TestWaitForLandedFailsFastOnManualPublishRepoWithoutPublishRequest(t *testi
 	}
 	if !strings.Contains(result.Error, "publish mode is manual") {
 		t.Fatalf("expected manual publish error, got %+v", result)
+	}
+}
+
+func TestWaitForLandedTreatsLocalOnlyManualIntegrationAsLanded(t *testing.T) {
+	repoRoot, _ := createTestRepo(t)
+	initRepoForWorker(t, repoRoot)
+	updatePublishModeAndRemote(t, repoRoot, "manual", "")
+
+	featurePath := filepath.Join(t.TempDir(), "feature-local-only-wait")
+	runTestCommand(t, repoRoot, "git", "worktree", "add", "-b", "feature/local-only-wait", featurePath)
+	writeFileAndCommit(t, featurePath, "local-only-wait.txt", "local only wait\n", "feature local only wait")
+
+	var submitOut bytes.Buffer
+	var submitErr bytes.Buffer
+	if err := runSubmit([]string{"--repo", featurePath, "--wait", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&submitOut), &submitErr); err != nil {
+		t.Fatalf("runSubmit returned error: %v", err)
+	}
+
+	var submitResult submitResult
+	if err := json.Unmarshal(submitOut.Bytes(), &submitResult); err != nil {
+		t.Fatalf("Unmarshal submit result: %v", err)
+	}
+	if submitResult.SubmissionID == 0 {
+		t.Fatalf("expected submission id, got %+v", submitResult)
+	}
+
+	var waitOut bytes.Buffer
+	var waitErr bytes.Buffer
+	if err := runWait([]string{"--repo", repoRoot, "--submission", fmt.Sprintf("%d", submitResult.SubmissionID), "--for", "landed", "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&waitOut), &waitErr); err != nil {
+		t.Fatalf("runWait returned error: %v: %s", err, waitOut.String())
+	}
+
+	var result submissionWaitResult
+	if err := json.Unmarshal(waitOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal wait result: %v", err)
+	}
+	if result.SubmissionStatus != "succeeded" || result.Outcome != waitOutcome("landed") {
+		t.Fatalf("expected local-only landed wait result, got %+v", result)
+	}
+	if result.PublishRequestID != 0 || result.PublishStatus != "" {
+		t.Fatalf("expected no publish request for local-only landed wait, got %+v", result)
+	}
+	if result.Error != "" {
+		t.Fatalf("expected no wait error, got %+v", result)
 	}
 }
 
