@@ -116,12 +116,12 @@ mq wait --submission <id> --for landed --json --timeout 30m
 mq land --json --timeout 30m
 ```
 
-`mq land` is a remote-publication command. It must fail before queueing when the
-configured remote is empty or missing from the protected worktree. Local-only
-repositories with `[repo].RemoteName = ""` may use
-`mq submit --wait --for landed` or `mq wait --for landed`; a verified
-protected-branch integration is the terminal landed state because no remote
-publish target exists.
+`mq land` is a blocking land command. When `[repo].RemoteName` names a remote,
+it must publish and fail before queueing if that remote is missing from the
+protected worktree. Local-only repositories with `[repo].RemoteName = ""` may
+use `mq land`, `mq submit --wait --for landed`, or `mq wait --for landed`; a
+verified protected-branch integration is the terminal landed state because no
+remote publish target exists.
 
 If a publish request fails because remote `main` advanced first, the supported
 operator recovery path is:

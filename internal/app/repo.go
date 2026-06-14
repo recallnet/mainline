@@ -235,9 +235,6 @@ func repoInitEffectiveConfig(defaults policy.File, loaded policy.File) policy.Fi
 	if cfg.Repo.ProtectedBranch == "" {
 		cfg.Repo.ProtectedBranch = defaults.Repo.ProtectedBranch
 	}
-	if cfg.Repo.RemoteName == "" {
-		cfg.Repo.RemoteName = defaults.Repo.RemoteName
-	}
 	if cfg.Repo.WorktreeLayoutPolicy == "" {
 		cfg.Repo.WorktreeLayoutPolicy = defaults.Repo.WorktreeLayoutPolicy
 	}

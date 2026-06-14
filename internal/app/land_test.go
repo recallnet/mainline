@@ -49,6 +49,59 @@ func TestLandJSONIntegratesAndPublishesBranch(t *testing.T) {
 	}
 }
 
+func TestLandTreatsLocalOnlyManualRepoAsLandedWithoutPublish(t *testing.T) {
+	bareDir, mainWorktree := createBareCloneWorktree(t)
+	configPath := filepath.Join(mainWorktree, "mainline.toml")
+	committedConfig := `[repo]
+ProtectedBranch = 'main'
+MainWorktree = '` + canonicalRegistryPath(mainWorktree) + `'
+
+[publish]
+Mode = 'manual'
+`
+	if err := os.WriteFile(configPath, []byte(committedConfig), 0o644); err != nil {
+		t.Fatalf("WriteFile(mainline.toml): %v", err)
+	}
+	runTestCommand(t, mainWorktree, "git", "add", "mainline.toml")
+	runTestCommand(t, mainWorktree, "git", "commit", "-m", "Initialize local-only mainline policy")
+
+	var initOut bytes.Buffer
+	var initErr bytes.Buffer
+	if err := runRepoInit([]string{"--repo", mainWorktree, "--protected-branch", "main", "--main-worktree", mainWorktree}, newStepPrinter(&initOut), &initErr); err != nil {
+		t.Fatalf("runRepoInit returned error: %v", err)
+	}
+
+	featurePath := filepath.Join(t.TempDir(), "feature-local-only-land")
+	runTestCommand(t, t.TempDir(), "git", "--git-dir", bareDir, "worktree", "add", "-b", "feature/local-only-land", featurePath, "main")
+	configureTestGitRepo(t, featurePath)
+	writeFileAndCommit(t, featurePath, "local-only-land.txt", "local only land\n", "feature local only land")
+	featureSHA := trimNewline(runTestCommand(t, featurePath, "git", "rev-parse", "HEAD"))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"land", "--repo", featurePath, "--json", "--timeout", "30s", "--poll-interval", "10ms"}, newStepPrinter(&stdout), &stderr); err != nil {
+		t.Fatalf("runCLI land returned error: %v: %s", err, stdout.String())
+	}
+
+	var result landResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal land result: %v", err)
+	}
+	if result.SubmissionStatus != "succeeded" || !result.Published {
+		t.Fatalf("expected local-only land success, got %+v", result)
+	}
+	if result.PublishRequestID != 0 || result.PublishStatus != "" {
+		t.Fatalf("expected no publish request for local-only land, got %+v", result)
+	}
+	if result.ProtectedSHA != featureSHA {
+		t.Fatalf("expected protected sha %q, got %q", featureSHA, result.ProtectedSHA)
+	}
+	localHead := trimNewline(runTestCommand(t, mainWorktree, "git", "rev-parse", "HEAD"))
+	if localHead != featureSHA {
+		t.Fatalf("expected protected worktree head %q, got %q", featureSHA, localHead)
+	}
+}
+
 func TestLandReturnsBlockedSubmissionFailure(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

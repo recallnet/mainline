@@ -1118,6 +1118,19 @@ Mode = 'manual'
 	if status := runTestCommand(t, worktreePath, "git", "status", "--short"); status != "" {
 		t.Fatalf("expected clean protected worktree after repo init, got %q", status)
 	}
+
+	layout, err := git.DiscoverRepositoryLayout(worktreePath)
+	if err != nil {
+		t.Fatalf("DiscoverRepositoryLayout: %v", err)
+	}
+	store := state.NewStore(state.DefaultPath(layout.GitDir))
+	repoRecord, err := store.GetRepositoryByPath(context.Background(), layout.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("GetRepositoryByPath: %v", err)
+	}
+	if repoRecord.RemoteName != "" {
+		t.Fatalf("expected repository state to preserve local-only empty remote, got %q", repoRecord.RemoteName)
+	}
 }
 
 func TestDoctorSucceedsFromBareCloneWorktree(t *testing.T) {

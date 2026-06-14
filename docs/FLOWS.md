@@ -198,10 +198,11 @@ cd /path/to/topic-worktree
 mq land --json --timeout 30m
 ```
 
-`mq land` waits for remote publish and fails before queueing if the configured
-remote is missing. For local-only repos with `[repo].RemoteName = ""`, use
-`mq submit --wait --for landed` or `mq wait --for landed` when the desired
-result is verified local protected-branch integration.
+`mq land` waits for remote publish when `[repo].RemoteName` names a remote, and
+fails before queueing if that configured remote is missing. For local-only repos
+with `[repo].RemoteName = ""`, `mq land`, `mq submit --wait --for landed`, and
+`mq wait --for landed` complete once local protected-branch integration is
+verified.
 
 Or, if it wants an explicit submission-id flow:
 

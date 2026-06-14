@@ -41,7 +41,8 @@ func runLand(args []string, stdout *stepPrinter, stderr io.Writer) error {
 	setFlagUsage(fs, fmt.Sprintf(`Usage:
   %s land [flags]
 
-Submit a topic worktree and wait until it is integrated and published.
+Submit a topic worktree and wait until it is integrated and published, or
+locally landed when no remote publish target is configured.
 
 Best for controller agents and factory daemons that want one command in and one
 final outcome out.
@@ -153,15 +154,17 @@ func validateLandPreflight(repoPath string) error {
 	if mainLayout.GitDir != layout.GitDir {
 		return fmt.Errorf("main worktree %s does not belong to repository %s", cfg.Repo.MainWorktree, repoRoot)
 	}
-	if cfg.Repo.RemoteName == "" {
+	if cfg.Repo.RemoteName == "" && cfg.Publish.Mode == "auto" {
 		return fmt.Errorf("publish cannot run because no remote is configured; `mq land` waits for publish, so use `mq submit --wait` for local integration only or configure [repo].RemoteName")
 	}
-	remoteExists, err := git.NewEngine(mainLayout.WorktreeRoot).RemoteExists(cfg.Repo.MainWorktree, cfg.Repo.RemoteName)
-	if err != nil {
-		return fmt.Errorf("publish cannot inspect configured remote %s in %s: %w", cfg.Repo.RemoteName, cfg.Repo.MainWorktree, err)
-	}
-	if !remoteExists {
-		return fmt.Errorf("publish cannot run because configured remote %s does not exist in %s; `mq land` waits for publish, so use `mq submit --wait` for local integration only or add the remote before retrying", cfg.Repo.RemoteName, cfg.Repo.MainWorktree)
+	if cfg.Repo.RemoteName != "" {
+		remoteExists, err := git.NewEngine(mainLayout.WorktreeRoot).RemoteExists(cfg.Repo.MainWorktree, cfg.Repo.RemoteName)
+		if err != nil {
+			return fmt.Errorf("publish cannot inspect configured remote %s in %s: %w", cfg.Repo.RemoteName, cfg.Repo.MainWorktree, err)
+		}
+		if !remoteExists {
+			return fmt.Errorf("publish cannot run because configured remote %s does not exist in %s; `mq land` waits for publish, so use `mq submit --wait` for local integration only or add the remote before retrying", cfg.Repo.RemoteName, cfg.Repo.MainWorktree)
+		}
 	}
 
 	if _, err := ensureProtectedRootHealthy(
@@ -223,6 +226,11 @@ func waitForLandedPublish(queued queuedSubmission, timeout time.Duration, pollIn
 				return result, err
 			}
 			result.ProtectedSHA = protectedSHA
+
+			if localOnlyLandedTerminal(queued.Config, 0) {
+				result.Published = true
+				return result, nil
+			}
 
 			request, err := ensureLandPublishRequest(context.Background(), queued.Store, queued.RepoRecord.ID, queued.RepoRoot, protectedSHA, queued.Submission.Priority)
 			if err != nil {

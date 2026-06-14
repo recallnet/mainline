@@ -469,7 +469,7 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 				result.DurationMS = time.Since(start).Milliseconds()
 				return result, nil
 			}
-			if localOnlyLandedWaitTerminal(queued.Config, info.PublishRequestID) {
+			if localOnlyLandedTerminal(queued.Config, info.PublishRequestID) {
 				result.Outcome = waitOutcome("landed")
 				result.DurationMS = time.Since(start).Milliseconds()
 				return result, nil
@@ -532,7 +532,7 @@ func waitForSubmissionTarget(queued queuedSubmission, target waitTarget, timeout
 	}
 }
 
-func localOnlyLandedWaitTerminal(cfg policy.File, publishRequestID int64) bool {
+func localOnlyLandedTerminal(cfg policy.File, publishRequestID int64) bool {
 	return cfg.Publish.Mode != "auto" && cfg.Repo.RemoteName == "" && publishRequestID == 0
 }
 

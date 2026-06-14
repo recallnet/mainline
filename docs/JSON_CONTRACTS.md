@@ -71,6 +71,40 @@ For `mq submit --wait`:
   `publish_status` may already be populated even when the final `outcome` is
   still `integrated`
 
+## `mq land --json`
+
+Returns one JSON object for the queued submission and blocking land result.
+
+Stable fields:
+
+- `submission_id`
+- `branch`
+- `source_worktree`
+- `source_sha`
+- `repository_root`
+- `main_worktree`
+- `protected_branch`
+- `submission_status`
+- `published`
+- `duration_ms`
+
+Optional fields:
+
+- `source_ref`
+- `ref_kind`
+- `allow_newer_head`
+- `priority`
+- `protected_sha`
+- `publish_request_id`
+- `publish_status`
+- `last_worker_result`
+- `error`
+
+In local-only repos with `[repo].RemoteName = ""`, `mq land --json` returns
+success after verified protected-branch integration, sets `published = true` to
+mean the land target is complete, and omits `publish_request_id` because no
+remote publish request is created.
+
 ## `mq status --json`
 
 Returns one JSON object with these stable top-level keys:

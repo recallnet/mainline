@@ -105,11 +105,14 @@ That is the primary follow path. Use the returned `submission_id` and wait on
 it. Do not use sleeps, branch-name polling, `mq logs`, `mq events`, or
 `mq watch` as the normal way to decide whether your land finished.
 
-If the wrapper expects remote landing as part of the same job, prefer:
+If the wrapper expects a single blocking land command, prefer:
 
 ```bash
 mq land --json --timeout 30m
 ```
+
+With `[repo].RemoteName = ""` and manual publish mode, `mq land` integrates and
+skips publish because local protected `main` is the terminal target.
 
 If publish loses a race because remote `main` moved first, rerun the failed
 publish request instead of hand-repairing protected `main`:
@@ -397,10 +400,10 @@ mq land --json --timeout 30m
 Use `mq submit --wait` when the caller only needs an integration result.
 Use `mq submit --wait --for landed` or `mq land` when the job is not done until
 remote `main` has moved.
-`mq land` requires the configured `[repo].RemoteName` to exist in the protected
-worktree. In local-only repos with `[repo].RemoteName = ""`,
-`mq submit --wait --for landed` and `mq wait --for landed` return `landed` once
-the submission is verified on local protected `main`.
+`mq land` requires a configured `[repo].RemoteName` to exist only when publish
+has a remote target. In local-only repos with `[repo].RemoteName = ""`,
+`mq land`, `mq submit --wait --for landed`, and `mq wait --for landed` return
+once the submission is verified on local protected `main`.
 
 Operate and observe:
 
