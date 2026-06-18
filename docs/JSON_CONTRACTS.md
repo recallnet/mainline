@@ -131,6 +131,7 @@ Optional top-level keys:
 
 - `latest_submission`
 - `latest_publish`
+- `protected_publication`
 - `active_submissions`
 - `active_publishes`
 - `integration_worker`
@@ -169,6 +170,25 @@ queue shape from `state` alone.
 - `hooks_bypassed_for_push`
 - `prepare_publish_enabled`
 - `validate_publish_enabled`
+
+`protected_publication` is present when a configured publish remote exists and
+the protected branch has publication state worth reporting. It contains:
+
+- `protected_sha`
+- `latest_published_sha`
+- `latest_publish_request_id`
+- `unpublished`
+- `publish_queued_or_running`
+- `queued_publish_request_id`
+- `running_publish_request_id`
+- `command`
+- `message`
+
+When `unpublished = true`, protected `main` contains commits that are not known
+to be published yet. If no publish is already queued or running for the current
+tip, `command` is the recommended `mq publish --repo ...` command. `mq doctor
+--json` exposes the same `protected_publication` object and also includes the
+message in `warnings`.
 
 Repo policy and protected-worktree configuration come from `mainline.toml`.
 The SQLite store is the durable queue/event state and repo identity layer.

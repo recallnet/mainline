@@ -1859,6 +1859,43 @@ func TestStatusJSONReportsQueuedWork(t *testing.T) {
 	}
 }
 
+func TestStatusJSONWarnsWhenProtectedTipIsUnpublished(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	queuePublish(t, repoRoot)
+	runOnce(t, repoRoot)
+	publishedSHA := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+
+	writeFileAndCommit(t, repoRoot, "out-of-band.txt", "out of band\n", "direct protected commit")
+	unpublishedSHA := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI([]string{"status", "--repo", repoRoot, "--json"}, newStepPrinter(&stdout), &stderr); err != nil {
+		t.Fatalf("runCLI returned error: %v", err)
+	}
+
+	var status statusResult
+	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if status.ProtectedPublication == nil || !status.ProtectedPublication.Unpublished {
+		t.Fatalf("expected unpublished protected publication signal, got %+v", status.ProtectedPublication)
+	}
+	if status.ProtectedPublication.ProtectedSHA != unpublishedSHA {
+		t.Fatalf("expected protected sha %q, got %+v", unpublishedSHA, status.ProtectedPublication)
+	}
+	if status.ProtectedPublication.LatestPublishedSHA != publishedSHA {
+		t.Fatalf("expected latest published sha %q, got %+v", publishedSHA, status.ProtectedPublication)
+	}
+	if !strings.Contains(status.ProtectedPublication.Command, "mq publish --repo "+canonicalRegistryPath(repoRoot)) {
+		t.Fatalf("expected publish command, got %+v", status.ProtectedPublication)
+	}
+	if len(status.Alerts) == 0 || !strings.Contains(strings.Join(status.Alerts, "\n"), "protected main has unpublished commits") {
+		t.Fatalf("expected unpublished protected tip alert, got %+v", status.Alerts)
+	}
+}
+
 func TestStatusTableReportsHumanQueueSummary(t *testing.T) {
 	repoRoot, _ := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

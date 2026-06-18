@@ -1724,6 +1724,43 @@ func TestDoctorFixPublishesProtectedTipAheadOfUpstream(t *testing.T) {
 	}
 }
 
+func TestDoctorWarnsWhenProtectedTipIsUnpublished(t *testing.T) {
+	repoRoot, _ := createTestRepoWithRemote(t)
+	initRepoForWorker(t, repoRoot)
+	queuePublish(t, repoRoot)
+	runOnce(t, repoRoot)
+	publishedSHA := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+
+	writeFileAndCommit(t, repoRoot, "out-of-band.txt", "out of band\n", "direct protected commit")
+	unpublishedSHA := trimNewline(runTestCommand(t, repoRoot, "git", "rev-parse", "HEAD"))
+
+	var doctorOut bytes.Buffer
+	var doctorErr bytes.Buffer
+	if err := runDoctor([]string{"--repo", repoRoot, "--json"}, newStepPrinter(&doctorOut), &doctorErr); err != nil {
+		t.Fatalf("runDoctor returned error: %v", err)
+	}
+
+	var result doctorResult
+	if err := json.Unmarshal(doctorOut.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if result.ProtectedPublication == nil || !result.ProtectedPublication.Unpublished {
+		t.Fatalf("expected unpublished protected publication signal, got %+v", result.ProtectedPublication)
+	}
+	if result.ProtectedPublication.ProtectedSHA != unpublishedSHA {
+		t.Fatalf("expected protected sha %q, got %+v", unpublishedSHA, result.ProtectedPublication)
+	}
+	if result.ProtectedPublication.LatestPublishedSHA != publishedSHA {
+		t.Fatalf("expected latest published sha %q, got %+v", publishedSHA, result.ProtectedPublication)
+	}
+	if !strings.Contains(result.ProtectedPublication.Command, "mq publish --repo "+canonicalRegistryPath(repoRoot)) {
+		t.Fatalf("expected publish command, got %+v", result.ProtectedPublication)
+	}
+	if !strings.Contains(strings.Join(result.Warnings, "\n"), "protected main has unpublished commits") {
+		t.Fatalf("expected unpublished warning, got %+v", result.Warnings)
+	}
+}
+
 func TestDoctorDetectsProtectedDivergenceWithoutBranchUpstream(t *testing.T) {
 	repoRoot, remoteDir := createTestRepoWithRemote(t)
 	initRepoForWorker(t, repoRoot)

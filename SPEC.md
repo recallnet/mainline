@@ -180,6 +180,9 @@ These are current design constraints, not hidden bugs:
 - queued or blocked submissions whose `source_sha` is already reachable from
   protected `main` are obsolete and may be auto-superseded even if their
   original source worktree has been deleted
+- status and doctor report when protected `main` has committed work that is
+  ahead of the latest known published tip; that state should be published or
+  reconciled, not reset as disposable drift
 
 ## Forward Product Direction
 

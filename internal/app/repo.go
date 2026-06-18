@@ -977,6 +977,14 @@ Flags:
 		if err != nil {
 			return err
 		}
+		protectedPublication, err := inspectDoctorProtectedPublication(ctx, engine, store, repoRecord, cfg)
+		if err != nil {
+			return err
+		}
+		result.ProtectedPublication = protectedPublication
+		if warning := protectedPublicationAlert(protectedPublication); warning != "" {
+			result.Warnings = append(result.Warnings, warning)
+		}
 		result.UnfinishedQueueItems = snapshot.UnfinishedQueueItems
 		result.QueueSummary = snapshot.QueueSummary
 		result.ActiveSubmissions = snapshot.ActiveSubmissions
@@ -1005,6 +1013,14 @@ Flags:
 			snapshot, err := loadRepoStatusSnapshot(ctx, store, repoRecord, cfg, 0)
 			if err != nil {
 				return err
+			}
+			protectedPublication, err := inspectDoctorProtectedPublication(ctx, engine, store, repoRecord, cfg)
+			if err != nil {
+				return err
+			}
+			result.ProtectedPublication = protectedPublication
+			if warning := protectedPublicationAlert(protectedPublication); warning != "" {
+				result.Warnings = append(result.Warnings, warning)
 			}
 			result.UnfinishedQueueItems = snapshot.UnfinishedQueueItems
 			result.QueueSummary = snapshot.QueueSummary
@@ -1101,17 +1117,18 @@ Flags:
 
 type doctorResult struct {
 	git.HealthReport
-	RootCheckout              rootCheckoutInfo           `json:"root_checkout,omitempty"`
-	QueueSummary              queueSummary               `json:"queue_summary,omitempty"`
-	ActiveSubmissions         []statusSubmission         `json:"active_submissions,omitempty"`
-	ActivePublishes           []statusPublish            `json:"active_publishes,omitempty"`
-	IntegrationWorker         *state.LeaseMetadata       `json:"integration_worker,omitempty"`
-	PublishWorker             *state.LeaseMetadata       `json:"publish_worker,omitempty"`
-	ProtectedWorktreeActivity *protectedWorktreeActivity `json:"protected_worktree_activity,omitempty"`
-	QueueBlocked              bool                       `json:"queue_blocked,omitempty"`
-	NextActions               []string                   `json:"next_actions,omitempty"`
-	FixesApplied              []string                   `json:"fixes_applied,omitempty"`
-	FixesSkipped              []string                   `json:"fixes_skipped,omitempty"`
+	RootCheckout              rootCheckoutInfo            `json:"root_checkout,omitempty"`
+	QueueSummary              queueSummary                `json:"queue_summary,omitempty"`
+	ActiveSubmissions         []statusSubmission          `json:"active_submissions,omitempty"`
+	ActivePublishes           []statusPublish             `json:"active_publishes,omitempty"`
+	IntegrationWorker         *state.LeaseMetadata        `json:"integration_worker,omitempty"`
+	PublishWorker             *state.LeaseMetadata        `json:"publish_worker,omitempty"`
+	ProtectedWorktreeActivity *protectedWorktreeActivity  `json:"protected_worktree_activity,omitempty"`
+	ProtectedPublication      *protectedPublicationStatus `json:"protected_publication,omitempty"`
+	QueueBlocked              bool                        `json:"queue_blocked,omitempty"`
+	NextActions               []string                    `json:"next_actions,omitempty"`
+	FixesApplied              []string                    `json:"fixes_applied,omitempty"`
+	FixesSkipped              []string                    `json:"fixes_skipped,omitempty"`
 }
 
 func doctorNextActions(result doctorResult) []string {

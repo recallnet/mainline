@@ -383,6 +383,11 @@ If protected `main` is dirty, `mq doctor` is the takeover command: it tells you 
 If the only dirty path is `mainline.toml` immediately after `mq repo init`,
 commit or revert that policy file before running `mq land`; do not use
 `mq doctor --fix` as a substitute for the required policy commit.
+If protected `main` has clean committed work that is ahead of the latest
+published tip, `mq status --json` and `mq doctor --json` report
+`protected_publication.unpublished = true` and recommend `mq publish --repo ...`.
+Do not treat that state as safe to reset; publish or intentionally reconcile the
+committed work first.
 
 Submit and land:
 

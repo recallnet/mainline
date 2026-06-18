@@ -18,28 +18,29 @@ import (
 )
 
 type statusResult struct {
-	RepositoryRoot            string                     `json:"repository_root"`
-	StatePath                 string                     `json:"state_path"`
-	CurrentWorktree           string                     `json:"current_worktree"`
-	CurrentBranch             string                     `json:"current_branch"`
-	CurrentBranchStatus       *git.BranchComparison      `json:"current_branch_status,omitempty"`
-	RebaseGuidance            *statusRebaseGuidance      `json:"rebase_guidance,omitempty"`
-	Alerts                    []string                   `json:"alerts,omitempty"`
-	QueueSummary              queueSummary               `json:"queue_summary"`
-	ProtectedBranch           string                     `json:"protected_branch"`
-	ProtectedBranchSHA        string                     `json:"protected_branch_sha"`
-	ProtectedUpstream         git.BranchStatus           `json:"protected_upstream"`
-	ExecutionEstimate         executionEstimate          `json:"execution_estimate"`
-	PublishExecution          publishExecutionPolicy     `json:"publish_execution"`
-	Counts                    queueCounts                `json:"counts"`
-	LatestSubmission          *statusSubmission          `json:"latest_submission,omitempty"`
-	LatestPublish             *statusPublish             `json:"latest_publish,omitempty"`
-	ActiveSubmissions         []statusSubmission         `json:"active_submissions,omitempty"`
-	ActivePublishes           []statusPublish            `json:"active_publishes,omitempty"`
-	IntegrationWorker         *state.LeaseMetadata       `json:"integration_worker,omitempty"`
-	PublishWorker             *state.LeaseMetadata       `json:"publish_worker,omitempty"`
-	ProtectedWorktreeActivity *protectedWorktreeActivity `json:"protected_worktree_activity,omitempty"`
-	RecentEvents              []state.EventRecord        `json:"recent_events"`
+	RepositoryRoot            string                      `json:"repository_root"`
+	StatePath                 string                      `json:"state_path"`
+	CurrentWorktree           string                      `json:"current_worktree"`
+	CurrentBranch             string                      `json:"current_branch"`
+	CurrentBranchStatus       *git.BranchComparison       `json:"current_branch_status,omitempty"`
+	RebaseGuidance            *statusRebaseGuidance       `json:"rebase_guidance,omitempty"`
+	Alerts                    []string                    `json:"alerts,omitempty"`
+	QueueSummary              queueSummary                `json:"queue_summary"`
+	ProtectedBranch           string                      `json:"protected_branch"`
+	ProtectedBranchSHA        string                      `json:"protected_branch_sha"`
+	ProtectedUpstream         git.BranchStatus            `json:"protected_upstream"`
+	ProtectedPublication      *protectedPublicationStatus `json:"protected_publication,omitempty"`
+	ExecutionEstimate         executionEstimate           `json:"execution_estimate"`
+	PublishExecution          publishExecutionPolicy      `json:"publish_execution"`
+	Counts                    queueCounts                 `json:"counts"`
+	LatestSubmission          *statusSubmission           `json:"latest_submission,omitempty"`
+	LatestPublish             *statusPublish              `json:"latest_publish,omitempty"`
+	ActiveSubmissions         []statusSubmission          `json:"active_submissions,omitempty"`
+	ActivePublishes           []statusPublish             `json:"active_publishes,omitempty"`
+	IntegrationWorker         *state.LeaseMetadata        `json:"integration_worker,omitempty"`
+	PublishWorker             *state.LeaseMetadata        `json:"publish_worker,omitempty"`
+	ProtectedWorktreeActivity *protectedWorktreeActivity  `json:"protected_worktree_activity,omitempty"`
+	RecentEvents              []state.EventRecord         `json:"recent_events"`
 }
 
 type statusRebaseGuidance struct {
@@ -278,6 +279,14 @@ func collectStatus(repoPath string, limit int) (statusResult, error) {
 	}
 	result.QueueSummary = snapshot.QueueSummary
 	result.Alerts = snapshot.Alerts
+	protectedPublication, err := inspectProtectedPublication(ctx, store, repoRecord, cfg, protectedSHA, protectedStatus)
+	if err != nil {
+		return statusResult{}, err
+	}
+	result.ProtectedPublication = protectedPublication
+	if alert := protectedPublicationAlert(protectedPublication); alert != "" {
+		result.Alerts = append(result.Alerts, alert)
+	}
 	result.IntegrationWorker = snapshot.IntegrationWorker
 	result.PublishWorker = snapshot.PublishWorker
 	result.ProtectedWorktreeActivity = snapshot.ProtectedWorktreeActivity
@@ -316,6 +325,15 @@ func renderStatus(stdout *stepPrinter, result statusResult) error {
 		printer.Line("Protected upstream: %s (ahead %d, behind %d)", result.ProtectedUpstream.Upstream, result.ProtectedUpstream.AheadCount, result.ProtectedUpstream.BehindCount)
 	} else {
 		printer.Line("Protected upstream: none")
+	}
+	if result.ProtectedPublication != nil && result.ProtectedPublication.Unpublished {
+		printer.Line("Protected publication: unpublished")
+		if result.ProtectedPublication.LatestPublishedSHA != "" {
+			printer.Line("Latest published SHA: %s", result.ProtectedPublication.LatestPublishedSHA)
+		}
+		if result.ProtectedPublication.Command != "" {
+			printer.Line("Publish command: %s", result.ProtectedPublication.Command)
+		}
 	}
 	if result.CurrentBranchStatus != nil {
 		printer.Line("Current branch vs protected: ahead %d, behind %d", result.CurrentBranchStatus.AheadCount, result.CurrentBranchStatus.BehindCount)
